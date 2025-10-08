@@ -9,6 +9,7 @@ import './reminders.dart';
 import './sos_screen.dart';
 import './location_permission_screen.dart';
 import './contact_info_page.dart';
+import './currency_camera.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -31,40 +32,64 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _checkProfileCompleteness() async {
-    try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        final doc = await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists) {
-          final data = doc.data();
-          final bool isIncomplete =
-              (data?['full_name']?.toString().trim().isEmpty ?? true) ||
-              (data?['phone']?.toString().trim().isEmpty ?? true) ||
-              (data?['address']?.toString().trim().isEmpty ?? true) ||
-              (data?['country']?.toString().trim().isEmpty ?? true) ||
-              (data?['city']?.toString().trim().isEmpty ?? true);
-          setState(() {
-            _isProfileIncomplete = isIncomplete;
-            _isLoading = false;
-          });
-        } else {
-          setState(() {
-            _isProfileIncomplete = true;
-            _isLoading = false;
+  try {
+    final user = _auth.currentUser;
+    if (user != null) {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (doc.exists) {
+        final data = doc.data();
+        final bool isIncomplete =
+            (data?['full_name']?.toString().trim().isEmpty ?? true) ||
+            (data?['phone']?.toString().trim().isEmpty ?? true) ||
+            (data?['address']?.toString().trim().isEmpty ?? true) ||
+            (data?['country']?.toString().trim().isEmpty ?? true) ||
+            (data?['city']?.toString().trim().isEmpty ?? true);
+        
+        // تحقق من آخر مرة عرضنا التنبيه
+        final lastShown = data?['profile_reminder_last_shown'] as Timestamp?;
+        final now = DateTime.now();
+        
+        bool shouldShow = false;
+        if (isIncomplete) {
+          if (lastShown == null) {
+            // أول مرة - اعرض التنبيه
+            shouldShow = true;
+          } else {
+            // تحقق إذا مر 3 أيام
+            final daysSinceLastShown = now.difference(lastShown.toDate()).inDays;
+            shouldShow = daysSinceLastShown >= 3;
+          }
+        }
+        
+        setState(() {
+          _isProfileIncomplete = shouldShow;
+          _isLoading = false;
+        });
+        
+        // احفظ وقت العرض
+        if (shouldShow) {
+          await _firestore.collection('users').doc(user.uid).update({
+            'profile_reminder_last_shown': Timestamp.now(),
           });
         }
       } else {
         setState(() {
+          _isProfileIncomplete = true;
           _isLoading = false;
         });
       }
-    } catch (e) {
-      print('Error checking profile: $e');
+    } else {
       setState(() {
         _isLoading = false;
       });
     }
+  } catch (e) {
+    print('Error checking profile: $e');
+    setState(() {
+      _isLoading = false;
+    });
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -435,12 +460,12 @@ class _HomePageState extends State<HomePage> {
                 ),
               );
             } else if (title == 'Currency Recognition') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CameraScreen(mode: 'text'),
-                ),
-              );
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const CurrencyCameraScreen(),
+    ),
+  );
             } else if (title == 'Color Identification') {
               Navigator.push(
                 context,

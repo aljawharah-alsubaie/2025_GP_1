@@ -7,6 +7,7 @@ import '../services/google_signin_handler.dart';
 import 'get_started.dart';
 import 'signup_screen.dart';
 import 'set_password_screen.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -124,6 +125,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         email: email,
         password: password,
       );
+        
+      const storage = FlutterSecureStorage();
+     await storage.write(key: 'isLoggedIn', value: 'true');
+     await storage.write(key: 'userEmail', value: email);
+
 
       User? user = userCredential.user;
       if (user != null) {

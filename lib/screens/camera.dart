@@ -437,12 +437,23 @@ class _CameraScreenState extends State<CameraScreen> {
                 Positioned.fill(
                   child: _selectedImagePath != null
                       ? Image.file(File(_selectedImagePath!), fit: BoxFit.cover)
-                      : Transform.scale(
-                          scale:
-                              _controller!.value.aspectRatio /
-                              (size.width / size.height),
-                          child: Center(child: CameraPreview(_controller!)),
-                        ),
+                      : Positioned.fill(
+  child: _selectedImagePath != null
+      ? Image.file(File(_selectedImagePath!), fit: BoxFit.cover)
+      : ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.center,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: size.width,
+                height: size.width * _controller!.value.aspectRatio,
+                child: CameraPreview(_controller!),
+              ),
+            ),
+          ),
+        ),
+),
                 ),
 
                 // Back button

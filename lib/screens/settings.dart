@@ -8,6 +8,8 @@ import 'termspoliciespage.dart';
 import 'login_screen.dart';
 import 'Reminders.dart'; // Add this import
 import 'sos_screen.dart'; // Add this import
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'welcome_screen.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -51,12 +53,17 @@ class SettingsPage extends StatelessWidget {
 
     if (confirmed == true) {
       try {
+        // ✅ امسح الـ session المحفوظة أولاً
+      final storage = FlutterSecureStorage();
+      await storage.delete(key: 'isLoggedIn');
+      await storage.delete(key: 'userEmail');
+      
         await FirebaseAuth.instance.signOut();
 
         // Navigate back to login screen and clear all previous routes
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          MaterialPageRoute(builder: (context) => const WelcomeScreen()),
           (route) => false,
         );
       } catch (e) {

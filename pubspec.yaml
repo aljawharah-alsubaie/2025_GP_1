@@ -45,16 +45,15 @@ flutter:
 dependencies:
   flutter:
     sdk: flutter
+  http: ^1.1.0
   cupertino_icons: ^1.0.8
   firebase_core: ^2.30.0
-  shared_preferences: ^2.0.15
+  shared_preferences: ^2.2.2
   firebase_auth: ^4.17.4
   google_sign_in: ^6.1.4
-  flutter_facebook_auth: ^6.0.4
   local_auth: ^2.1.7
   image_picker: ^1.0.4
   country_picker: ^2.0.20
-  http: ^1.1.5
   dropdown_search: ^5.0.6
   geolocator: ^11.0.0
   geocoding: ^3.0.0
@@ -67,6 +66,7 @@ dependencies:
   path_provider: ^2.1.1
   permission_handler: ^11.0.1
   image: ^4.1.7
+  flutter_secure_storage: ^9.0.0
   # للكشف عن الوجه
   google_mlkit_face_detection: ^0.10.0
 
