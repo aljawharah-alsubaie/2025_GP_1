@@ -8,7 +8,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
 import 'dart:math' as math;
-import '../services/api_service.dart';
+import '../services/watson_service.dart';
 
 class CurrencyCameraScreen extends StatefulWidget {
   const CurrencyCameraScreen({super.key});
@@ -22,8 +22,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   List<CameraDescription>? _cameras;
   final picker = ImagePicker();
   final AudioPlayer _player = AudioPlayer();
-  final CurrencyApiService _apiService = CurrencyApiService();
-  
+  final WatsonMLService _watsonService = WatsonMLService();  
   bool _busy = false;
   String _detectedCurrency = "";
   String? _selectedImagePath;
@@ -41,21 +40,21 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   }
 
   Future<void> _checkApiConnection() async {
-    final isConnected = await _apiService.checkHealth();
-    setState(() {
-      _isApiConnected = isConnected;
-    });
-    
-    if (!isConnected && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Warning: Currency recognition service is offline'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 3),
-        ),
-      );
-    }
+  final isConnected = await _watsonService.checkHealth(); // ✅ غيّر هنا
+  setState(() {
+    _isApiConnected = isConnected;
+  });
+  
+  if (!isConnected && mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('⚠️ IBM Watson service is offline'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 3),
+      ),
+    );
   }
+}
 
   Future<void> _initCamera() async {
     _cameras = await availableCameras();
@@ -280,8 +279,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     print("Features extracted: ${features.length} features");
     
     print("Step 2: Sending to API...");
-    final result = await _apiService.predictCurrency(features);
-    print("API Response: $result");
+    final result = await _watsonService.predictCurrency(features); // ✅ غيّر هنا    print("API Response: $result");
       // استخراج النتيجة
       String currencyText = _parsePredictionResult(result);
 
