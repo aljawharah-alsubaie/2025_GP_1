@@ -361,12 +361,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 4),
                   DropdownSearch<String>(
                     key: ValueKey(selectedCountryCode),
-                    items: cities,
+                    items: (filter, infiniteScrollProps) => cities,
                     selectedItem: selectedCity,
                     enabled: cities.isNotEmpty,
                     onChanged: (val) => setState(() => selectedCity = val),
-                    dropdownDecoratorProps: DropDownDecoratorProps(
-                      dropdownSearchDecoration: InputDecoration(
+                    decoratorProps: DropDownDecoratorProps(
+                      decoration: InputDecoration(
                         hintText: "Please select your City",
                         hintStyle: TextStyle(
                           fontSize: 13,

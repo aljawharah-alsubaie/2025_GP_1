@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:local_auth/local_auth.dart';
@@ -39,6 +38,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     super.initState();
     _setupAnimations();
     _checkBiometricAvailability();
+    _checkRememberedUser();
     _animationController.forward();
   }
 
@@ -100,6 +100,19 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     }
   }
 
+  Future<void> _checkRememberedUser() async {
+    const storage = FlutterSecureStorage();
+    final rememberMe = await storage.read(key: 'rememberMe');
+    final savedEmail = await storage.read(key: 'savedEmail');
+    
+    if (rememberMe == 'true' && savedEmail != null) {
+      setState(() {
+        _emailController.text = savedEmail;
+        _rememberMe = true;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _animationController.dispose();
@@ -127,9 +140,17 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       );
         
       const storage = FlutterSecureStorage();
-     await storage.write(key: 'isLoggedIn', value: 'true');
-     await storage.write(key: 'userEmail', value: email);
-
+      await storage.write(key: 'isLoggedIn', value: 'true');
+      await storage.write(key: 'userEmail', value: email);
+      
+      // حفظ حالة Remember Me
+      if (_rememberMe) {
+        await storage.write(key: 'rememberMe', value: 'true');
+        await storage.write(key: 'savedEmail', value: email);
+      } else {
+        await storage.delete(key: 'rememberMe');
+        await storage.delete(key: 'savedEmail');
+      }
 
       User? user = userCredential.user;
       if (user != null) {
@@ -362,16 +383,19 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                             ),
                             child: Column(
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF6B1D73).withOpacity(0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.login_rounded,
-                                    size: 48,
-                                    color: Colors.white,
+                                Semantics(
+                                  label: 'Login icon',
+                                  child: Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF6B1D73).withOpacity(0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.login_rounded,
+                                      size: 48,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(height: 16),
@@ -445,11 +469,16 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                           children: [
                             Row(
                               children: [
-                                Checkbox(
-                                  value: _rememberMe,
-                                  onChanged: (value) => setState(() => _rememberMe = value ?? false),
-                                  activeColor: const Color(0xFF6B1D73),
-                                  checkColor: Colors.white,
+                                Semantics(
+                                  label: 'Remember me checkbox',
+                                  hint: 'Double tap to toggle',
+                                  checked: _rememberMe,
+                                  child: Checkbox(
+                                    value: _rememberMe,
+                                    onChanged: (value) => setState(() => _rememberMe = value ?? false),
+                                    activeColor: const Color(0xFF6B1D73),
+                                    checkColor: Colors.white,
+                                  ),
                                 ),
                                 GestureDetector(
                                   onTap: () => setState(() => _rememberMe = !_rememberMe),
@@ -463,31 +492,36 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                 ),
                               ],
                             ),
-                            TextButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  PageRouteBuilder(
-                                    pageBuilder: (context, animation, secondaryAnimation) => 
-                                        const ForgotPasswordScreen(),
-                                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                      return SlideTransition(
-                                        position: Tween<Offset>(
-                                          begin: const Offset(1.0, 0.0),
-                                          end: Offset.zero,
-                                        ).animate(animation),
-                                        child: child,
-                                      );
-                                    },
+                            Semantics(
+                              button: true,
+                              label: 'Forgot password button',
+                              hint: 'Double tap to reset your password',
+                              child: TextButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    PageRouteBuilder(
+                                      pageBuilder: (context, animation, secondaryAnimation) => 
+                                          const ForgotPasswordScreen(),
+                                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                        return SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: const Offset(1.0, 0.0),
+                                            end: Offset.zero,
+                                          ).animate(animation),
+                                          child: child,
+                                        );
+                                      },
+                                    ),
+                                  );
+                                },
+                                child: const Text(
+                                  "Forgot Password?",
+                                  style: TextStyle(
+                                    color: Color.fromARGB(255, 231, 172, 238),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
                                   ),
-                                );
-                              },
-                              child: const Text(
-                                "Forgot Password?",
-                                style: TextStyle(
-                                  color: Color.fromARGB(255, 231, 172, 238),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
                                 ),
                               ),
                             ),
@@ -499,36 +533,42 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         // Login button with animation
                         ScaleTransition(
                           scale: _buttonScaleAnimation,
-                          child: SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: _isLoading ? null : _login,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF6B1D73),
-                                foregroundColor: Colors.white,
-                                elevation: 12,
-                                shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                          child: Semantics(
+                            button: true,
+                            label: _isLoading ? 'Logging in, please wait' : 'Login button',
+                            hint: _isLoading ? '' : 'Double tap to login',
+                            enabled: !_isLoading,
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 56,
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6B1D73),
+                                  foregroundColor: Colors.white,
+                                  elevation: 12,
+                                  shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
                                 ),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        height: 24,
+                                        width: 24,
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Text(
+                                        "Log In",
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                               ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Text(
-                                      "log In",
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
                             ),
                           ),
                         ),
@@ -572,7 +612,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                             _buildSocialButton(
                               icon: Icons.g_mobiledata,
                               onTap: _loginWithGoogle,
-                              label: "log in with Google",
+                              label: "Google",
                             ),
                             if (_biometricAvailable)
                               _buildSocialButton(
@@ -589,7 +629,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.3),
+                            color: Colors.white.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: Colors.white.withOpacity(0.2),
@@ -598,39 +638,44 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
+                              const Text(
                                 "Don't have an account? ",
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 16,
                                 ),
                               ),
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    PageRouteBuilder(
-                                      pageBuilder: (context, animation, secondaryAnimation) => 
-                                          const SignupScreen(),
-                                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                        return SlideTransition(
-                                          position: Tween<Offset>(
-                                            begin: const Offset(1.0, 0.0),
-                                            end: Offset.zero,
-                                          ).animate(animation),
-                                          child: child,
-                                        );
-                                      },
+                              Semantics(
+                                button: true,
+                                label: 'Sign up link',
+                                hint: 'Double tap to create a new account',
+                                child: GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      PageRouteBuilder(
+                                        pageBuilder: (context, animation, secondaryAnimation) => 
+                                            const SignupScreen(),
+                                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                          return SlideTransition(
+                                            position: Tween<Offset>(
+                                              begin: const Offset(1.0, 0.0),
+                                              end: Offset.zero,
+                                            ).animate(animation),
+                                            child: child,
+                                          );
+                                        },
+                                      ),
+                                    );
+                                  },
+                                  child: const Text(
+                                    "Sign Up",
+                                    style: TextStyle(
+                                      color: Color(0xFF6B1D73),
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      decoration: TextDecoration.underline,
                                     ),
-                                  );
-                                },
-                                child: const Text(
-                                  "Sign Up",
-                                  style: TextStyle(
-                                    color: Color(0xFF6B1D73),
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    decoration: TextDecoration.underline,
                                   ),
                                 ),
                               ),
@@ -658,52 +703,58 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     String? Function(String?)? validator,
     TextInputType keyboardType = TextInputType.text,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        validator: validator,
-        style: const TextStyle(color: Colors.black, fontSize: 16),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade600),
-          prefixIcon: Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6B1D73).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+    return Semantics(
+      label: '$hint input field',
+      textField: true,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
             ),
-            child: Icon(
-              icon,
-              color: const Color(0xFF6B1D73),
-              size: 20,
+          ],
+        ),
+        child: TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          validator: validator,
+          style: const TextStyle(color: Colors.black, fontSize: 16),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.grey.shade600),
+            prefixIcon: ExcludeSemantics(
+              child: Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6B1D73).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  icon,
+                  color: const Color(0xFF6B1D73),
+                  size: 20,
+                ),
+              ),
             ),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(
-              color: Color(0xFF6B1D73),
-              width: 2,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(
+                color: Color(0xFF6B1D73),
+                width: 2,
+              ),
+            ),
+            fillColor: Colors.white.withOpacity(0.95),
+            filled: true,
+            contentPadding: const EdgeInsets.all(20),
           ),
-          fillColor: Colors.white.withOpacity(0.95),
-          filled: true,
-          contentPadding: const EdgeInsets.all(20),
         ),
       ),
     );
@@ -716,59 +767,71 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     required VoidCallback onToggle,
     String? Function(String?)? validator,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: TextFormField(
-        controller: controller,
-        obscureText: obscure,
-        validator: validator,
-        style: const TextStyle(color: Colors.black, fontSize: 16),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade600),
-          prefixIcon: Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF6B1D73).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+    return Semantics(
+      label: 'Password input field',
+      textField: true,
+      obscured: true,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
             ),
-            child: Icon(
-              Icons.lock_outline,
-              color: const Color(0xFF6B1D73),
-              size: 20,
+          ],
+        ),
+        child: TextFormField(
+          controller: controller,
+          obscureText: obscure,
+          validator: validator,
+          style: const TextStyle(color: Colors.black, fontSize: 16),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.grey.shade600),
+            prefixIcon: ExcludeSemantics(
+              child: Container(
+                margin: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6B1D73).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.lock_outline,
+                  color: Color(0xFF6B1D73),
+                  size: 20,
+                ),
+              ),
             ),
-          ),
-          suffixIcon: IconButton(
-            onPressed: onToggle,
-            icon: Icon(
-              obscure ? Icons.visibility_off : Icons.visibility,
-              color: const Color(0xFF6B1D73),
+            suffixIcon: Semantics(
+              button: true,
+              label: obscure ? 'Show password' : 'Hide password',
+              hint: 'Double tap to toggle password visibility',
+              child: IconButton(
+                onPressed: onToggle,
+                icon: Icon(
+                  obscure ? Icons.visibility_off : Icons.visibility,
+                  color: const Color(0xFF6B1D73),
+                ),
+              ),
             ),
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(
-              color: Color(0xFF6B1D73),
-              width: 2,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(
+                color: Color(0xFF6B1D73),
+                width: 2,
+              ),
+            ),
+            fillColor: Colors.white.withOpacity(0.95),
+            filled: true,
+            contentPadding: const EdgeInsets.all(20),
           ),
-          fillColor: Colors.white.withOpacity(0.95),
-          filled: true,
-          contentPadding: const EdgeInsets.all(20),
         ),
       ),
     );
@@ -779,37 +842,43 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     required VoidCallback onTap,
     required String label,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.3),
+    return Semantics(
+      button: true,
+      label: '$label button',
+      hint: 'Double tap to login with $label',
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.3),
+            ),
           ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: Colors.white,
-              size: 24,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ExcludeSemantics(
+                child: Icon(
+                  icon,
+                  color: Colors.white,
+                  size: 24,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
