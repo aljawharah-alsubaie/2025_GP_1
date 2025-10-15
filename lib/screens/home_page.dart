@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import './profile.dart';
 import './face_list.dart';
 import './camera.dart';
@@ -18,465 +20,954 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
+  final FlutterTts _tts = FlutterTts();
+  
   bool _isProfileIncomplete = false;
   bool _isLoading = true;
   bool _isDismissed = false;
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late AnimationController _floatController;
+  
+  String _userName = 'User';
+// 🎨 نظام ألوان موف جديد
+static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
+static const Color vibrantPurple = Color(0xFF8E3A95);
+static const Color primaryPurple = Color(0xFF9C4A9E);
+static const Color softPurple = Color(0xFFB665BA);
+static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
+static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
+static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
   @override
   void initState() {
     super.initState();
+    _initTts();
+    _loadUserName();
     _checkProfileCompleteness();
+    
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..forward();
+    
+    _slideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..forward();
+    
+    _floatController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
+    )..repeat(reverse: true);
+  }
+
+  Future<void> _initTts() async {
+    await _tts.setLanguage("en-US");
+    await _tts.setSpeechRate(0.5);
+    await _tts.setVolume(1.0);
+  }
+
+  Future<void> _loadUserName() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data();
+          setState(() {
+            _userName = data?['full_name']?.toString().trim() ?? 'User';
+            if (_userName.isEmpty) _userName = 'User';
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading user name: $e');
+    }
+  }
+
+  Future<void> _speak(String text) async {
+    await _tts.speak(text);
+  }
+
+  void _hapticFeedback() {
+    HapticFeedback.mediumImpact();
   }
 
   Future<void> _checkProfileCompleteness() async {
-  try {
-    final user = _auth.currentUser;
-    if (user != null) {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists) {
-        final data = doc.data();
-        final bool isIncomplete =
-            (data?['full_name']?.toString().trim().isEmpty ?? true) ||
-            (data?['phone']?.toString().trim().isEmpty ?? true) ||
-            (data?['address']?.toString().trim().isEmpty ?? true) ||
-            (data?['country']?.toString().trim().isEmpty ?? true) ||
-            (data?['city']?.toString().trim().isEmpty ?? true);
-        
-        // تحقق من آخر مرة عرضنا التنبيه
-        final lastShown = data?['profile_reminder_last_shown'] as Timestamp?;
-        final now = DateTime.now();
-        
-        bool shouldShow = false;
-        if (isIncomplete) {
-          if (lastShown == null) {
-            // أول مرة - اعرض التنبيه
-            shouldShow = true;
-          } else {
-            // تحقق إذا مر 3 أيام
-            final daysSinceLastShown = now.difference(lastShown.toDate()).inDays;
-            shouldShow = daysSinceLastShown >= 3;
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data();
+          final bool isIncomplete =
+              (data?['full_name']?.toString().trim().isEmpty ?? true) ||
+              (data?['phone']?.toString().trim().isEmpty ?? true) ||
+              (data?['address']?.toString().trim().isEmpty ?? true) ||
+              (data?['country']?.toString().trim().isEmpty ?? true) ||
+              (data?['city']?.toString().trim().isEmpty ?? true);
+          
+          final lastShown = data?['profile_reminder_last_shown'] as Timestamp?;
+          final now = DateTime.now();
+          
+          bool shouldShow = false;
+          if (isIncomplete) {
+            if (lastShown == null) {
+              shouldShow = true;
+            } else {
+              final daysSinceLastShown = now.difference(lastShown.toDate()).inDays;
+              shouldShow = daysSinceLastShown >= 3;
+            }
           }
-        }
-        
-        setState(() {
-          _isProfileIncomplete = shouldShow;
-          _isLoading = false;
-        });
-        
-        // احفظ وقت العرض
-        if (shouldShow) {
-          await _firestore.collection('users').doc(user.uid).update({
-            'profile_reminder_last_shown': Timestamp.now(),
+          
+          setState(() {
+            _isProfileIncomplete = shouldShow;
+            _isLoading = false;
+          });
+          
+          if (shouldShow) {
+            await _firestore.collection('users').doc(user.uid).update({
+              'profile_reminder_last_shown': Timestamp.now(),
+            });
+          }
+        } else {
+          setState(() {
+            _isProfileIncomplete = true;
+            _isLoading = false;
           });
         }
       } else {
         setState(() {
-          _isProfileIncomplete = true;
           _isLoading = false;
         });
       }
-    } else {
+    } catch (e) {
+      print('Error checking profile: $e');
       setState(() {
         _isLoading = false;
       });
     }
-  } catch (e) {
-    print('Error checking profile: $e');
-    setState(() {
-      _isLoading = false;
-    });
   }
-}
+
+  @override
+  void dispose() {
+    _tts.stop();
+    _fadeController.dispose();
+    _slideController.dispose();
+    _floatController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    const purple = Color(0xFF6B1D73);
     return Scaffold(
+      backgroundColor: ultraLightPurple,
       body: Stack(
         children: [
-          ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              Stack(
-                children: [
-                  Container(
-                    height: 170,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [purple, purple.withOpacity(0.8)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(40),
-                      ),
-                    ),
-                  ),
-                  // Logo in top-left corner (moved higher)
-                  Positioned(
-                    top: 15,
-                    left: 16,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      child: Image.asset(
-                        'assets/images/logo.png', // Replace with your logo path
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                  // Profile icon in top-right corner
-                  Positioned(
-                    top: 40,
-                    right: 16,
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ProfilePage(),
-                          ),
-                        ).then((_) => _checkProfileCompleteness());
-                      },
-                      child: const CircleAvatar(
-                        radius: 20,
-                        backgroundColor: Colors.white,
-                        child: Icon(Icons.person, color: Colors.grey),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: [
-                    _buildFeatureCard('Face Recognition'),
-                    _buildFeatureCard('Emergency Contact', highlight: true),
-                    _buildFeatureCard('Text Reading'),
-                    _buildFeatureCard('Alerts / Reminders', highlight: true),
-                    _buildFeatureCard('Currency Recognition'),
-                    _buildFeatureCard('Color Identification', highlight: true),
-                  ],
+          // 🎨 خلفية متدرجة
+          _buildGradientBackground(),
+          
+          // 🎯 الهيدر الجديد فوق تماماً
+          SafeArea(
+            child: Column(
+              children: [
+                _buildModernHeader(),
+                Expanded(
+                  child: _buildFeaturesList(),
                 ),
-              ),
-            ],
-          ),
-          // Profile incomplete overlay
-          if (!_isLoading && _isProfileIncomplete && !_isDismissed)
-            Container(
-              color: Colors.black.withOpacity(0.5),
-              child: Center(
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 300),
-                  opacity: 1.0,
-                  child: Container(
-                    margin: const EdgeInsets.all(24),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6B1D73), Color(0xFF9C4A9E)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.account_circle_outlined,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Text(
-                                'Complete Your Profile',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Please add your personal and address details to unlock all features!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: () {
-                                setState(() => _isDismissed = true);
-                              },
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.white70,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                              ),
-                              child: const Text(
-                                'Later',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const ProfilePage(),
-                                  ),
-                                ).then((_) => _checkProfileCompleteness());
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: const Color(0xFF6B1D73),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 8,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                elevation: 2,
-                              ),
-                              child: const Text(
-                                'Complete Now',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              ],
             ),
+          ),
+
+          if (!_isLoading && _isProfileIncomplete && !_isDismissed)
+            _buildProfileAlert(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        selectedItemColor: const Color(0xFFB14ABA),
-        unselectedItemColor: Colors.black,
-        backgroundColor: Colors.grey.shade200,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal),
-        type: BottomNavigationBarType.fixed,
-        onTap: (index) async {
-          if (index == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const HomePage()),
-            );
-          } else if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const RemindersPage()),
-            );
-          } else if (index == 2) {
-            final user = _auth.currentUser;
-            if (user != null) {
-              final doc = await _firestore
-                  .collection('users')
-                  .doc(user.uid)
-                  .get();
-              final data = doc.data();
-              final permissionGranted =
-                  data?['location_permission_granted'] ?? false;
-              if (!permissionGranted) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => LocationPermissionScreen(
-                      onPermissionGranted: () async {
-                        await _firestore
-                            .collection('users')
-                            .doc(user.uid)
-                            .update({'location_permission_granted': true});
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SosScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                );
-              } else {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SosScreen()),
-                );
-              }
-            }
-          } else if (index == 3) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SettingsPage()),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications_none),
-            label: 'Reminders',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.warning_amber_outlined),
-            label: 'Emergency',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-      ),
+      
+      bottomNavigationBar: _buildFloatingBottomNav(),
     );
   }
 
-  static Widget _buildFeatureCard(String title, {bool highlight = false}) {
-    String imageName = '';
-    String description = '';
-    switch (title) {
-      case 'Face Recognition':
-        imageName = 'facerecog.jpg';
-        description = 'Identify and recognize people';
-        break;
-      case 'Emergency Contact':
-        imageName = 'emergency_contacts.jpg';
-        description = 'Manage your emergency contacts';
-        break;
-      case 'Text Reading':
-        imageName = 'textreading.jpg';
-        description = 'Read printed text aloud';
-        break;
-      case 'Alerts / Reminders':
-        imageName = 'reminders.jpg';
-        description = 'Set and manage your reminders';
-        break;
-      case 'Currency Recognition':
-        imageName = 'currency.jpg';
-        description = 'Identify different currencies';
-        break;
-      case 'Color Identification':
-        imageName = 'color.jpg';
-        description = 'Detect and identify colors';
-        break;
-      default:
-        description = 'Feature description';
-        break;
-    }
-
-    return Builder(
-      builder: (context) => Card(
-        color: highlight ? const Color(0xAA6B1D73) : const Color(0xAAC8B8E4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        child: ListTile(
-          leading: Container(
-            width: 50,
-            height: 50,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: imageName.isNotEmpty
-                ? (title == 'Emergency Contact' 
-                    ? const Icon(Icons.contact_emergency, color: Colors.black, size: 32)
-                    : Image.asset('assets/images/$imageName', fit: BoxFit.contain))
-                : const Icon(Icons.image, color: Colors.grey, size: 20),
-          ),
-          title: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          subtitle: Text(description, style: const TextStyle(fontSize: 13)),
-          trailing: const Icon(Icons.arrow_forward_ios),
-          onTap: () {
-            if (title == 'Face Recognition') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const FaceListPage(),
-                ),
-              );
-            } else if (title == 'Emergency Contact') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ContactInfoPage(),
-                ),
-              );
-            } else if (title == 'Alerts / Reminders') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const RemindersPage()),
-              );
-            } else if (title == 'Text Reading') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CameraScreen(mode: 'text'),
-                ),
-              );
-            } else if (title == 'Currency Recognition') {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => const CurrencyCameraScreen(),
-    ),
-  );
-            } else if (title == 'Color Identification') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CameraScreen(mode: 'color'),
-                ),
-              );
-            }
-          },
+  // 🎨 خلفية متدرجة
+  Widget _buildGradientBackground() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            ultraLightPurple,
+            palePurple.withOpacity(0.3),
+            Colors.white,
+          ],
+          stops: const [0.0, 0.5, 1.0],
         ),
       ),
     );
   }
+
+  // 🎯 هيدر جديد - النظارة يسار، Profile يمين ثابت
+  Widget _buildModernHeader() {
+    return FadeTransition(
+      opacity: _fadeController,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withOpacity(0.9),
+              Colors.white.withOpacity(0.7),
+              const Color.fromARGB(198, 255, 255, 255),
+              const Color.fromARGB(195, 240, 224, 245),
+
+            ],
+          ),
+        ),
+        child: Column(
+          children: [
+            // الصف الأول: نظارة + اسم + بروفايل
+            Row(
+              children: [
+                // 🕶️ نظارة متحركة على اليسار
+                AnimatedBuilder(
+                  animation: _floatController,
+                  builder: (context, child) {
+                    return Transform.translate(
+                      offset: Offset(0, -5 * _floatController.value),
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [
+                            BoxShadow(
+                              color: vibrantPurple.withOpacity(0.15),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            '🕶️',
+                            style: TextStyle(fontSize: 24),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                
+                const SizedBox(width: 12),
+                
+                // النص في المنتصف
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Welcome Back',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: deepPurple.withOpacity(0.5),
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _userName,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          foreground: Paint()
+                            ..shader = LinearGradient(
+                              colors: [deepPurple, vibrantPurple],
+                            ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // زر البروفايل ثابت على اليمين
+                Semantics(
+                  label: 'Profile settings',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () {
+                      _hapticFeedback();
+                      _speak('Profile');
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ProfilePage(),
+                        ),
+                      ).then((_) {
+                        _checkProfileCompleteness();
+                        _loadUserName();
+                      });
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [vibrantPurple, primaryPurple],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: vibrantPurple.withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.person_outline,
+                        color: Colors.white,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 16),
+                  
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 📊 إحصائية سريعة
+  Widget _buildQuickStat(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          icon,
+          size: 16,
+          color: vibrantPurple,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: deepPurple.withOpacity(0.7),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 📜 قائمة الميزات - أصغر
+Widget _buildFeaturesList() {
+  return SlideTransition(
+    position: Tween<Offset>(
+      begin: const Offset(0, 0.15),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.easeOutCubic,
+    )),
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 80),  // ✅ أصغر
+      children: [
+        _buildNeumorphicCard(
+          title: 'Face Recognition',
+          subtitle: 'Identify people instantly',
+          icon: Icons.face_retouching_natural,
+          gradient: LinearGradient(
+            colors: [deepPurple, vibrantPurple],
+          ),
+          onTap: () {
+            _hapticFeedback();
+            _speak('Face Recognition');
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const FaceListPage(),
+              ),
+            );
+          },
+        ),
+        
+        _buildNeumorphicCard(
+          title: 'Emergency SOS',
+          subtitle: 'Quick emergency contacts',
+          icon: Icons.emergency_outlined,
+          gradient: LinearGradient(
+            colors: [vibrantPurple, primaryPurple],
+          ),
+          onTap: () {
+            _hapticFeedback();
+            _speak('Emergency Contact');
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ContactInfoPage(),
+              ),
+            );
+          },
+        ),
+        
+        _buildNeumorphicCard(
+          title: 'Text Reading',
+          subtitle: 'Read any text aloud',
+          icon: Icons.record_voice_over,
+          gradient: LinearGradient(
+            colors: [deepPurple, vibrantPurple],
+          ),
+          onTap: () {
+            _hapticFeedback();
+            _speak('Text Reading');
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CameraScreen(mode: 'text'),
+              ),
+            );
+          },
+        ),
+        
+        _buildNeumorphicCard(
+          title: 'Reminders',
+          subtitle: 'Never miss important events',
+          icon: Icons.alarm_on,
+          gradient: LinearGradient(
+            colors: [vibrantPurple, primaryPurple],
+          ),
+          onTap: () {
+            _hapticFeedback();
+            _speak('Reminders');
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const RemindersPage(),
+              ),
+            );
+          },
+        ),
+        
+        _buildNeumorphicCard(
+          title: 'Currency Scanner',
+          subtitle: 'Identify money instantly',
+          icon: Icons.monetization_on,
+          gradient: LinearGradient(
+            colors: [deepPurple, vibrantPurple],
+          ),
+          onTap: () {
+            _hapticFeedback();
+            _speak('Currency Recognition');
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CurrencyCameraScreen(),
+              ),
+            );
+          },
+        ),
+        
+        _buildNeumorphicCard(
+          title: 'Color Detector',
+          subtitle: 'Identify colors around you',
+          icon: Icons.palette,
+          gradient: LinearGradient(
+            colors: [vibrantPurple, primaryPurple],
+          ),
+          onTap: () {
+            _hapticFeedback();
+            _speak('Color Identification');
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const CameraScreen(mode: 'color'),
+              ),
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+// 🎯 كارت Neumorphic أصغر
+Widget _buildNeumorphicCard({
+  required String title,
+  required String subtitle,
+  required IconData icon,
+  required Gradient gradient,
+  required VoidCallback onTap,
+}) {
+  return Semantics(
+    label: '$title. $subtitle. Double tap to open',
+    button: true,
+    child: Container(
+      margin: const EdgeInsets.only(bottom: 14),  // ✅ أصغر (كان 20)
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),  // ✅ أصغر (كان 25)
+          child: Container(
+            padding: const EdgeInsets.all(14),  // ✅ أصغر (كان 20)
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),  // ✅ أصغر
+              boxShadow: [
+                BoxShadow(
+                  color: palePurple.withOpacity(0.35),  // ✅ أخف
+                  blurRadius: 15,  // ✅ أصغر (كان 20)
+                  offset: const Offset(0, 8),  // ✅ أصغر (كان 10)
+                ),
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.8),
+                  blurRadius: 12,  // ✅ أصغر (كان 15)
+                  offset: const Offset(-2, -2),  // ✅ أصغر (كان -3, -3)
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                // الأيقونة المتدرجة
+                Container(
+                  width: 54,  // ✅ أصغر (كان 64)
+                  height: 54,  // ✅ أصغر
+                  decoration: BoxDecoration(
+                    gradient: gradient,
+                    borderRadius: BorderRadius.circular(15),  // ✅ أصغر (كان 18)
+                    boxShadow: [
+                      BoxShadow(
+                        color: gradient.colors.first.withOpacity(0.35),  // ✅ أخف
+                        blurRadius: 12,  // ✅ أصغر (كان 15)
+                        offset: const Offset(0, 6),  // ✅ أصغر (كان 8)
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    icon,
+                    color: Colors.white,
+                    size: 28,  // ✅ أصغر (كان 32)
+                  ),
+                ),
+                
+                const SizedBox(width: 14),  // ✅ أصغر (كان 18)
+                
+                // النص
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 15,  // ✅ أصغر (كان 17)
+                          fontWeight: FontWeight.w700,
+                          color: deepPurple,
+                        ),
+                      ),
+                      const SizedBox(height: 3),  // ✅ أصغر (كان 4)
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 12,  // ✅ أصغر (كان 13)
+                          color: deepPurple.withOpacity(0.5),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // سهم متدرج
+                Container(
+                  padding: const EdgeInsets.all(6),  // ✅ أصغر (كان 8)
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        gradient.colors.first.withOpacity(0.1),
+                        gradient.colors.last.withOpacity(0.1),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(10),  // ✅ أصغر (كان 12)
+                  ),
+                  child: Icon(
+                    Icons.arrow_forward_ios,
+                    size: 14,  // ✅ أصغر (كان 16)
+                    color: gradient.colors.first,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+  // ⚠️ تنبيه البروفايل
+  Widget _buildProfileAlert() {
+    return Container(
+      color: Colors.black.withOpacity(0.7),
+      child: Center(
+        child: Semantics(
+          label: 'Profile incomplete. Complete your profile to unlock features',
+          child: Container(
+            margin: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: vibrantPurple.withOpacity(0.3),
+                  blurRadius: 30,
+                  offset: const Offset(0, 15),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(30),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [vibrantPurple, primaryPurple],
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(30),
+                      topRight: Radius.circular(30),
+                    ),
+                  ),
+                  child: const Column(
+                    children: [
+                      Icon(
+                        Icons.person_add_alt_1,
+                        color: Colors.white,
+                        size: 64,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'Complete Your Profile',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                Padding(
+                  padding: const EdgeInsets.all(30),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Add your personal details to unlock all features',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: deepPurple.withOpacity(0.6),
+                          height: 1.5,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 30),
+                      
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Semantics(
+                              label: 'Later button',
+                              button: true,
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  _hapticFeedback();
+                                  _speak('Dismissed');
+                                  setState(() => _isDismissed = true);
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  side: BorderSide(
+                                    color: lightPurple,
+                                    width: 2,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Later',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: vibrantPurple,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 2,
+                            child: Semantics(
+                              label: 'Complete now button',
+                              button: true,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [vibrantPurple, primaryPurple],
+                                  ),
+                                  borderRadius: BorderRadius.circular(15),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: vibrantPurple.withOpacity(0.4),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
+                                ),
+                                child: ElevatedButton(
+                                  onPressed: () {
+                                    _hapticFeedback();
+                                    _speak('Opening profile');
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const ProfilePage(),
+                                      ),
+                                    ).then((_) {
+                                      _checkProfileCompleteness();
+                                      _loadUserName();
+                                    });
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 18),
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Complete Now',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+// 📍 Bottom Navigation بخلفية موف غامقة
+Widget _buildFloatingBottomNav() {
+  return ClipRRect(
+    borderRadius: const BorderRadius.only(
+      topLeft: Radius.circular(24),
+      topRight: Radius.circular(24),
+    ),
+    child: Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            deepPurple.withOpacity(0.95),
+            vibrantPurple.withOpacity(0.98),
+            primaryPurple,
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: deepPurple.withOpacity(0.3),
+            blurRadius: 25,
+            offset: const Offset(0, -8),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavButton(
+                icon: Icons.home_rounded,
+                label: 'Home',
+                isActive: true,
+                onTap: () {
+                  _hapticFeedback();
+                  _speak('Home');
+                },
+              ),
+              _buildNavButton(
+                icon: Icons.notifications_rounded,
+                label: 'Alerts',
+                onTap: () {
+                  _hapticFeedback();
+                  _speak('Reminders');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const RemindersPage(),
+                    ),
+                  );
+                },
+              ),
+              _buildNavButton(
+                icon: Icons.emergency,
+                label: 'SOS',
+                onTap: () async {
+                  _hapticFeedback();
+                  _speak('Emergency');
+                  final user = _auth.currentUser;
+                  if (user != null) {
+                    final doc = await _firestore
+                        .collection('users')
+                        .doc(user.uid)
+                        .get();
+                    final data = doc.data();
+                    final permissionGranted =  // ✅ الصحيح
+                        data?['location_permission_granted'] ?? false;
+                    if (!permissionGranted) {  // ✅ الصحيح
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => LocationPermissionScreen(
+                            onPermissionGranted: () async {
+                              await _firestore
+                                  .collection('users')
+                                  .doc(user.uid)
+                                  .update({'location_permission_granted': true});
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const SosScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SosScreen(),
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+              _buildNavButton(
+                icon: Icons.settings_rounded,
+                label: 'Settings',
+                onTap: () {
+                  _hapticFeedback();
+                  _speak('Settings');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsPage(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
+Widget _buildNavButton({
+  required IconData icon,
+  required String label,
+  bool isActive = false,
+  required VoidCallback onTap,
+}) {
+  return Semantics(
+    label: '$label button',
+    button: true,
+    selected: isActive,
+    child: GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive 
+              ? Colors.white.withOpacity(0.25)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: isActive
+              ? Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 1.5,
+                )
+              : null,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isActive 
+                  ? Colors.white
+                  : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
+              size: 22,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive 
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.9),
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 }

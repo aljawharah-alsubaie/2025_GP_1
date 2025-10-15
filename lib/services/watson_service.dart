@@ -17,7 +17,17 @@ class WatsonMLService {
         DateTime.now().isBefore(_tokenExpiry!)) {
       return _cachedToken!;
     }
-
+    // Add this test function temporarily
+   Future<void> _testConnection() async {
+     try {
+       final response = await http.get(
+         Uri.parse('https://iam.cloud.ibm.com'),
+       ).timeout(const Duration(seconds: 10));
+       print('✅ Can reach IBM Cloud: ${response.statusCode}');
+     } catch (e) {
+       print('❌ Cannot reach IBM Cloud: $e');
+     }
+   }
     try {
       final response = await http.post(
         Uri.parse('https://iam.cloud.ibm.com/identity/token'),
