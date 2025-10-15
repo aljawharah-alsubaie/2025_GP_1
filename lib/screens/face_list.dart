@@ -30,16 +30,16 @@ class _FaceListPageState extends State<FaceListPage> {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  // Header matching face_management.dart style exactly
+                  // ENHANCED: Much larger header with better spacing and touch targets
                   Container(
                     padding: const EdgeInsets.only(
-                      top: 40,
-                      left: 16,
-                      right: 16,
-                      bottom: 30,
+                      top: 60, // IMPROVED: Even more padding from top
+                      left: 20, // IMPROVED: More horizontal padding
+                      right: 20,
+                      bottom: 40, // IMPROVED: More bottom padding
                     ),
                     decoration: BoxDecoration(
-                      color: const Color.fromARGB(74, 243, 210, 247),
+                      color: const Color(0xFFF5E6F7),
                       borderRadius: const BorderRadius.only(
                         bottomLeft: Radius.circular(65),
                         bottomRight: Radius.circular(65),
@@ -55,44 +55,95 @@ class _FaceListPageState extends State<FaceListPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+                        // ENHANCED: Much taller navigation row
                         SizedBox(
-                          height: 40,
+                          height: 64, // IMPROVED: Increased from 48 to 64
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
-                              const Center(
-                                child: Text(
-                                  'Face Recognition',
-                                  style: TextStyle(
-                                    color: Color(0xFFB14ABA),
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
+                              Center(
+                                child: Semantics(
+                                  label: 'Face Recognition page',
+                                  header: true,
+                                  child: const Text(
+                                    'Face Recognition',
+                                    style: TextStyle(
+                                      color: Color(0xFF6B1D73),
+                                      fontSize: 28, // IMPROVED: Larger (was 24)
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
                                   ),
                                 ),
                               ),
+                              // ENHANCED: MUCH larger back button with better positioning
                               Positioned(
                                 left: 0,
-                                top: 0,
-                                child: GestureDetector(
-                                  onTap: () {
-                                    Navigator.pop(context);
-                                  },
-                                  child: const Icon(
-                                    Icons.arrow_back_ios,
-                                    color: Color(0xFFB14ABA),
+                                top: 8, // IMPROVED: Better vertical centering
+                                child: Semantics(
+                                  label: 'Go back to previous page',
+                                  button: true,
+                                  hint: 'Double tap to navigate back',
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: () {
+                                        HapticFeedback.mediumImpact(); // IMPROVED: Stronger haptic
+                                        Navigator.pop(context);
+                                      },
+                                      borderRadius: BorderRadius.circular(28),
+                                      // ENHANCED: Visual ripple effect
+                                      splashColor: const Color(
+                                        0xFF6B1D73,
+                                      ).withOpacity(0.2),
+                                      highlightColor: const Color(
+                                        0xFF6B1D73,
+                                      ).withOpacity(0.1),
+                                      child: Container(
+                                        // IMPROVED: Much larger touch target (56x56)
+                                        width: 56,
+                                        height: 56,
+                                        alignment: Alignment.center,
+                                        // ENHANCED: Add visible background
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.3),
+                                          borderRadius: BorderRadius.circular(
+                                            28,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(
+                                              0xFF6B1D73,
+                                            ).withOpacity(0.3),
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.arrow_back_ios_new,
+                                          color: Color(0xFF6B1D73),
+                                          size:
+                                              28, // IMPROVED: Much larger icon
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        const Text(
-                          'Choose an option to get started',
-                          style: TextStyle(
-                            color: Color(0xFFB14ABA),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
+                        const SizedBox(height: 16), // IMPROVED: More spacing
+                        Semantics(
+                          label:
+                              'Choose an option to get started with face recognition',
+                          child: const Text(
+                            'Choose an option to get started',
+                            style: TextStyle(
+                              color: Color(0xFF6B1D73),
+                              fontSize: 18, // IMPROVED: Larger (was 16)
+                              fontWeight: FontWeight.w500,
+                              height: 1.4,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
                         ),
                       ],
@@ -106,8 +157,10 @@ class _FaceListPageState extends State<FaceListPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Add Person Option with Animation
-                        AnimatedButton(
+                        // Add Person Option
+                        AccessibleButton(
+                          semanticLabel:
+                              'Add Person. Register a new person for face recognition',
                           onTap: () {
                             Navigator.push(
                               context,
@@ -118,13 +171,10 @@ class _FaceListPageState extends State<FaceListPage> {
                             );
                           },
                           child: Container(
-                            margin: const EdgeInsets.only(bottom: 24),
+                            constraints: const BoxConstraints(minHeight: 72),
+                            margin: const EdgeInsets.only(bottom: 20),
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF6B1D73), Color(0xFF9C4A9E)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
+                              color: const Color(0xFF6B1D73),
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
@@ -136,70 +186,65 @@ class _FaceListPageState extends State<FaceListPage> {
                                 ),
                               ],
                             ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(16),
-                                splashColor: Colors.white.withOpacity(0.3),
-                                highlightColor: Colors.white.withOpacity(0.1),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.25),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.person_add,
+                                      color: Colors.white,
+                                      size: 32,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 20),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Add Person',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
                                           ),
                                         ),
-                                        child: const Icon(
-                                          Icons.person_add,
-                                          color: Colors.white,
-                                          size: 28,
+                                        SizedBox(height: 6),
+                                        Text(
+                                          'Register a new person for recognition',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                            height: 1.3,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      const Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Add Person',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              'Register a new person for recognition',
-                                              style: TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.arrow_forward_ios,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 12),
+                                  const Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
 
-                        // Identify Person Option with Animation
-                        AnimatedButton(
+                        // Identify Person Option
+                        AccessibleButton(
+                          semanticLabel:
+                              'Identify Person. Use camera to recognize and identify people',
                           onTap: () {
                             Navigator.push(
                               context,
@@ -210,13 +255,10 @@ class _FaceListPageState extends State<FaceListPage> {
                             );
                           },
                           child: Container(
-                            margin: const EdgeInsets.only(bottom: 24),
+                            constraints: const BoxConstraints(minHeight: 72),
+                            margin: const EdgeInsets.only(bottom: 20),
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF6B1D73), Color(0xFF9C4A9E)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
+                              color: const Color(0xFF6B1D73),
                               borderRadius: BorderRadius.circular(16),
                               boxShadow: [
                                 BoxShadow(
@@ -228,63 +270,56 @@ class _FaceListPageState extends State<FaceListPage> {
                                 ),
                               ],
                             ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(16),
-                                splashColor: Colors.white.withOpacity(0.3),
-                                highlightColor: Colors.white.withOpacity(0.1),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.25),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.camera_alt,
+                                      color: Colors.white,
+                                      size: 32,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 20),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Identify Person',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
                                           ),
                                         ),
-                                        child: const Icon(
-                                          Icons.camera_alt,
-                                          color: Colors.white,
-                                          size: 28,
+                                        SizedBox(height: 6),
+                                        Text(
+                                          'Recognize and identify people',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                            height: 1.3,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      const Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              'Identify Person',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 18,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            SizedBox(height: 4),
-                                            Text(
-                                              'Recognize and identify people',
-                                              style: TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.arrow_forward_ios,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 12),
+                                  const Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -299,98 +334,125 @@ class _FaceListPageState extends State<FaceListPage> {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        selectedItemColor: const Color(0xFFB14ABA),
-        unselectedItemColor: Colors.black,
-        backgroundColor: Colors.grey.shade200,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal),
-        type: BottomNavigationBarType.fixed,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+      // Bottom Navigation Bar
+      bottomNavigationBar: Semantics(
+        label: 'Main navigation bar',
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          selectedItemColor: const Color(0xFF6B1D73),
+          unselectedItemColor: const Color(0xFF424242),
+          backgroundColor: Colors.white,
+          selectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.normal,
+            fontSize: 13,
+          ),
+          type: BottomNavigationBarType.fixed,
+          iconSize: 28,
+          onTap: (index) {
+            HapticFeedback.lightImpact();
+            setState(() {
+              _currentIndex = index;
+            });
 
-          if (index == 0) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const HomePage()),
-            );
-          } else if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const RemindersPage()),
-            );
-          } else if (index == 2) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SosScreen()),
-            );
-          } else if (index == 3) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const SettingsPage()),
-            );
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.notifications_none),
-            label: 'Reminders',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.warning_amber_outlined),
-            label: 'Emergency',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
+            if (index == 0) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const HomePage()),
+              );
+            } else if (index == 1) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RemindersPage()),
+              );
+            } else if (index == 2) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SosScreen()),
+              );
+            } else if (index == 3) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+            }
+          },
+          items: const [
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.home_outlined),
+              ),
+              label: 'Home',
+              tooltip: 'Navigate to Home page',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.notifications_none),
+              ),
+              label: 'Reminders',
+              tooltip: 'Navigate to Reminders page',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.warning_amber_outlined),
+              ),
+              label: 'Emergency',
+              tooltip: 'Navigate to Emergency SOS page',
+            ),
+            BottomNavigationBarItem(
+              icon: Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Icon(Icons.settings),
+              ),
+              label: 'Settings',
+              tooltip: 'Navigate to Settings page',
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// Custom Animated Button Widget
-class AnimatedButton extends StatefulWidget {
+// Accessible Button Widget
+class AccessibleButton extends StatefulWidget {
   final VoidCallback onTap;
   final Widget child;
+  final String semanticLabel;
 
-  const AnimatedButton({Key? key, required this.onTap, required this.child})
-    : super(key: key);
+  const AccessibleButton({
+    Key? key,
+    required this.onTap,
+    required this.child,
+    required this.semanticLabel,
+  }) : super(key: key);
 
   @override
-  State<AnimatedButton> createState() => _AnimatedButtonState();
+  State<AccessibleButton> createState() => _AccessibleButtonState();
 }
 
-class _AnimatedButtonState extends State<AnimatedButton>
+class _AccessibleButtonState extends State<AccessibleButton>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _opacityAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 150),
+      duration: const Duration(milliseconds: 100),
       vsync: this,
     );
 
     _scaleAnimation = Tween<double>(
       begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-    _opacityAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.8,
+      end: 0.97,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
@@ -400,36 +462,29 @@ class _AnimatedButtonState extends State<AnimatedButton>
     super.dispose();
   }
 
-  void _onTapDown(TapDownDetails details) {
-    _controller.forward();
-  }
-
-  void _onTapUp(TapUpDetails details) {
-    _controller.reverse();
-  }
-
-  void _onTapCancel() {
-    _controller.reverse();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: _onTapDown,
-      onTapUp: _onTapUp,
-      onTapCancel: _onTapCancel,
-      onTap: widget.onTap,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: _scaleAnimation.value,
-            child: Opacity(
-              opacity: _opacityAnimation.value,
-              child: widget.child,
-            ),
-          );
+    return Semantics(
+      label: widget.semanticLabel,
+      button: true,
+      enabled: true,
+      child: GestureDetector(
+        onTapDown: (_) {
+          _controller.forward();
+          HapticFeedback.lightImpact();
         },
+        onTapUp: (_) => _controller.reverse(),
+        onTapCancel: () => _controller.reverse(),
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: _scaleAnimation.value,
+              child: widget.child,
+            );
+          },
+        ),
       ),
     );
   }

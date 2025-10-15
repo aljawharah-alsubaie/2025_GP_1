@@ -21,8 +21,8 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   File? _image;
-  String? _profileImageUrl; // To store the Firebase Storage URL
-  bool _isUploading = false; // To show loading state
+  String? _profileImageUrl;
+  bool _isUploading = false;
   final picker = ImagePicker();
 
   final _auth = FirebaseAuth.instance;
@@ -37,23 +37,44 @@ class _ProfilePageState extends State<ProfilePage> {
   String? selectedCountryCode;
   String? selectedCountryName;
   String? selectedCity;
-
   List<String> cities = [];
+
+  late FocusNode _nameFocus;
+  late FocusNode _emailFocus;
+  late FocusNode _phoneFocus;
+  late FocusNode _addressFocus;
+  late FocusNode _saveFocus;
 
   @override
   void initState() {
     super.initState();
+    _nameFocus = FocusNode();
+    _emailFocus = FocusNode();
+    _phoneFocus = FocusNode();
+    _addressFocus = FocusNode();
+    _saveFocus = FocusNode();
     _loadUserData();
   }
 
+  @override
+  void dispose() {
+    _nameFocus.dispose();
+    _emailFocus.dispose();
+    _phoneFocus.dispose();
+    _addressFocus.dispose();
+    _saveFocus.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadUserData() async {
-    print('Loading user data...');
     final user = _auth.currentUser;
     if (user != null) {
-      print('User found: ${user.uid}');
       final doc = await _firestore.collection('users').doc(user.uid).get();
       if (doc.exists) {
-        print('Document exists, loading data...');
         final data = doc.data();
         _emailController.text = data?['email'] ?? '';
         _nameController.text = data?['full_name'] ?? '';
@@ -62,18 +83,13 @@ class _ProfilePageState extends State<ProfilePage> {
         selectedCountryName = data?['country'];
         selectedCity = data?['city'];
         selectedCountryCode = data?['countryCode'];
-        _profileImageUrl = data?['profileImageUrl']; // Load existing image URL
+        _profileImageUrl = data?['profileImageUrl'];
 
         if (selectedCountryCode != null) {
           fetchCities(selectedCountryCode!);
         }
-        print('Data loaded successfully');
         setState(() {});
-      } else {
-        print('Document does not exist');
       }
-    } else {
-      print('No user found');
     }
   }
 
@@ -82,24 +98,17 @@ class _ProfilePageState extends State<ProfilePage> {
       final user = _auth.currentUser;
       if (user == null) return null;
 
-      // Create a reference to Firebase Storage
       final storageRef = _storage.ref().child('profilePic/${user.uid}.jpg');
-
-      // Upload the file
       final uploadTask = storageRef.putFile(imageFile);
-
-      // Wait for upload to complete
       final snapshot = await uploadTask;
-
-      // Get the download URL
       final downloadUrl = await snapshot.ref.getDownloadURL();
-
       return downloadUrl;
     } catch (e) {
-      print('Error uploading image: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload image: $e')));
+      }
       return null;
     }
   }
@@ -108,16 +117,16 @@ class _ProfilePageState extends State<ProfilePage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Confirm Save'),
-        content: Text('Are you sure you want to save changes?'),
+        title: const Text('Confirm Save'),
+        content: const Text('Are you sure you want to save changes?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Yes'),
+            child: const Text('Yes'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
         ],
       ),
@@ -126,7 +135,6 @@ class _ProfilePageState extends State<ProfilePage> {
     if (confirm == true) {
       final user = _auth.currentUser;
       if (user != null) {
-        // Prepare the data to save
         Map<String, dynamic> userData = {
           'email': _emailController.text.trim(),
           'full_name': _nameController.text.trim(),
@@ -137,26 +145,25 @@ class _ProfilePageState extends State<ProfilePage> {
           'countryCode': selectedCountryCode,
         };
 
-        // If there's a new image, upload it first
         if (_image != null) {
           setState(() => _isUploading = true);
-
           final imageUrl = await _uploadImageToFirebase(_image!);
           if (imageUrl != null) {
             userData['profileImageUrl'] = imageUrl;
-            _profileImageUrl = imageUrl; // Update local state
+            _profileImageUrl = imageUrl;
           }
-
           setState(() => _isUploading = false);
         }
 
-        // Save all data to Firestore
         await _firestore.collection('users').doc(user.uid).update(userData);
-
         setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Your changes have been saved successfully')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Your changes have been saved successfully'),
+            ),
+          );
+        }
       }
     }
   }
@@ -164,7 +171,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _getImage() async {
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 80, // Compress image to reduce upload time
+      imageQuality: 80,
     );
 
     if (pickedFile != null) {
@@ -240,20 +247,47 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // Helper method to get the current profile image
   ImageProvider _getProfileImage() {
     if (_image != null) {
-      return FileImage(_image!); // Show newly selected image
+      return FileImage(_image!);
     } else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
-      return NetworkImage(_profileImageUrl!); // Show image from Firebase
+      return NetworkImage(_profileImageUrl!);
     } else {
-      return const AssetImage('assets/images/profileimg.jpg'); // Default image
+      return const AssetImage('assets/images/profileimg.jpg');
     }
+  }
+
+  InputDecoration _buildInputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(
+        color: Color(0xFF6B1D73),
+        fontWeight: FontWeight.w500,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFF6B1D73), width: 1.5),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFF6B1D73), width: 1.5),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFF6B1D73), width: 2.5),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      filled: true,
+      fillColor: Colors.white,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -264,46 +298,72 @@ class _ProfilePageState extends State<ProfilePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-
-                  const Text(
+                  Text(
                     "Personal Details",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 18 * textScaleFactor,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF2C3E50),
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  _buildField("Name", _nameController),
-                  _buildField("Email Address", _emailController),
-                  _buildField("Phone Number", _phoneController),
+                  _buildTextField(
+                    "Name",
+                    _nameController,
+                    _nameFocus,
+                    _emailFocus,
+                  ),
+                  _buildTextField(
+                    "Email Address",
+                    _emailController,
+                    _emailFocus,
+                    _phoneFocus,
+                  ),
+                  _buildTextField(
+                    "Phone Number",
+                    _phoneController,
+                    _phoneFocus,
+                    _addressFocus,
+                  ),
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         "Address Details",
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 18 * textScaleFactor,
                           fontWeight: FontWeight.bold,
+                          color: const Color(0xFF2C3E50),
                         ),
                       ),
                       GestureDetector(
                         onTap: _getCurrentLocationAndFill,
-                        child: const Text(
-                          "or Use Current Location",
-                          style: TextStyle(
-                            color: Color(0xFF6B1D73),
-                            fontSize: 14,
-                            fontStyle: FontStyle.italic,
-                            decoration: TextDecoration.underline,
+                        child: Tooltip(
+                          message: 'Use current location',
+                          child: Text(
+                            "or Use Current Location",
+                            style: TextStyle(
+                              color: const Color(0xFF6B1D73),
+                              fontSize: 13 * textScaleFactor,
+                              fontStyle: FontStyle.italic,
+                              decoration: TextDecoration.underline,
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     "Country",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      fontSize: 16 * textScaleFactor,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF2C3E50),
+                    ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   GestureDetector(
                     onTap: () {
                       showCountryPicker(
@@ -320,66 +380,87 @@ class _ProfilePageState extends State<ProfilePage> {
                         },
                       );
                     },
-                    child: AbsorbPointer(
-                      child: DropdownButtonFormField<String>(
-                        value: selectedCountryName,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: const Color(0xFF6B1D73),
+                          width: 1.5,
                         ),
-                        hint: Text(
-                          "Please select your Country",
-                          style: TextStyle(
-                            fontStyle: FontStyle.italic,
-                            fontSize: 13,
-                            color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            selectedCountryName ?? 'Select Country',
+                            style: TextStyle(
+                              fontSize: 14 * textScaleFactor,
+                              color: selectedCountryName != null
+                                  ? Colors.black
+                                  : Colors.grey,
+                            ),
                           ),
-                        ),
-                        items: selectedCountryName != null
-                            ? [
-                                DropdownMenuItem(
-                                  value: selectedCountryName,
-                                  child: Text(selectedCountryName!),
-                                ),
-                              ]
-                            : [],
-                        onChanged: (_) {},
-                        icon: const Icon(Icons.arrow_drop_down),
+                          const Icon(
+                            Icons.arrow_drop_down,
+                            color: Color(0xFF6B1D73),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text(
+                  Text(
                     "City",
-                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16 * textScaleFactor,
+                      color: const Color(0xFF2C3E50),
+                    ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   DropdownSearch<String>(
                     key: ValueKey(selectedCountryCode),
                     items: cities,
                     selectedItem: selectedCity,
                     enabled: cities.isNotEmpty,
-                    onChanged: (val) => setState(() => selectedCity = val),
+                    onChanged: (val) {
+                      setState(() => selectedCity = val);
+                    },
                     dropdownDecoratorProps: DropDownDecoratorProps(
                       dropdownSearchDecoration: InputDecoration(
-                        hintText: "Please select your City",
+                        hintText: cities.isEmpty
+                            ? "Select country first"
+                            : "Select City",
                         hintStyle: TextStyle(
-                          fontSize: 13,
+                          fontSize: 13 * textScaleFactor,
                           fontStyle: FontStyle.italic,
-                          color: Colors.black.withOpacity(0.5),
+                          color: Colors.black.withOpacity(0.6),
                         ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF6B1D73),
+                            width: 1.5,
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF6B1D73),
+                            width: 1.5,
+                          ),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
+                          horizontal: 14,
+                          vertical: 14,
                         ),
+                        filled: true,
+                        fillColor: Colors.white,
                       ),
                     ),
                     popupProps: PopupProps.bottomSheet(
@@ -407,37 +488,53 @@ class _ProfilePageState extends State<ProfilePage> {
                       constraints: BoxConstraints(
                         maxHeight: MediaQuery.of(context).size.height * 0.7,
                       ),
-                      emptyBuilder: (context, _) =>
-                          const Center(child: Text("No data found")),
+                      emptyBuilder: (context, _) => const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text("No cities found"),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildField("Address", _addressController),
+                  _buildTextField(
+                    "Address",
+                    _addressController,
+                    _addressFocus,
+                    _saveFocus,
+                  ),
                   const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: _isUploading ? null : _saveProfile,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6B1D73),
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      focusNode: _saveFocus,
+                      onPressed: _isUploading ? null : _saveProfile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6B1D73),
+                        disabledBackgroundColor: Colors.grey,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                    ),
-                    child: _isUploading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
+                      child: _isUploading
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : Text(
+                              "Save Changes",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16 * textScaleFactor,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
-                          )
-                        : const Text(
-                            "Save",
-                            style: TextStyle(color: Colors.white),
-                          ),
+                    ),
                   ),
                   const SizedBox(height: 30),
                 ],
@@ -449,30 +546,37 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller) {
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller,
+    FocusNode currentFocus,
+    FocusNode nextFocus,
+  ) {
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+          style: TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 16 * textScaleFactor,
+            color: const Color(0xFF2C3E50),
+          ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         TextField(
           controller: controller,
-          decoration: InputDecoration(
-            hintText: label == "Address" ? "Enter your address" : null,
-            hintStyle: TextStyle(
-              fontSize: 13,
-              fontStyle: FontStyle.italic,
-              color: Colors.black.withOpacity(0.5),
-            ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
-            ),
-          ),
+          focusNode: currentFocus,
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) => nextFocus.requestFocus(),
+          keyboardType: label == "Email Address"
+              ? TextInputType.emailAddress
+              : label == "Phone Number"
+              ? TextInputType.phone
+              : TextInputType.text,
+          decoration: _buildInputDecoration(label),
         ),
         const SizedBox(height: 12),
       ],
@@ -493,7 +597,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   top: -12,
                   left: -20,
                   child: CircleAvatar(
-                    backgroundColor: Colors.white.withOpacity(0.22),
+                    backgroundColor: Colors.white.withOpacity(0.12),
                     radius: 45,
                   ),
                 ),
@@ -501,7 +605,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   top: 120,
                   right: -15,
                   child: CircleAvatar(
-                    backgroundColor: Colors.white.withOpacity(0.22),
+                    backgroundColor: Colors.white.withOpacity(0.12),
                     radius: 40,
                   ),
                 ),
@@ -509,7 +613,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   bottom: 110,
                   left: 60,
                   child: CircleAvatar(
-                    backgroundColor: Colors.white.withOpacity(0.22),
+                    backgroundColor: Colors.white.withOpacity(0.12),
                     radius: 15,
                   ),
                 ),
@@ -517,7 +621,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   bottom: 210,
                   left: 240,
                   child: CircleAvatar(
-                    backgroundColor: Colors.white.withOpacity(0.22),
+                    backgroundColor: Colors.white.withOpacity(0.12),
                     radius: 15,
                   ),
                 ),
@@ -529,8 +633,9 @@ class _ProfilePageState extends State<ProfilePage> {
           top: 24,
           left: 6,
           child: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 40),
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
             onPressed: () => Navigator.of(context).pop(),
+            tooltip: 'Go back',
           ),
         ),
         const Positioned(
@@ -542,7 +647,7 @@ class _ProfilePageState extends State<ProfilePage> {
               "My Profile",
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 20,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -563,11 +668,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withOpacity(0.4),
                     ),
                     child: const Center(
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
+                        strokeWidth: 2.5,
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     ),
@@ -584,11 +689,11 @@ class _ProfilePageState extends State<ProfilePage> {
                       border: Border.all(color: Colors.white, width: 2),
                     ),
                     child: CircleAvatar(
-                      radius: 14,
+                      radius: 16,
                       backgroundColor: _isUploading
                           ? Colors.grey
                           : const Color(0xFF007AFF),
-                      child: Icon(Icons.edit, size: 16, color: Colors.white),
+                      child: Icon(Icons.edit, size: 18, color: Colors.white),
                     ),
                   ),
                 ),
