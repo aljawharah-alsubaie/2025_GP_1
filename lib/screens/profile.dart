@@ -428,21 +428,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     items: (filter, infiniteScrollProps) => cities,
                     selectedItem: selectedCity,
                     enabled: cities.isNotEmpty,
-<<<<<<< HEAD
-                    onChanged: (val) {
-                      setState(() => selectedCity = val);
-                    },
-                    dropdownDecoratorProps: DropDownDecoratorProps(
-                      dropdownSearchDecoration: InputDecoration(
-                        hintText: cities.isEmpty
-                            ? "Select country first"
-                            : "Select City",
-=======
                     onChanged: (val) => setState(() => selectedCity = val),
                     decoratorProps: DropDownDecoratorProps(
                       decoration: InputDecoration(
                         hintText: "Please select your City",
->>>>>>> caeda50e20ec4305479346973e7b9a765cf600e4
                         hintStyle: TextStyle(
                           fontSize: 13 * textScaleFactor,
                           fontStyle: FontStyle.italic,
