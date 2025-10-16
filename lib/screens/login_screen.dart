@@ -15,7 +15,8 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
@@ -25,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _biometricAvailable = false;
-  
+
   late AnimationController _animationController;
   late AnimationController _buttonAnimationController;
   late Animation<double> _fadeAnimation;
@@ -47,43 +48,40 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
-    
+
     _buttonAnimationController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.0, 0.8, curve: Curves.easeInOut),
-    ));
-    
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.5),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.2, 1.0, curve: Curves.easeOutBack),
-    ));
-    
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.4, 1.0, curve: Curves.elasticOut),
-    ));
 
-    _buttonScaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(
-      parent: _buttonAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.8, curve: Curves.easeInOut),
+      ),
+    );
+
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.2, 1.0, curve: Curves.easeOutBack),
+          ),
+        );
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.4, 1.0, curve: Curves.elasticOut),
+      ),
+    );
+
+    _buttonScaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(
+        parent: _buttonAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
   }
 
   Future<void> _checkBiometricAvailability() async {
@@ -104,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     const storage = FlutterSecureStorage();
     final rememberMe = await storage.read(key: 'rememberMe');
     final savedEmail = await storage.read(key: 'savedEmail');
-    
+
     if (rememberMe == 'true' && savedEmail != null) {
       setState(() {
         _emailController.text = savedEmail;
@@ -134,15 +132,13 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-        
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+
       const storage = FlutterSecureStorage();
       await storage.write(key: 'isLoggedIn', value: 'true');
       await storage.write(key: 'userEmail', value: email);
-      
+
       // حفظ حالة Remember Me
       if (_rememberMe) {
         await storage.write(key: 'rememberMe', value: 'true');
@@ -159,28 +155,30 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             .collection('users')
             .doc(user.uid)
             .get();
-        
+
         String fullName = 'User';
         if (userDoc.exists) {
-          Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+          Map<String, dynamic> userData =
+              userDoc.data() as Map<String, dynamic>;
           fullName = userData['full_name'] ?? user.displayName ?? 'User';
         }
 
         _showSnackBar("Welcome back, $fullName!", Colors.green);
-        
+
         if (!mounted) return;
-        
+
         // Smooth navigation with delay for better UX
         await Future.delayed(const Duration(milliseconds: 500));
-        
+
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => 
+            pageBuilder: (context, animation, secondaryAnimation) =>
                 GetStartedScreen(fullName: fullName),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
             transitionDuration: const Duration(milliseconds: 500),
           ),
         );
@@ -226,8 +224,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     }
 
     try {
-      final List<BiometricType> availableBiometrics = await _localAuth.getAvailableBiometrics();
-      
+      final List<BiometricType> availableBiometrics = await _localAuth
+          .getAvailableBiometrics();
+
       if (availableBiometrics.isEmpty) {
         _showSnackBar("No biometric methods enrolled", Colors.orange);
         return;
@@ -248,32 +247,37 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               .collection('users')
               .doc(user.uid)
               .get();
-          
+
           String fullName = 'User';
           if (userDoc.exists) {
-            Map<String, dynamic> userData = userDoc.data() as Map<String, dynamic>;
+            Map<String, dynamic> userData =
+                userDoc.data() as Map<String, dynamic>;
             fullName = userData['full_name'] ?? user.displayName ?? 'User';
           }
 
           _showSnackBar("Biometric authentication successful!", Colors.green);
-          
+
           if (!mounted) return;
-          
+
           await Future.delayed(const Duration(milliseconds: 500));
-          
+
           Navigator.pushReplacement(
             context,
             PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => 
+              pageBuilder: (context, animation, secondaryAnimation) =>
                   GetStartedScreen(fullName: fullName),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
               transitionDuration: const Duration(milliseconds: 500),
             ),
           );
         } else {
-          _showSnackBar("Please login with email first to enable biometric authentication", Colors.orange);
+          _showSnackBar(
+            "Please login with email first to enable biometric authentication",
+            Colors.orange,
+          );
         }
       }
     } catch (e) {
@@ -300,8 +304,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         content: Row(
           children: [
             Icon(
-              color == Colors.green ? Icons.check_circle : 
-              color == Colors.orange ? Icons.warning : Icons.error,
+              color == Colors.green
+                  ? Icons.check_circle
+                  : color == Colors.orange
+                  ? Icons.warning
+                  : Icons.error,
               color: Colors.white,
               size: 20,
             ),
@@ -360,7 +367,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                     child: Column(
                       children: [
                         const SizedBox(height: 40),
-                        
+
                         // Header section with animation
                         ScaleTransition(
                           scale: _scaleAnimation,
@@ -388,7 +395,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                   child: Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF6B1D73).withOpacity(0.2),
+                                      color: const Color(
+                                        0xFF6B1D73,
+                                      ).withOpacity(0.2),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(
@@ -421,7 +430,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                             ),
                           ),
                         ),
-                        
+
                         const SizedBox(height: 40),
 
                         // Email field
@@ -434,7 +443,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                             if (value == null || value.trim().isEmpty) {
                               return "Email is required";
                             }
-                            final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                            final emailRegex = RegExp(
+                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                            );
                             if (!emailRegex.hasMatch(value.trim())) {
                               return "Please enter a valid email address";
                             }
@@ -449,7 +460,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                           controller: _passwordController,
                           hint: "Password",
                           obscure: _obscurePassword,
-                          onToggle: () => setState(() => _obscurePassword = !_obscurePassword),
+                          onToggle: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return "Password is required";
@@ -475,13 +488,17 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                   checked: _rememberMe,
                                   child: Checkbox(
                                     value: _rememberMe,
-                                    onChanged: (value) => setState(() => _rememberMe = value ?? false),
+                                    onChanged: (value) => setState(
+                                      () => _rememberMe = value ?? false,
+                                    ),
                                     activeColor: const Color(0xFF6B1D73),
                                     checkColor: Colors.white,
                                   ),
                                 ),
                                 GestureDetector(
-                                  onTap: () => setState(() => _rememberMe = !_rememberMe),
+                                  onTap: () => setState(
+                                    () => _rememberMe = !_rememberMe,
+                                  ),
                                   child: const Text(
                                     "Remember me",
                                     style: TextStyle(
@@ -501,17 +518,27 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                   Navigator.push(
                                     context,
                                     PageRouteBuilder(
-                                      pageBuilder: (context, animation, secondaryAnimation) => 
-                                          const ForgotPasswordScreen(),
-                                      transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                        return SlideTransition(
-                                          position: Tween<Offset>(
-                                            begin: const Offset(1.0, 0.0),
-                                            end: Offset.zero,
-                                          ).animate(animation),
-                                          child: child,
-                                        );
-                                      },
+                                      pageBuilder:
+                                          (
+                                            context,
+                                            animation,
+                                            secondaryAnimation,
+                                          ) => const ForgotPasswordScreen(),
+                                      transitionsBuilder:
+                                          (
+                                            context,
+                                            animation,
+                                            secondaryAnimation,
+                                            child,
+                                          ) {
+                                            return SlideTransition(
+                                              position: Tween<Offset>(
+                                                begin: const Offset(1.0, 0.0),
+                                                end: Offset.zero,
+                                              ).animate(animation),
+                                              child: child,
+                                            );
+                                          },
                                     ),
                                   );
                                 },
@@ -535,7 +562,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                           scale: _buttonScaleAnimation,
                           child: Semantics(
                             button: true,
-                            label: _isLoading ? 'Logging in, please wait' : 'Login button',
+                            label: _isLoading
+                                ? 'Logging in, please wait'
+                                : 'Login button',
                             hint: _isLoading ? '' : 'Double tap to login',
                             enabled: !_isLoading,
                             child: SizedBox(
@@ -547,7 +576,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                   backgroundColor: const Color(0xFF6B1D73),
                                   foregroundColor: Colors.white,
                                   elevation: 12,
-                                  shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
+                                  shadowColor: const Color(
+                                    0xFF6B1D73,
+                                  ).withOpacity(0.4),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(16),
                                   ),
@@ -585,7 +616,9 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                               ),
                             ),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               child: Text(
                                 "OR",
                                 style: TextStyle(
@@ -605,81 +638,95 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
                         const SizedBox(height: 30),
 
-                        // Social login buttons
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        // Social login buttons - Full width style
+                        Column(
                           children: [
-                            _buildSocialButton(
+                            _buildFullWidthSocialButton(
                               icon: Icons.g_mobiledata,
                               onTap: _loginWithGoogle,
-                              label: "Google",
+                              label: "Continue with Google",
                             ),
-                            if (_biometricAvailable)
-                              _buildSocialButton(
+                            if (_biometricAvailable) ...[
+                              const SizedBox(height: 16),
+                              _buildFullWidthSocialButton(
                                 icon: Icons.fingerprint,
                                 onTap: _loginWithBiometric,
-                                label: "Biometric",
+                                label: "Continue with Biometric",
                               ),
+                            ],
                           ],
                         ),
 
                         const SizedBox(height: 40),
 
                         // Sign up link
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.2),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text(
-                                "Don't have an account? ",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
+                        Semantics(
+                          button: true,
+                          label: 'Sign up button',
+                          hint: 'Double tap to create a new account',
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                PageRouteBuilder(
+                                  pageBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                      ) => const SignupScreen(),
+                                  transitionsBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child,
+                                      ) {
+                                        return SlideTransition(
+                                          position: Tween<Offset>(
+                                            begin: const Offset(1.0, 0.0),
+                                            end: Offset.zero,
+                                          ).animate(animation),
+                                          child: child,
+                                        );
+                                      },
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 16,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1,
                                 ),
                               ),
-                              Semantics(
-                                button: true,
-                                label: 'Sign up link',
-                                hint: 'Double tap to create a new account',
-                                child: GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      PageRouteBuilder(
-                                        pageBuilder: (context, animation, secondaryAnimation) => 
-                                            const SignupScreen(),
-                                        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                          return SlideTransition(
-                                            position: Tween<Offset>(
-                                              begin: const Offset(1.0, 0.0),
-                                              end: Offset.zero,
-                                            ).animate(animation),
-                                            child: child,
-                                          );
-                                        },
-                                      ),
-                                    );
-                                  },
-                                  child: const Text(
-                                    "Sign Up",
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    "Don't have an account? ",
                                     style: TextStyle(
-                                      color: Color(0xFF6B1D73),
+                                      color: Colors.white.withOpacity(0.9),
                                       fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      decoration: TextDecoration.underline,
                                     ),
                                   ),
-                                ),
+                                  const Text(
+                                    "Sign Up",
+                                    style: TextStyle(
+                                      color: Color.fromARGB(255, 248, 183, 255),
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
 
@@ -733,11 +780,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   color: const Color(0xFF6B1D73).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
-                  icon,
-                  color: const Color(0xFF6B1D73),
-                  size: 20,
-                ),
+                child: Icon(icon, color: const Color(0xFF6B1D73), size: 20),
               ),
             ),
             border: OutlineInputBorder(
@@ -746,10 +789,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(
-                color: Color(0xFF6B1D73),
-                width: 2,
-              ),
+              borderSide: const BorderSide(color: Color(0xFF6B1D73), width: 2),
             ),
             fillColor: Colors.white.withOpacity(0.95),
             filled: true,
@@ -823,10 +863,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(
-                color: Color(0xFF6B1D73),
-                width: 2,
-              ),
+              borderSide: const BorderSide(color: Color(0xFF6B1D73), width: 2),
             ),
             fillColor: Colors.white.withOpacity(0.95),
             filled: true,
@@ -837,45 +874,52 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildSocialButton({
+  Widget _buildFullWidthSocialButton({
     required IconData icon,
     required VoidCallback onTap,
     required String label,
   }) {
     return Semantics(
       button: true,
-      label: '$label button',
-      hint: 'Double tap to login with $label',
-      child: GestureDetector(
-        onTap: onTap,
+      label: label,
+      hint: 'Double tap to $label',
+      child: SizedBox(
+        width: double.infinity,
+        height: 56,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: Colors.white.withOpacity(0.3),
+              width: 1.5,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ExcludeSemantics(
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 24,
-                ),
+          child: ElevatedButton(
+            onPressed: onTap,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              foregroundColor: Colors.white,
+              shadowColor: Colors.transparent,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ExcludeSemantics(child: Icon(icon, size: 28)),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

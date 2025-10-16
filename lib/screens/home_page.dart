@@ -24,23 +24,22 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
   final FlutterTts _tts = FlutterTts();
-  
+
   bool _isProfileIncomplete = false;
   bool _isLoading = true;
   bool _isDismissed = false;
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _floatController;
-  
+
   String _userName = 'User';
-// 🎨 نظام ألوان موف جديد
-static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
-static const Color vibrantPurple = Color(0xFF8E3A95);
-static const Color primaryPurple = Color(0xFF9C4A9E);
-static const Color softPurple = Color(0xFFB665BA);
-static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
-static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
-static const Color ultraLightPurple = Color(0xFFF3E5F5);
+  // 🎨 نظام ألوان موف جديد
+  static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
+  static const Color vibrantPurple = Color(0xFF8E3A95);
+  static const Color primaryPurple = Color(0xFF9C4A9E);
+  static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
+  static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
+  static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
   @override
   void initState() {
@@ -48,17 +47,17 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
     _initTts();
     _loadUserName();
     _checkProfileCompleteness();
-    
+
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..forward();
-    
+
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
-    
+
     _floatController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 3000),
@@ -110,25 +109,27 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
               (data?['address']?.toString().trim().isEmpty ?? true) ||
               (data?['country']?.toString().trim().isEmpty ?? true) ||
               (data?['city']?.toString().trim().isEmpty ?? true);
-          
+
           final lastShown = data?['profile_reminder_last_shown'] as Timestamp?;
           final now = DateTime.now();
-          
+
           bool shouldShow = false;
           if (isIncomplete) {
             if (lastShown == null) {
               shouldShow = true;
             } else {
-              final daysSinceLastShown = now.difference(lastShown.toDate()).inDays;
+              final daysSinceLastShown = now
+                  .difference(lastShown.toDate())
+                  .inDays;
               shouldShow = daysSinceLastShown >= 3;
             }
           }
-          
+
           setState(() {
             _isProfileIncomplete = shouldShow;
             _isLoading = false;
           });
-          
+
           if (shouldShow) {
             await _firestore.collection('users').doc(user.uid).update({
               'profile_reminder_last_shown': Timestamp.now(),
@@ -170,15 +171,13 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
         children: [
           // 🎨 خلفية متدرجة
           _buildGradientBackground(),
-          
+
           // 🎯 الهيدر الجديد فوق تماماً
           SafeArea(
             child: Column(
               children: [
                 _buildModernHeader(),
-                Expanded(
-                  child: _buildFeaturesList(),
-                ),
+                Expanded(child: _buildFeaturesList()),
               ],
             ),
           ),
@@ -187,7 +186,7 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
             _buildProfileAlert(),
         ],
       ),
-      
+
       bottomNavigationBar: _buildFloatingBottomNav(),
     );
   }
@@ -199,11 +198,7 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            ultraLightPurple,
-            palePurple.withOpacity(0.3),
-            Colors.white,
-          ],
+          colors: [ultraLightPurple, palePurple.withOpacity(0.3), Colors.white],
           stops: const [0.0, 0.5, 1.0],
         ),
       ),
@@ -225,7 +220,6 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
               Colors.white.withOpacity(0.7),
               const Color.fromARGB(198, 255, 255, 255),
               const Color.fromARGB(195, 240, 224, 245),
-
             ],
           ),
         ),
@@ -255,18 +249,15 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
                           ],
                         ),
                         child: Center(
-                          child: Text(
-                            '🕶️',
-                            style: TextStyle(fontSize: 24),
-                          ),
+                          child: Text('🕶️', style: TextStyle(fontSize: 24)),
                         ),
                       ),
                     );
                   },
                 ),
-                
+
                 const SizedBox(width: 12),
-                
+
                 // النص في المنتصف
                 Expanded(
                   child: Column(
@@ -297,7 +288,7 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
                     ],
                   ),
                 ),
-                
+
                 // زر البروفايل ثابت على اليمين
                 Semantics(
                   label: 'Profile settings',
@@ -342,283 +333,228 @@ static const Color ultraLightPurple = Color(0xFFF3E5F5);
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-                  
           ],
         ),
       ),
     );
   }
 
-  // 📊 إحصائية سريعة
-  Widget _buildQuickStat(IconData icon, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          icon,
-          size: 16,
-          color: vibrantPurple,
-        ),
-        const SizedBox(width: 6),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: deepPurple.withOpacity(0.7),
+  // 📜 قائمة الميزات - أصغر
+  Widget _buildFeaturesList() {
+    return SlideTransition(
+      position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
+          .animate(
+            CurvedAnimation(
+              parent: _slideController,
+              curve: Curves.easeOutCubic,
+            ),
           ),
-        ),
-      ],
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          6,
+          16,
+          16,
+        ), // ✅ إزالة المسافة الزائدة
+        children: [
+          _buildNeumorphicCard(
+            title: 'Face Recognition',
+            subtitle: 'Identify people instantly',
+            icon: Icons.face_retouching_natural,
+            gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
+            onTap: () {
+              _hapticFeedback();
+              _speak('Face Recognition');
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const FaceListPage()),
+              );
+            },
+          ),
+
+          _buildNeumorphicCard(
+            title: 'Emergency SOS',
+            subtitle: 'Quick emergency contacts',
+            icon: Icons.emergency_outlined,
+            gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
+            onTap: () {
+              _hapticFeedback();
+              _speak('Emergency Contact');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ContactInfoPage(),
+                ),
+              );
+            },
+          ),
+
+          _buildNeumorphicCard(
+            title: 'Text Reading',
+            subtitle: 'Read any text aloud',
+            icon: Icons.record_voice_over,
+            gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
+            onTap: () {
+              _hapticFeedback();
+              _speak('Text Reading');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CameraScreen(mode: 'text'),
+                ),
+              );
+            },
+          ),
+
+          _buildNeumorphicCard(
+            title: 'Currency Scanner',
+            subtitle: 'Identify money instantly',
+            icon: Icons.monetization_on,
+            gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
+            onTap: () {
+              _hapticFeedback();
+              _speak('Currency Recognition');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CurrencyCameraScreen(),
+                ),
+              );
+            },
+          ),
+
+          _buildNeumorphicCard(
+            title: 'Color Detector',
+            subtitle: 'Identify colors around you',
+            icon: Icons.palette,
+            gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
+            onTap: () {
+              _hapticFeedback();
+              _speak('Color Identification');
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CameraScreen(mode: 'color'),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
-  // 📜 قائمة الميزات - أصغر
-Widget _buildFeaturesList() {
-  return SlideTransition(
-    position: Tween<Offset>(
-      begin: const Offset(0, 0.15),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _slideController,
-      curve: Curves.easeOutCubic,
-    )),
-    child: ListView(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 80),  // ✅ أصغر
-      children: [
-        _buildNeumorphicCard(
-          title: 'Face Recognition',
-          subtitle: 'Identify people instantly',
-          icon: Icons.face_retouching_natural,
-          gradient: LinearGradient(
-            colors: [deepPurple, vibrantPurple],
-          ),
-          onTap: () {
-            _hapticFeedback();
-            _speak('Face Recognition');
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const FaceListPage(),
-              ),
-            );
-          },
-        ),
-        
-        _buildNeumorphicCard(
-          title: 'Emergency SOS',
-          subtitle: 'Quick emergency contacts',
-          icon: Icons.emergency_outlined,
-          gradient: LinearGradient(
-            colors: [vibrantPurple, primaryPurple],
-          ),
-          onTap: () {
-            _hapticFeedback();
-            _speak('Emergency Contact');
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ContactInfoPage(),
-              ),
-            );
-          },
-        ),
-        
-        _buildNeumorphicCard(
-          title: 'Text Reading',
-          subtitle: 'Read any text aloud',
-          icon: Icons.record_voice_over,
-          gradient: LinearGradient(
-            colors: [deepPurple, vibrantPurple],
-          ),
-          onTap: () {
-            _hapticFeedback();
-            _speak('Text Reading');
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CameraScreen(mode: 'text'),
-              ),
-            );
-          },
-        ),
-        
-        _buildNeumorphicCard(
-          title: 'Reminders',
-          subtitle: 'Never miss important events',
-          icon: Icons.alarm_on,
-          gradient: LinearGradient(
-            colors: [vibrantPurple, primaryPurple],
-          ),
-          onTap: () {
-            _hapticFeedback();
-            _speak('Reminders');
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const RemindersPage(),
-              ),
-            );
-          },
-        ),
-        
-        _buildNeumorphicCard(
-          title: 'Currency Scanner',
-          subtitle: 'Identify money instantly',
-          icon: Icons.monetization_on,
-          gradient: LinearGradient(
-            colors: [deepPurple, vibrantPurple],
-          ),
-          onTap: () {
-            _hapticFeedback();
-            _speak('Currency Recognition');
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CurrencyCameraScreen(),
-              ),
-            );
-          },
-        ),
-        
-        _buildNeumorphicCard(
-          title: 'Color Detector',
-          subtitle: 'Identify colors around you',
-          icon: Icons.palette,
-          gradient: LinearGradient(
-            colors: [vibrantPurple, primaryPurple],
-          ),
-          onTap: () {
-            _hapticFeedback();
-            _speak('Color Identification');
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CameraScreen(mode: 'color'),
-              ),
-            );
-          },
-        ),
-      ],
-    ),
-  );
-}
-
-// 🎯 كارت Neumorphic أصغر
-Widget _buildNeumorphicCard({
-  required String title,
-  required String subtitle,
-  required IconData icon,
-  required Gradient gradient,
-  required VoidCallback onTap,
-}) {
-  return Semantics(
-    label: '$title. $subtitle. Double tap to open',
-    button: true,
-    child: Container(
-      margin: const EdgeInsets.only(bottom: 14),  // ✅ أصغر (كان 20)
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),  // ✅ أصغر (كان 25)
-          child: Container(
-            padding: const EdgeInsets.all(14),  // ✅ أصغر (كان 20)
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),  // ✅ أصغر
-              boxShadow: [
-                BoxShadow(
-                  color: palePurple.withOpacity(0.35),  // ✅ أخف
-                  blurRadius: 15,  // ✅ أصغر (كان 20)
-                  offset: const Offset(0, 8),  // ✅ أصغر (كان 10)
-                ),
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.8),
-                  blurRadius: 12,  // ✅ أصغر (كان 15)
-                  offset: const Offset(-2, -2),  // ✅ أصغر (كان -3, -3)
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // الأيقونة المتدرجة
-                Container(
-                  width: 54,  // ✅ أصغر (كان 64)
-                  height: 54,  // ✅ أصغر
-                  decoration: BoxDecoration(
-                    gradient: gradient,
-                    borderRadius: BorderRadius.circular(15),  // ✅ أصغر (كان 18)
-                    boxShadow: [
-                      BoxShadow(
-                        color: gradient.colors.first.withOpacity(0.35),  // ✅ أخف
-                        blurRadius: 12,  // ✅ أصغر (كان 15)
-                        offset: const Offset(0, 6),  // ✅ أصغر (كان 8)
-                      ),
-                    ],
+  // 🎯 كارت Neumorphic أصغر
+  Widget _buildNeumorphicCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Gradient gradient,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      label: '$title. $subtitle. Double tap to open',
+      button: true,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 18), // ✅ زيادة المسافة قليلاً
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: palePurple.withOpacity(0.35),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
                   ),
-                  child: Icon(
-                    icon,
-                    color: Colors.white,
-                    size: 28,  // ✅ أصغر (كان 32)
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.8),
+                    blurRadius: 12,
+                    offset: const Offset(-2, -2),
                   ),
-                ),
-                
-                const SizedBox(width: 14),  // ✅ أصغر (كان 18)
-                
-                // النص
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 15,  // ✅ أصغر (كان 17)
-                          fontWeight: FontWeight.w700,
-                          color: deepPurple,
+                ],
+              ),
+              child: Row(
+                children: [
+                  // الأيقونة المتدرجة
+                  Container(
+                    width: 54,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      gradient: gradient,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: gradient.colors.first.withOpacity(0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
                         ),
-                      ),
-                      const SizedBox(height: 3),  // ✅ أصغر (كان 4)
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 12,  // ✅ أصغر (كان 13)
-                          color: deepPurple.withOpacity(0.5),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                // سهم متدرج
-                Container(
-                  padding: const EdgeInsets.all(6),  // ✅ أصغر (كان 8)
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        gradient.colors.first.withOpacity(0.1),
-                        gradient.colors.last.withOpacity(0.1),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(10),  // ✅ أصغر (كان 12)
+                    child: Icon(icon, color: Colors.white, size: 28),
                   ),
-                  child: Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,  // ✅ أصغر (كان 16)
-                    color: gradient.colors.first,
+
+                  const SizedBox(width: 14),
+                  // النص
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: deepPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: deepPurple.withOpacity(0.5),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+
+                  // سهم متدرج
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          gradient.colors.first.withOpacity(0.1),
+                          gradient.colors.last.withOpacity(0.1),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 14,
+                      color: gradient.colors.first,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // ⚠️ تنبيه البروفايل
   Widget _buildProfileAlert() {
@@ -674,7 +610,7 @@ Widget _buildNeumorphicCard({
                     ],
                   ),
                 ),
-                
+
                 Padding(
                   padding: const EdgeInsets.all(30),
                   child: Column(
@@ -689,7 +625,7 @@ Widget _buildNeumorphicCard({
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 30),
-                      
+
                       Row(
                         children: [
                           Expanded(
@@ -703,7 +639,9 @@ Widget _buildNeumorphicCard({
                                   setState(() => _isDismissed = true);
                                 },
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 18,
+                                  ),
                                   side: BorderSide(
                                     color: lightPurple,
                                     width: 2,
@@ -750,7 +688,8 @@ Widget _buildNeumorphicCard({
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => const ProfilePage(),
+                                        builder: (context) =>
+                                            const ProfilePage(),
                                       ),
                                     ).then((_) {
                                       _checkProfileCompleteness();
@@ -758,7 +697,9 @@ Widget _buildNeumorphicCard({
                                     });
                                   },
                                   style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 18),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 18,
+                                    ),
                                     backgroundColor: Colors.transparent,
                                     shadowColor: Colors.transparent,
                                     shape: RoundedRectangleBorder(
@@ -790,184 +731,182 @@ Widget _buildNeumorphicCard({
     );
   }
 
-// 📍 Bottom Navigation بخلفية موف غامقة
-Widget _buildFloatingBottomNav() {
-  return ClipRRect(
-    borderRadius: const BorderRadius.only(
-      topLeft: Radius.circular(24),
-      topRight: Radius.circular(24),
-    ),
-    child: Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            deepPurple.withOpacity(0.95),
-            vibrantPurple.withOpacity(0.98),
-            primaryPurple,
+  // 📍 Bottom Navigation بخلفية موف غامقة
+  Widget _buildFloatingBottomNav() {
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(24),
+        topRight: Radius.circular(24),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              deepPurple.withOpacity(0.95),
+              vibrantPurple.withOpacity(0.98),
+              primaryPurple,
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: deepPurple.withOpacity(0.3),
+              blurRadius: 25,
+              offset: const Offset(0, -8),
+            ),
           ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: deepPurple.withOpacity(0.3),
-            blurRadius: 25,
-            offset: const Offset(0, -8),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavButton(
-                icon: Icons.home_rounded,
-                label: 'Home',
-                isActive: true,
-                onTap: () {
-                  _hapticFeedback();
-                  _speak('Home');
-                },
-              ),
-              _buildNavButton(
-                icon: Icons.notifications_rounded,
-                label: 'Alerts',
-                onTap: () {
-                  _hapticFeedback();
-                  _speak('Reminders');
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const RemindersPage(),
-                    ),
-                  );
-                },
-              ),
-              _buildNavButton(
-                icon: Icons.emergency,
-                label: 'SOS',
-                onTap: () async {
-                  _hapticFeedback();
-                  _speak('Emergency');
-                  final user = _auth.currentUser;
-                  if (user != null) {
-                    final doc = await _firestore
-                        .collection('users')
-                        .doc(user.uid)
-                        .get();
-                    final data = doc.data();
-                    final permissionGranted =  // ✅ الصحيح
-                        data?['location_permission_granted'] ?? false;
-                    if (!permissionGranted) {  // ✅ الصحيح
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => LocationPermissionScreen(
-                            onPermissionGranted: () async {
-                              await _firestore
-                                  .collection('users')
-                                  .doc(user.uid)
-                                  .update({'location_permission_granted': true});
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const SosScreen(),
-                                ),
-                              );
-                            },
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavButton(
+                  icon: Icons.home_rounded,
+                  label: 'Home',
+                  isActive: true,
+                  onTap: () {
+                    _hapticFeedback();
+                    _speak('Home');
+                  },
+                ),
+                _buildNavButton(
+                  icon: Icons.notifications_rounded,
+                  label: 'Reminders',
+                  onTap: () {
+                    _hapticFeedback();
+                    _speak('Reminders');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RemindersPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildNavButton(
+                  icon: Icons.emergency,
+                  label: 'Emergency',
+                  onTap: () async {
+                    _hapticFeedback();
+                    _speak('Emergency');
+                    final user = _auth.currentUser;
+                    if (user != null) {
+                      final doc = await _firestore
+                          .collection('users')
+                          .doc(user.uid)
+                          .get();
+                      final data = doc.data();
+                      final permissionGranted =
+                          data?['location_permission_granted'] ?? false;
+                      if (!permissionGranted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => LocationPermissionScreen(
+                              onPermissionGranted: () async {
+                                await _firestore
+                                    .collection('users')
+                                    .doc(user.uid)
+                                    .update({
+                                      'location_permission_granted': true,
+                                    });
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const SosScreen(),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      );
-                    } else {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SosScreen(),
-                        ),
-                      );
+                        );
+                      } else {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SosScreen(),
+                          ),
+                        );
+                      }
                     }
-                  }
-                },
+                  },
+                ),
+                _buildNavButton(
+                  icon: Icons.settings_rounded,
+                  label: 'Settings',
+                  onTap: () {
+                    _hapticFeedback();
+                    _speak('Settings');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsPage(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
+  Widget _buildNavButton({
+    required IconData icon,
+    required String label,
+    bool isActive = false,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      label: '$label button',
+      button: true,
+      selected: isActive,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.white.withOpacity(0.25)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: isActive
+                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isActive
+                    ? Colors.white
+                    : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
+                size: 22,
               ),
-              _buildNavButton(
-                icon: Icons.settings_rounded,
-                label: 'Settings',
-                onTap: () {
-                  _hapticFeedback();
-                  _speak('Settings');
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SettingsPage(),
-                    ),
-                  );
-                },
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.9),
+                  fontSize: 11,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
               ),
             ],
           ),
         ),
       ),
-    ),
-  );
-}
-
-// 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
-Widget _buildNavButton({
-  required IconData icon,
-  required String label,
-  bool isActive = false,
-  required VoidCallback onTap,
-}) {
-  return Semantics(
-    label: '$label button',
-    button: true,
-    selected: isActive,
-    child: GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive 
-              ? Colors.white.withOpacity(0.25)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: isActive
-              ? Border.all(
-                  color: Colors.white.withOpacity(0.3),
-                  width: 1.5,
-                )
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isActive 
-                  ? Colors.white
-                  : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
-              size: 22,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive 
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.9),
-                fontSize: 11,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
+    );
+  }
 }
