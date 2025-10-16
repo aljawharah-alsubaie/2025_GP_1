@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'login_screen.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -97,6 +98,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
     super.dispose();
   }
 
+  // Method to send password reset with custom email (prevents spam)
   Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -106,57 +108,60 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
     });
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: _emailController.text.trim(),
+      // Call Cloud Function for custom email
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
+        'sendCustomPasswordReset',
       );
       
-      setState(() {
-        _emailSent = true;
-        _loading = false;
+      final result = await callable.call({
+        'email': _emailController.text.trim(),
       });
       
-      _successAnimationController.forward();
-      
-      _showSnackBar(
-        "Password reset link sent to ${_emailController.text.trim()}",
-        Colors.green,
-        Icons.check_circle,
-      );
+      if (result.data['success'] == true) {
+        setState(() {
+          _emailSent = true;
+          _loading = false;
+        });
+        
+        _successAnimationController.forward();
+        
+        _showSnackBar(
+          "Password reset link sent to ${_emailController.text.trim()}",
+          Colors.green,
+          Icons.check_circle,
+        );
 
-      // Auto navigate back after 3 seconds
-      Future.delayed(const Duration(seconds: 30), () {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-              transitionDuration: const Duration(milliseconds: 500),
-            ),
-          );
-        }
-      });
+        // Auto navigate back after 30 seconds
+        Future.delayed(const Duration(seconds: 30), () {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+                transitionDuration: const Duration(milliseconds: 500),
+              ),
+            );
+          }
+        });
+      }
 
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseFunctionsException catch (e) {
       setState(() => _loading = false);
       
       String errorMessage = "Something went wrong";
       IconData errorIcon = Icons.error;
       
       switch (e.code) {
-        case 'user-not-found':
+        case 'not-found':
           errorMessage = "No account found with this email address";
           errorIcon = Icons.person_off;
           break;
-        case 'invalid-email':
+        case 'invalid-argument':
           errorMessage = "Please enter a valid email address";
           errorIcon = Icons.email_outlined;
-          break;
-        case 'too-many-requests':
-          errorMessage = "Too many requests. Please try again later";
-          errorIcon = Icons.timer;
           break;
         default:
           errorMessage = e.message ?? "An error occurred";
@@ -329,6 +334,33 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        color: Colors.blue.shade300,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          "Check your spam folder if you don't see the email",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white.withOpacity(0.7),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                                 const SizedBox(height: 16),
                                 Text(
                                   "Returning to login in 30 seconds...",
@@ -454,7 +486,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.3),
+                            color: Colors.white.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: Colors.white.withOpacity(0.2),
