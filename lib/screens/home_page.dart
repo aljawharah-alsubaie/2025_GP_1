@@ -896,7 +896,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   color: isActive
                       ? Colors.white
                       : Colors.white.withOpacity(0.9),
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
