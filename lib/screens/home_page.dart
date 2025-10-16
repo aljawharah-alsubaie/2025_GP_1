@@ -207,13 +207,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(
-          25,
-          45,
-          25,
-          55,
-        ), // زيادة المسافة من الأعلى والأسفل
-
+        padding: const EdgeInsets.fromLTRB(25, 45, 25, 55),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -348,12 +342,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          16,
-          20,
-          16,
-          16,
-        ), // زيادة المسافة من الأعلى
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
         children: [
           _buildNeumorphicCard(
             title: 'Face Recognition',
@@ -370,20 +359,55 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             },
           ),
 
+          // ✅ Emergency SOS Box - يفتح SOS Screen
           _buildNeumorphicCard(
             title: 'Emergency SOS',
-            subtitle: 'Quick emergency contacts',
+            subtitle: 'Send emergency alert now',
             icon: Icons.emergency_outlined,
             gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
-            onTap: () {
+            onTap: () async {
               _hapticFeedback();
-              _speak('Emergency Contact');
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ContactInfoPage(),
-                ),
-              );
+              _speak('Emergency SOS');
+              final user = _auth.currentUser;
+              if (user != null) {
+                final doc = await _firestore
+                    .collection('users')
+                    .doc(user.uid)
+                    .get();
+                final data = doc.data();
+                final permissionGranted =
+                    data?['location_permission_granted'] ?? false;
+                if (!permissionGranted) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => LocationPermissionScreen(
+                        onPermissionGranted: () async {
+                          await _firestore
+                              .collection('users')
+                              .doc(user.uid)
+                              .update({
+                                'location_permission_granted': true,
+                              });
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SosScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  );
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SosScreen(),
+                    ),
+                  );
+                }
+              }
             },
           ),
 
@@ -507,7 +531,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         Text(
                           title,
                           style: TextStyle(
-                            fontSize: 17, // حجم متوسط
+                            fontSize: 17,
                             fontWeight: FontWeight.w700,
                             color: deepPurple,
                           ),
@@ -516,7 +540,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         Text(
                           subtitle,
                           style: TextStyle(
-                            fontSize: 13, // حجم متوسط
+                            fontSize: 13,
                             color: deepPurple.withOpacity(0.5),
                             fontWeight: FontWeight.w500,
                           ),
@@ -784,52 +808,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     );
                   },
                 ),
+                // ✅ زر Emergency Contact صار هنا بدل SOS
                 _buildNavButton(
-                  icon: Icons.emergency,
+                  icon: Icons.contact_phone,
                   label: 'Emergency',
-                  onTap: () async {
+                  onTap: () {
                     _hapticFeedback();
-                    _speak('Emergency');
-                    final user = _auth.currentUser;
-                    if (user != null) {
-                      final doc = await _firestore
-                          .collection('users')
-                          .doc(user.uid)
-                          .get();
-                      final data = doc.data();
-                      final permissionGranted =
-                          data?['location_permission_granted'] ?? false;
-                      if (!permissionGranted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => LocationPermissionScreen(
-                              onPermissionGranted: () async {
-                                await _firestore
-                                    .collection('users')
-                                    .doc(user.uid)
-                                    .update({
-                                      'location_permission_granted': true,
-                                    });
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const SosScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      } else {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SosScreen(),
-                          ),
-                        );
-                      }
-                    }
+                    _speak('Emergency Contact');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ContactInfoPage(),
+                      ),
+                    );
                   },
                 ),
                 _buildNavButton(
