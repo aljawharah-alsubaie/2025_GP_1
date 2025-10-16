@@ -19,7 +19,8 @@ class RemindersPage extends StatefulWidget {
   State<RemindersPage> createState() => _RemindersPageState();
 }
 
-class _RemindersPageState extends State<RemindersPage> with TickerProviderStateMixin {
+class _RemindersPageState extends State<RemindersPage>
+    with TickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterTts _tts = FlutterTts();
@@ -49,7 +50,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _pulseController;
-  
+
   // 🎨 نظام ألوان موحد
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
@@ -65,17 +66,17 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
     _initTts();
     _initSpeech();
     _loadReminders();
-    
+
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..forward();
-    
+
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
-    
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
@@ -97,14 +98,18 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
     bool available = await _speech.initialize(
       onError: (error) {
         print('Speech error: $error');
-        _speak('Speech recognition error. Please check your microphone permissions');
+        _speak(
+          'Speech recognition error. Please check your microphone permissions',
+        );
       },
       onStatus: (status) => print('Speech status: $status'),
     );
-    
+
     if (!available) {
       print('Speech recognition not available');
-      _speak('Speech recognition is not available on this device. Please install Google Speech Services from Play Store');
+      _speak(
+        'Speech recognition is not available on this device. Please install Google Speech Services from Play Store',
+      );
     } else {
       print('Speech recognition initialized successfully');
     }
@@ -154,10 +159,14 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
   Future<void> _startVoiceReminder() async {
     // Check if speech recognition is available
     if (!_speech.isAvailable) {
-      _speak('Speech recognition is not available. Please install Google Speech Services from Play Store');
+      _speak(
+        'Speech recognition is not available. Please install Google Speech Services from Play Store',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Speech recognition not available. Install Google Speech Services'),
+          content: Text(
+            'Speech recognition not available. Install Google Speech Services',
+          ),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 5),
           action: SnackBarAction(
@@ -169,7 +178,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
       );
       return;
     }
-    
+
     setState(() {
       _isVoiceMode = true;
       _voiceStep = 0;
@@ -179,9 +188,15 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
       _voiceNote = '';
       _voiceFrequency = 'One time';
     });
-    
+
     _hapticFeedback();
-    await _speak('Starting voice reminder. Please tell me the title of your reminder');
+    await _speak(
+      'Starting voice reminder. Please tell me the title of your reminder',
+    );
+    await Future.delayed(const Duration(milliseconds: 2500));
+    await _speak(
+      'Starting voice reminder. Please tell me the title of your reminder',
+    );
     // ✅ ننتظر 1 ثانية إضافية بعد انتهاء TTS
     await Future.delayed(const Duration(milliseconds: 3500));
     _listenForVoiceInput();
@@ -194,14 +209,16 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
     }
 
     setState(() => _isListening = true);
-    
+
     await _speech.listen(
       onResult: (result) {
         if (result.finalResult) {
           _processVoiceInput(result.recognizedWords);
         }
       },
-      listenFor: const Duration(seconds: 15), // ✅ زودنا المدة من 10 إلى 15 ثانية
+      listenFor: const Duration(
+        seconds: 15,
+      ), // ✅ زودنا المدة من 10 إلى 15 ثانية
       pauseFor: const Duration(seconds: 5), // ✅ زودنا المدة من 3 إلى 5 ثواني
       localeId: 'en_US',
       cancelOnError: true,
@@ -211,7 +228,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
 
   Future<void> _processVoiceInput(String input) async {
     setState(() => _isListening = false);
-    
+
     if (input.isEmpty) {
       await _speak('I did not hear anything. Please try again');
       await Future.delayed(const Duration(milliseconds: 2500)); // ✅ زودنا الوقت
@@ -222,9 +239,13 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
     switch (_voiceStep) {
       case 0: // Title
         _voiceTitle = input;
-        await _speak('Got it. Title is: $input. Now, when would you like to be reminded? Say the date and time');
+        await _speak(
+          'Got it. Title is: $input. Now, when would you like to be reminded? Say the date and time',
+        );
         setState(() => _voiceStep = 1);
-        await Future.delayed(const Duration(milliseconds: 4000)); // ✅ زودنا الوقت من 3000 إلى 4000
+        await Future.delayed(
+          const Duration(milliseconds: 4000),
+        ); // ✅ زودنا الوقت من 3000 إلى 4000
         _listenForVoiceInput();
         break;
 
@@ -233,13 +254,25 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
         if (dateTime != null) {
           _voiceDate = '${dateTime.day}/${dateTime.month}/${dateTime.year}';
           _voiceTime = _formatTime(dateTime);
-          await _speak('Perfect. Reminder set for ${_formatDateForSpeech(dateTime)} at ${_voiceTime}. Would you like to add a note? Say yes or no');
+          await _speak(
+            'Perfect. Reminder set for ${_formatDateForSpeech(dateTime)} at ${_voiceTime}. Would you like to add a note? Say yes or no',
+          );
           setState(() => _voiceStep = 2);
-          await Future.delayed(const Duration(milliseconds: 4000)); // ✅ زودنا الوقت من 3000 إلى 4000
+          await Future.delayed(
+            const Duration(milliseconds: 4000),
+          ); // ✅ زودنا الوقت من 3000 إلى 4000
           _listenForVoiceInput();
         } else {
-          await _speak('Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM');
-          await Future.delayed(const Duration(milliseconds: 4500)); // ✅ زودنا الوقت من 3500 إلى 4500
+          await _speak(
+            'Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM',
+          );
+          await Future.delayed(const Duration(milliseconds: 3500));
+          await _speak(
+            'Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM',
+          );
+          await Future.delayed(
+            const Duration(milliseconds: 4500),
+          ); // ✅ زودنا الوقت من 3500 إلى 4500
           _listenForVoiceInput();
         }
         break;
@@ -248,21 +281,31 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
         if (input.toLowerCase().contains('yes')) {
           await _speak('What would you like to add as a note?');
           setState(() => _voiceStep = 3);
-          await Future.delayed(const Duration(milliseconds: 2500)); // ✅ زودنا الوقت من 2000 إلى 2500
+          await Future.delayed(
+            const Duration(milliseconds: 2500),
+          ); // ✅ زودنا الوقت من 2000 إلى 2500
           _listenForVoiceInput();
         } else {
-          await _speak('Would you like this reminder to repeat? Say one time, daily, or weekly');
+          await _speak(
+            'Would you like this reminder to repeat? Say one time, daily, or weekly',
+          );
           setState(() => _voiceStep = 4);
-          await Future.delayed(const Duration(milliseconds: 3500)); // ✅ زودنا الوقت من 2500 إلى 3500
+          await Future.delayed(
+            const Duration(milliseconds: 3500),
+          ); // ✅ زودنا الوقت من 2500 إلى 3500
           _listenForVoiceInput();
         }
         break;
 
       case 3: // Note input
         _voiceNote = input;
-        await _speak('Note added. Would you like this reminder to repeat? Say one time, daily, or weekly');
+        await _speak(
+          'Note added. Would you like this reminder to repeat? Say one time, daily, or weekly',
+        );
         setState(() => _voiceStep = 4);
-        await Future.delayed(const Duration(milliseconds: 3500)); // ✅ زودنا الوقت من 2500 إلى 3500
+        await Future.delayed(
+          const Duration(milliseconds: 3500),
+        ); // ✅ زودنا الوقت من 2500 إلى 3500
         _listenForVoiceInput();
         break;
 
@@ -274,9 +317,18 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
         } else {
           _voiceFrequency = 'One time';
         }
-        
-        await _speak('Understood. Frequency is ${_voiceFrequency}. Creating your reminder now');
-        await Future.delayed(const Duration(milliseconds: 2500)); // ✅ زودنا الوقت من 2000 إلى 2500
+
+        await _speak(
+          'Understood. Frequency is ${_voiceFrequency}. Creating your reminder now',
+        );
+        await Future.delayed(const Duration(milliseconds: 2000));
+
+        await _speak(
+          'Understood. Frequency is ${_voiceFrequency}. Creating your reminder now',
+        );
+        await Future.delayed(
+          const Duration(milliseconds: 2500),
+        ); // ✅ زودنا الوقت من 2000 إلى 2500
         await _saveVoiceReminder();
         break;
     }
@@ -285,7 +337,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
   DateTime? _parseDateTimeFromVoice(String input) {
     final now = DateTime.now();
     final lowerInput = input.toLowerCase();
-    
+
     DateTime? date;
     TimeOfDay? time;
 
@@ -294,31 +346,38 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
       date = now;
     } else if (lowerInput.contains('tomorrow')) {
       date = now.add(const Duration(days: 1));
-    } else if (lowerInput.contains('next monday') || lowerInput.contains('monday')) {
+    } else if (lowerInput.contains('next monday') ||
+        lowerInput.contains('monday')) {
       int daysToAdd = (DateTime.monday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
-    } else if (lowerInput.contains('next tuesday') || lowerInput.contains('tuesday')) {
+    } else if (lowerInput.contains('next tuesday') ||
+        lowerInput.contains('tuesday')) {
       int daysToAdd = (DateTime.tuesday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
-    } else if (lowerInput.contains('next wednesday') || lowerInput.contains('wednesday')) {
+    } else if (lowerInput.contains('next wednesday') ||
+        lowerInput.contains('wednesday')) {
       int daysToAdd = (DateTime.wednesday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
-    } else if (lowerInput.contains('next thursday') || lowerInput.contains('thursday')) {
+    } else if (lowerInput.contains('next thursday') ||
+        lowerInput.contains('thursday')) {
       int daysToAdd = (DateTime.thursday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
-    } else if (lowerInput.contains('next friday') || lowerInput.contains('friday')) {
+    } else if (lowerInput.contains('next friday') ||
+        lowerInput.contains('friday')) {
       int daysToAdd = (DateTime.friday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
-    } else if (lowerInput.contains('next saturday') || lowerInput.contains('saturday')) {
+    } else if (lowerInput.contains('next saturday') ||
+        lowerInput.contains('saturday')) {
       int daysToAdd = (DateTime.saturday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
-    } else if (lowerInput.contains('next sunday') || lowerInput.contains('sunday')) {
+    } else if (lowerInput.contains('next sunday') ||
+        lowerInput.contains('sunday')) {
       int daysToAdd = (DateTime.sunday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
@@ -327,44 +386,55 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
     }
 
     // Parse time
-    final timeRegex = RegExp(r'(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)?', caseSensitive: false);
+    final timeRegex = RegExp(
+      r'(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)?',
+      caseSensitive: false,
+    );
     final match = timeRegex.firstMatch(lowerInput);
-    
+
     if (match != null) {
       int hour = int.parse(match.group(1)!);
       final period = match.group(2)?.toLowerCase() ?? '';
-      
+
       if (period.contains('pm') && hour != 12) {
         hour += 12;
       } else if (period.contains('am') && hour == 12) {
         hour = 0;
-      } else if (period.isEmpty && hour < 12 && lowerInput.contains('evening')) {
+      } else if (period.isEmpty &&
+          hour < 12 &&
+          lowerInput.contains('evening')) {
         hour += 12;
       } else if (period.isEmpty && hour < 8) {
         hour += 12; // Assume PM for hours less than 8
       }
-      
+
       time = TimeOfDay(hour: hour, minute: 0);
     }
 
     if (date != null && time != null) {
       return DateTime(date.year, date.month, date.day, time.hour, time.minute);
     }
-    
+
     return null;
   }
 
   String _formatTime(DateTime dateTime) {
-    final hour = dateTime.hour > 12 ? dateTime.hour - 12 : (dateTime.hour == 0 ? 12 : dateTime.hour);
+    final hour = dateTime.hour > 12
+        ? dateTime.hour - 12
+        : (dateTime.hour == 0 ? 12 : dateTime.hour);
     final period = dateTime.hour >= 12 ? 'PM' : 'AM';
     return '${hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')} $period';
   }
 
   String _formatDateForSpeech(DateTime date) {
     final now = DateTime.now();
-    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+    if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day) {
       return 'today';
-    } else if (date.year == now.year && date.month == now.month && date.day == now.day + 1) {
+    } else if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day + 1) {
       return 'tomorrow';
     } else {
       return '${_getWeekdayName(date.weekday)}, ${_getMonthName(date.month)} ${date.day}';
@@ -372,7 +442,15 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
   }
 
   String _getWeekdayName(int weekday) {
-    const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const weekdays = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
     return weekdays[weekday - 1];
   }
 
@@ -420,10 +498,14 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
       });
 
       _hapticFeedback();
-      await _speak('Reminder created successfully. Title: $_voiceTitle, Time: $_voiceTime, Frequency: $_voiceFrequency');
+      await _speak(
+        'Reminder created successfully. Title: $_voiceTitle, Time: $_voiceTime, Frequency: $_voiceFrequency',
+      );
     } catch (e) {
       print('Error saving voice reminder: $e');
-      await _speak('Sorry, there was an error creating your reminder. Please try again');
+      await _speak(
+        'Sorry, there was an error creating your reminder. Please try again',
+      );
       setState(() {
         _isVoiceMode = false;
         _voiceStep = 0;
@@ -475,14 +557,11 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
             child: Column(
               children: [
                 _buildModernHeader(),
-                Expanded(
-                  child: _buildRemindersList(),
-                ),
+                Expanded(child: _buildRemindersList()),
               ],
             ),
           ),
-          if (_isVoiceMode || _isListening)
-            _buildVoiceOverlay(),
+          if (_isVoiceMode || _isListening) _buildVoiceOverlay(),
         ],
       ),
       floatingActionButton: _buildVoiceAddButton(),
@@ -497,11 +576,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            ultraLightPurple,
-            palePurple.withOpacity(0.3),
-            Colors.white,
-          ],
+          colors: [ultraLightPurple, palePurple.withOpacity(0.3), Colors.white],
           stops: const [0.0, 0.5, 1.0],
         ),
       ),
@@ -558,9 +633,9 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                 ),
               ),
             ),
-            
+
             const SizedBox(width: 12),
-            
+
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -607,13 +682,13 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
     }
 
     return SlideTransition(
-      position: Tween<Offset>(
-        begin: const Offset(0, 0.15),
-        end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: _slideController,
-        curve: Curves.easeOutCubic,
-      )),
+      position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
+          .animate(
+            CurvedAnimation(
+              parent: _slideController,
+              curve: Curves.easeOutCubic,
+            ),
+          ),
       child: RefreshIndicator(
         onRefresh: _loadReminders,
         color: vibrantPurple,
@@ -631,9 +706,10 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
 
   Widget _buildReminderCard(ReminderItem reminder, int index) {
     final isToday = _isToday(reminder.date);
-    
+
     return Semantics(
-      label: 'Reminder: ${reminder.title}. Date: ${reminder.date.day} ${_getMonthName(reminder.date.month)}, ${reminder.date.year}. Time: ${reminder.time}. ${reminder.note.isNotEmpty ? "Note: ${reminder.note}." : ""} Double tap to see options',
+      label:
+          'Reminder: ${reminder.title}. Date: ${reminder.date.day} ${_getMonthName(reminder.date.month)}, ${reminder.date.year}. Time: ${reminder.time}. ${reminder.note.isNotEmpty ? "Note: ${reminder.note}." : ""} Double tap to see options',
       button: true,
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
@@ -651,13 +727,12 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
-                border: isToday ? Border.all(
-                  color: vibrantPurple,
-                  width: 2,
-                ) : null,
+                border: isToday
+                    ? Border.all(color: vibrantPurple, width: 2)
+                    : null,
                 boxShadow: [
                   BoxShadow(
-                    color: isToday 
+                    color: isToday
                         ? vibrantPurple.withOpacity(0.4)
                         : palePurple.withOpacity(0.35),
                     blurRadius: 15,
@@ -677,7 +752,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                     height: 54,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: isToday 
+                        colors: isToday
                             ? [vibrantPurple, primaryPurple]
                             : [deepPurple, vibrantPurple],
                       ),
@@ -712,9 +787,9 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                       ],
                     ),
                   ),
-                  
+
                   const SizedBox(width: 14),
-                  
+
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -803,7 +878,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                       ],
                     ),
                   ),
-                  
+
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
@@ -889,7 +964,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
     Color? color,
   }) {
     final buttonColor = color ?? vibrantPurple;
-    
+
     return Semantics(
       label: '$label button',
       button: true,
@@ -904,10 +979,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
           decoration: BoxDecoration(
             color: buttonColor.withOpacity(0.1),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: buttonColor.withOpacity(0.3),
-              width: 1,
-            ),
+            border: Border.all(color: buttonColor.withOpacity(0.3), width: 1),
           ),
           child: Row(
             children: [
@@ -917,11 +989,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                   color: buttonColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 20,
-                ),
+                child: Icon(icon, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -934,11 +1002,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                   ),
                 ),
               ),
-              Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: buttonColor,
-              ),
+              Icon(Icons.arrow_forward_ios, size: 16, color: buttonColor),
             ],
           ),
         ),
@@ -956,7 +1020,10 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
             height: 120,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [deepPurple.withOpacity(0.1), vibrantPurple.withOpacity(0.1)],
+                colors: [
+                  deepPurple.withOpacity(0.1),
+                  vibrantPurple.withOpacity(0.1),
+                ],
               ),
               borderRadius: BorderRadius.circular(60),
             ),
@@ -1045,9 +1112,9 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                   );
                 },
               ),
-              
+
               const SizedBox(height: 30),
-              
+
               Text(
                 _isListening ? 'Listening...' : _getVoiceStepText(),
                 style: TextStyle(
@@ -1057,9 +1124,9 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                 ),
                 textAlign: TextAlign.center,
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               Text(
                 _getVoiceStepHint(),
                 style: TextStyle(
@@ -1069,9 +1136,9 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                 ),
                 textAlign: TextAlign.center,
               ),
-              
+
               const SizedBox(height: 30),
-              
+
               // Cancel button
               Semantics(
                 label: 'Cancel voice input',
@@ -1161,9 +1228,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
           width: 70,
           height: 70,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [vibrantPurple, primaryPurple],
-            ),
+            gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
             borderRadius: BorderRadius.circular(35),
             boxShadow: [
               BoxShadow(
@@ -1173,11 +1238,7 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
               ),
             ],
           ),
-          child: const Icon(
-            Icons.mic,
-            color: Colors.white,
-            size: 36,
-          ),
+          child: const Icon(Icons.mic, color: Colors.white, size: 36),
         ),
       ),
     );
@@ -1244,7 +1305,10 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                           },
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
-                            side: BorderSide(color: Colors.grey.shade300, width: 2),
+                            side: BorderSide(
+                              color: Colors.grey.shade300,
+                              width: 2,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
@@ -1308,8 +1372,18 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
 
   String _getMonthName(int month) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return months[month - 1];
   }
@@ -1391,7 +1465,9 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
                                 await _firestore
                                     .collection('users')
                                     .doc(user.uid)
-                                    .update({'location_permission_granted': true});
+                                    .update({
+                                      'location_permission_granted': true,
+                                    });
                                 Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
@@ -1451,15 +1527,12 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
           duration: const Duration(milliseconds: 300),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: isActive 
+            color: isActive
                 ? Colors.white.withOpacity(0.25)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             border: isActive
-                ? Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 1.5,
-                  )
+                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
                 : null,
           ),
           child: Column(
@@ -1467,16 +1540,14 @@ class _RemindersPageState extends State<RemindersPage> with TickerProviderStateM
             children: [
               Icon(
                 icon,
-                color: isActive 
-                    ? Colors.white
-                    : Colors.white.withOpacity(0.9),
+                color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
                 size: 22,
               ),
               const SizedBox(height: 3),
               Text(
                 label,
                 style: TextStyle(
-                  color: isActive 
+                  color: isActive
                       ? Colors.white
                       : Colors.white.withOpacity(0.9),
                   fontSize: 11,
