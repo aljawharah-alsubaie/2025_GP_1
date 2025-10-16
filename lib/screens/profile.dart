@@ -1,16 +1,10 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:country_picker/country_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:geocoding/geocoding.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
-import 'package:dropdown_search/dropdown_search.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -32,17 +26,10 @@ class _ProfilePageState extends State<ProfilePage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _addressController = TextEditingController();
-
-  String? selectedCountryCode;
-  String? selectedCountryName;
-  String? selectedCity;
-  List<String> cities = [];
 
   late FocusNode _nameFocus;
   late FocusNode _emailFocus;
   late FocusNode _phoneFocus;
-  late FocusNode _addressFocus;
   late FocusNode _saveFocus;
 
   // 🎨 نفس ألوان الصفحة الرئيسية
@@ -59,7 +46,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _nameFocus = FocusNode();
     _emailFocus = FocusNode();
     _phoneFocus = FocusNode();
-    _addressFocus = FocusNode();
     _saveFocus = FocusNode();
     _loadUserData();
   }
@@ -69,12 +55,10 @@ class _ProfilePageState extends State<ProfilePage> {
     _nameFocus.dispose();
     _emailFocus.dispose();
     _phoneFocus.dispose();
-    _addressFocus.dispose();
     _saveFocus.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
-    _addressController.dispose();
     super.dispose();
   }
 
@@ -87,15 +71,7 @@ class _ProfilePageState extends State<ProfilePage> {
         _emailController.text = data?['email'] ?? '';
         _nameController.text = data?['full_name'] ?? '';
         _phoneController.text = data?['phone'] ?? '';
-        _addressController.text = data?['address'] ?? '';
-        selectedCountryName = data?['country'];
-        selectedCity = data?['city'];
-        selectedCountryCode = data?['countryCode'];
         _profileImageUrl = data?['profileImageUrl'];
-
-        if (selectedCountryCode != null) {
-          fetchCities(selectedCountryCode!);
-        }
         setState(() {});
       }
     }
@@ -247,10 +223,6 @@ class _ProfilePageState extends State<ProfilePage> {
           'email': _emailController.text.trim(),
           'full_name': _nameController.text.trim(),
           'phone': _phoneController.text.trim(),
-          'address': _addressController.text.trim(),
-          'country': selectedCountryName,
-          'city': selectedCity,
-          'countryCode': selectedCountryCode,
         };
 
         if (_image != null) {
@@ -300,114 +272,6 @@ class _ProfilePageState extends State<ProfilePage> {
             content: const Text('Profile image selected'),
             duration: const Duration(seconds: 2),
             backgroundColor: vibrantPurple,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> fetchCities(String countryCode) async {
-    final username = 'fajer_mh';
-    final url = Uri.parse(
-      'http://api.geonames.org/searchJSON?country=$countryCode&featureClass=P&maxRows=1000&username=$username',
-    );
-    try {
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List<String> fetchedCities = (data['geonames'] as List)
-            .where((item) => item['fcode'] == 'PPLA' || item['fcode'] == 'PPLC')
-            .map((item) => item['name'].toString())
-            .toSet()
-            .toList();
-        setState(() {
-          cities = fetchedCities;
-        });
-      } else {
-        setState(() {
-          cities = [];
-        });
-      }
-    } catch (e) {
-      setState(() {
-        cities = [];
-      });
-    }
-  }
-
-  Future<void> _getCurrentLocationAndFill() async {
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Location services are disabled'),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.deniedForever ||
-            permission == LocationPermission.denied) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Location permission denied'),
-                backgroundColor: Colors.orange,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-          return;
-        }
-      }
-
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      List<Placemark> placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-      if (placemarks.isNotEmpty) {
-        Placemark place = placemarks.first;
-        setState(() {
-          selectedCountryName = place.country;
-          selectedCountryCode = place.isoCountryCode;
-          selectedCity = place.locality ?? place.subAdministrativeArea;
-          _addressController.text =
-              "${place.street ?? ''}, ${place.subLocality ?? ''}, ${place.administrativeArea ?? ''}";
-        });
-
-        if (selectedCountryCode != null) {
-          fetchCities(selectedCountryCode!);
-        }
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Location filled successfully'),
-              backgroundColor: vibrantPurple,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print("Location error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to get location'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -506,74 +370,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             "Phone Number",
                             _phoneController,
                             _phoneFocus,
-                            _addressFocus,
-                            Icons.phone_outlined,
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // 📍 Address Details Section
-                      _buildSectionCard(
-                        title: "Address Details",
-                        icon: Icons.location_on_outlined,
-                        trailing: Semantics(
-                          label: 'Use current location to fill address',
-                          button: true,
-                          child: GestureDetector(
-                            onTap: _getCurrentLocationAndFill,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    vibrantPurple.withOpacity(0.1),
-                                    primaryPurple.withOpacity(0.1),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: vibrantPurple.withOpacity(0.3),
-                                  width: 2,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.my_location,
-                                    size: 18,
-                                    color: vibrantPurple,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    "Use Location",
-                                    style: TextStyle(
-                                      color: vibrantPurple,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        children: [
-                          _buildCountryPicker(),
-                          const SizedBox(height: 14),
-                          _buildCityDropdown(),
-                          const SizedBox(height: 14),
-                          _buildTextField(
-                            "Address",
-                            _addressController,
-                            _addressFocus,
                             _saveFocus,
-                            Icons.home_outlined,
+                            Icons.phone_outlined,
                           ),
                         ],
                       ),
@@ -759,7 +557,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildSectionCard({
     required String title,
     required IconData icon,
-    Widget? trailing,
     required List<Widget> children,
   }) {
     return Semantics(
@@ -803,7 +600,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                 ),
-                if (trailing != null) trailing,
               ],
             ),
             const SizedBox(height: 20),
@@ -862,191 +658,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ),
         const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  // 🌍 Country Picker
-  Widget _buildCountryPicker() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.public, size: 18, color: vibrantPurple),
-            const SizedBox(width: 8),
-            Text(
-              "Country",
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                color: deepPurple,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Semantics(
-          label: selectedCountryName != null
-              ? 'Country selected: $selectedCountryName. Double tap to change'
-              : 'Select country. Double tap to choose',
-          button: true,
-          child: GestureDetector(
-            onTap: () {
-              showCountryPicker(
-                context: context,
-                showPhoneCode: false,
-                onSelect: (Country country) {
-                  setState(() {
-                    selectedCountryCode = country.countryCode;
-                    selectedCountryName = country.name;
-                    selectedCity = null;
-                    cities = [];
-                  });
-                  fetchCities(country.countryCode);
-                },
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-              decoration: BoxDecoration(
-                border: Border.all(color: lightPurple, width: 2),
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.white,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    selectedCountryName ?? 'Select Country',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: selectedCountryName != null
-                          ? deepPurple
-                          : deepPurple.withOpacity(0.4),
-                    ),
-                  ),
-                  Icon(Icons.arrow_drop_down, color: vibrantPurple, size: 28),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // 🏙️ City Dropdown
-  Widget _buildCityDropdown() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.location_city, size: 18, color: vibrantPurple),
-            const SizedBox(width: 8),
-            Text(
-              "City",
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                color: deepPurple,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Semantics(
-          label: selectedCity != null
-              ? 'City selected: $selectedCity'
-              : cities.isEmpty
-              ? 'Select country first to choose city'
-              : 'Select city',
-          child: DropdownSearch<String>(
-            key: ValueKey(selectedCountryCode),
-            items: (filter, infiniteScrollProps) => cities,
-            selectedItem: selectedCity,
-            enabled: cities.isNotEmpty,
-            onChanged: (val) => setState(() => selectedCity = val),
-            decoratorProps: DropDownDecoratorProps(
-              decoration: InputDecoration(
-                hintText: "Select your city",
-                hintStyle: TextStyle(
-                  fontSize: 16,
-                  color: deepPurple.withOpacity(0.4),
-                  fontWeight: FontWeight.w500,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: lightPurple, width: 2),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: lightPurple, width: 2),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: vibrantPurple, width: 3),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 20,
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-            ),
-            popupProps: PopupProps.bottomSheet(
-              showSearchBox: true,
-              searchFieldProps: TextFieldProps(
-                decoration: InputDecoration(
-                  hintText: 'Search City...',
-                  hintStyle: TextStyle(fontSize: 16),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: lightPurple, width: 2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: vibrantPurple, width: 3),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                ),
-              ),
-              containerBuilder: (context, popupWidget) {
-                return Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
-                  ),
-                  child: popupWidget,
-                );
-              },
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.7,
-              ),
-              emptyBuilder: (context, _) => Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Text(
-                  "No cities found",
-                  style: TextStyle(
-                    color: deepPurple.withOpacity(0.5),
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
       ],
     );
   }
