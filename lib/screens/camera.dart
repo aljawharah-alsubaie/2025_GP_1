@@ -10,9 +10,11 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import '../services/face_recognition_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CameraScreen extends StatefulWidget {
-  final String mode; // 'text' or 'color' - passed from home page
+  final String mode; // 'text', 'color', or 'face'
 
   const CameraScreen({super.key, required this.mode});
 
@@ -25,16 +27,13 @@ class _CameraScreenState extends State<CameraScreen> {
   List<CameraDescription>? _cameras;
   final picker = ImagePicker();
 
-  // Audio player
   final AudioPlayer _player = AudioPlayer();
   bool _busy = false;
   String _extractedText = "";
   String _detectedColor = "";
+  RecognitionResult? _faceResult;
 
-  // Store the selected image path
   String? _selectedImagePath;
-
-  // Processing mode: 'text', 'color', or 'both'
   String _processingMode = 'text';
 
   // IBM Watson TTS credentials
@@ -43,12 +42,10 @@ class _CameraScreenState extends State<CameraScreen> {
   static const String IBM_TTS_URL =
       "https://api.au-syd.text-to-speech.watson.cloud.ibm.com/instances/892ef34b-36b6-4ba6-b29c-d4a55108f114";
 
-  // OCR service
   final TextRecognizer _textRecognizer = TextRecognizer(
     script: TextRecognitionScript.latin,
   );
 
-  // Color names mapping (basic CSS3 colors)
   static const Map<String, List<int>> _colorNames = {
     'red': [255, 0, 0],
     'green': [0, 128, 0],
@@ -84,21 +81,64 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
-    _processingMode =
-        widget.mode; // Set the processing mode from the widget parameter
+    _processingMode = widget.mode;
     _initCamera();
+    if (_processingMode == 'face') {
+      _initFaceRecognition();
+    }
   }
 
   Future<void> _initCamera() async {
     _cameras = await availableCameras();
     if (_cameras != null && _cameras!.isNotEmpty) {
+      // Use front camera for face recognition, back camera for others
+      final cameraIndex = _processingMode == 'face' ? 1 : 0;
       _controller = CameraController(
-        _cameras![0],
-        ResolutionPreset.max,
+        _cameras![cameraIndex < _cameras!.length ? cameraIndex : 0],
+        ResolutionPreset.high,
         enableAudio: false,
       );
       await _controller!.initialize();
       if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _initFaceRecognition() async {
+    final initialized = await FaceRecognitionService.initialize();
+    if (!initialized) {
+      print('Failed to initialize face recognition');
+    }
+    // Load embeddings from Firestore
+    await _loadFaceEmbeddings();
+  }
+
+  Future<void> _loadFaceEmbeddings() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('face_embeddings')
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        print('No face embeddings found');
+        return;
+      }
+
+      Map<String, List<List<double>>> allEmbeddings = {};
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        if (data['embeddings'] != null) {
+          List<List<double>> personEmbeddings = (data['embeddings'] as List)
+              .map((e) => (e as List).map((v) => (v as num).toDouble()).toList())
+              .toList();
+          allEmbeddings[doc.id] = personEmbeddings;
+        }
+      }
+
+      FaceRecognitionService.loadMultipleEmbeddings(allEmbeddings);
+      print('✅ Loaded ${allEmbeddings.length} persons for recognition');
+    } catch (e) {
+      print('Error loading face embeddings: $e');
     }
   }
 
@@ -107,20 +147,18 @@ class _CameraScreenState extends State<CameraScreen> {
     final newIndex = _controller!.description == _cameras![0] ? 1 : 0;
     _controller = CameraController(
       _cameras![newIndex],
-      ResolutionPreset.max,
+      ResolutionPreset.high,
       enableAudio: false,
     );
     await _controller!.initialize();
     if (mounted) setState(() {});
   }
 
-  // OCR function
   Future<String> _extractTextFromImage(String imagePath) async {
     try {
       final InputImage inputImage = InputImage.fromFilePath(imagePath);
-      final RecognizedText recognizedText = await _textRecognizer.processImage(
-        inputImage,
-      );
+      final RecognizedText recognizedText =
+          await _textRecognizer.processImage(inputImage);
       return recognizedText.text;
     } catch (e) {
       print('OCR Error: $e');
@@ -128,9 +166,7 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  // Color detection functions
   double _colorDistance(List<int> color1, List<int> color2) {
-    // Calculate Euclidean distance between two RGB colors
     double rDiff = (color1[0] - color2[0]).toDouble();
     double gDiff = (color1[1] - color2[1]).toDouble();
     double bDiff = (color1[2] - color2[2]).toDouble();
@@ -157,17 +193,14 @@ class _CameraScreenState extends State<CameraScreen> {
       final File imageFile = File(imagePath);
       final Uint8List imageBytes = await imageFile.readAsBytes();
 
-      // Decode image
       final ui.Image image = await decodeImageFromList(imageBytes);
-      final ByteData? byteData = await image.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
-      );
+      final ByteData? byteData =
+          await image.toByteData(format: ui.ImageByteFormat.rawRgba);
 
-      if (byteData == null) return [128, 128, 128]; // Default gray
+      if (byteData == null) return [128, 128, 128];
 
       final Uint8List pixels = byteData.buffer.asUint8List();
 
-      // Get center crop (60% of image)
       final int width = image.width;
       final int height = image.height;
       final int cropWidth = (width * 0.6).round();
@@ -176,41 +209,33 @@ class _CameraScreenState extends State<CameraScreen> {
       final int startY = (height - cropHeight) ~/ 2;
 
       Map<String, int> colorFrequency = {};
-      int totalValidPixels = 0;
 
-      // Sample pixels from center crop
       for (int y = startY; y < startY + cropHeight; y += 3) {
-        // Sample every 3rd pixel for performance
         for (int x = startX; x < startX + cropWidth; x += 3) {
-          final int pixelIndex = (y * width + x) * 4; // RGBA format
+          final int pixelIndex = (y * width + x) * 4;
 
           if (pixelIndex + 2 < pixels.length) {
             final int r = pixels[pixelIndex];
             final int g = pixels[pixelIndex + 1];
             final int b = pixels[pixelIndex + 2];
 
-            // Filter out very dark, very bright, or very desaturated colors
             final double brightness = (r + g + b) / 3.0;
             final int maxRgb = math.max(r, math.max(g, b));
             final int minRgb = math.min(r, math.min(g, b));
-            final double saturation = maxRgb == 0
-                ? 0
-                : (maxRgb - minRgb) / maxRgb;
+            final double saturation = maxRgb == 0 ? 0 : (maxRgb - minRgb) / maxRgb;
 
             if (brightness > 40 && brightness < 245 && saturation > 0.15) {
               final String colorKey = '$r,$g,$b';
               colorFrequency[colorKey] = (colorFrequency[colorKey] ?? 0) + 1;
-              totalValidPixels++;
             }
           }
         }
       }
 
       if (colorFrequency.isEmpty) {
-        return [128, 128, 128]; // Default gray if no valid colors found
+        return [128, 128, 128];
       }
 
-      // Find the most frequent color
       String mostFrequentColor = colorFrequency.entries
           .reduce((a, b) => a.value > b.value ? a : b)
           .key;
@@ -223,7 +248,7 @@ class _CameraScreenState extends State<CameraScreen> {
       ];
     } catch (e) {
       print('Color detection error: $e');
-      return [128, 128, 128]; // Default gray on error
+      return [128, 128, 128];
     }
   }
 
@@ -231,14 +256,13 @@ class _CameraScreenState extends State<CameraScreen> {
     try {
       List<int> dominantRgb = await _getDominantColor(imagePath);
       String colorName = _rgbToColorName(dominantRgb);
-      return "The  color is $colorName ";
+      return "The color is $colorName";
     } catch (e) {
       print('Color detection error: $e');
       return "Could not detect color";
     }
   }
 
-  // TTS function
   Future<String?> _convertTextToSpeech(String text) async {
     try {
       final String auth = base64Encode(utf8.encode('apikey:$IBM_TTS_API_KEY'));
@@ -274,11 +298,7 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  // Process image based on selected mode (STRICT - no mixing)
-  Future<void> _processImage(
-    String imagePath, {
-    bool fromGallery = false,
-  }) async {
+  Future<void> _processImage(String imagePath, {bool fromGallery = false}) async {
     setState(() => _busy = true);
 
     try {
@@ -288,13 +308,12 @@ class _CameraScreenState extends State<CameraScreen> {
 
       String textToSpeak = "";
 
-      // STRICT MODE SEPARATION - only process what was selected from home page
       if (_processingMode == 'text') {
-        // ONLY extract text, ignore color completely
         String extractedText = await _extractTextFromImage(imagePath);
         setState(() {
           _extractedText = extractedText;
-          _detectedColor = ""; // Clear color info
+          _detectedColor = "";
+          _faceResult = null;
         });
 
         if (extractedText.trim().isNotEmpty) {
@@ -303,13 +322,40 @@ class _CameraScreenState extends State<CameraScreen> {
           textToSpeak = "No text detected in the image";
         }
       } else if (_processingMode == 'color') {
-        // ONLY detect color, ignore text completely
         String detectedColor = await _detectColorFromImage(imagePath);
         setState(() {
           _detectedColor = detectedColor;
-          _extractedText = ""; // Clear text info
+          _extractedText = "";
+          _faceResult = null;
         });
         textToSpeak = detectedColor;
+      } else if (_processingMode == 'face') {
+        // Face Recognition
+        final result = await FaceRecognitionService.recognizeFace(
+          File(imagePath),
+          threshold: 0.25,
+          normalizationType: 'arcface',
+          useAdaptiveThreshold: true,
+        );
+
+        setState(() {
+          _faceResult = result;
+          _extractedText = "";
+          _detectedColor = "";
+        });
+
+        if (result != null) {
+          if (result.isMatch) {
+            textToSpeak = "Face recognized. This is ${result.personId}";
+          } else {
+            textToSpeak = "Face detected but not recognized. Unknown person";
+          }
+          
+          // Show result dialog
+          _showFaceResultDialog(result, imagePath);
+        } else {
+          textToSpeak = "No face detected in the image";
+        }
       }
 
       print("==== Processing Result (Mode: $_processingMode) ====");
@@ -317,10 +363,11 @@ class _CameraScreenState extends State<CameraScreen> {
         print("Text: $_extractedText");
       } else if (_processingMode == 'color' && _detectedColor.isNotEmpty) {
         print("Color: $_detectedColor");
+      } else if (_processingMode == 'face' && _faceResult != null) {
+        print("Face: $_faceResult");
       }
 
       if (textToSpeak.trim().isNotEmpty) {
-        // Convert to speech and play
         String? audioPath = await _convertTextToSpeech(textToSpeak);
 
         if (audioPath != null) {
@@ -328,9 +375,18 @@ class _CameraScreenState extends State<CameraScreen> {
           await _player.play(DeviceFileSource(audioPath));
 
           if (mounted) {
-            String successMessage = _processingMode == 'color'
-                ? 'Color detected and playing audio!'
-                : 'Text extracted and playing audio!';
+            String successMessage;
+            switch (_processingMode) {
+              case 'color':
+                successMessage = 'Color detected and playing audio!';
+                break;
+              case 'face':
+                successMessage = 'Face processed and playing audio!';
+                break;
+              default:
+                successMessage = 'Text extracted and playing audio!';
+            }
+            
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(successMessage),
@@ -338,24 +394,6 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
             );
           }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Analysis complete but audio conversion failed'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          }
-        }
-      } else {
-        if (mounted) {
-          String errorMessage = _processingMode == 'color'
-              ? 'Could not detect color in the image!'
-              : 'No text detected in the image!';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
-          );
         }
       }
     } catch (e) {
@@ -367,6 +405,141 @@ class _CameraScreenState extends State<CameraScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void _showFaceResultDialog(RecognitionResult result, String imagePath) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(
+              result.isMatch ? Icons.check_circle : Icons.cancel,
+              color: result.isMatch ? Colors.green : Colors.red,
+              size: 32,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                result.isMatch ? 'Face Recognized!' : 'Unknown Face',
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(
+                File(imagePath),
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (result.isMatch) ...[
+              _buildInfoRow('Name', result.personId, Icons.person),
+              _buildInfoRow(
+                'Match Score',
+                '${(result.similarity * 100).toStringAsFixed(1)}%',
+                Icons.analytics,
+              ),
+              _buildInfoRow(
+                'Threshold',
+                '${(result.threshold * 100).toStringAsFixed(1)}%',
+                Icons.settings,
+              ),
+            ] else ...[
+              _buildInfoRow(
+                'Status',
+                'Not in database',
+                Icons.person_outline,
+              ),
+              _buildInfoRow(
+                'Best Match',
+                result.personId != 'unknown' ? result.personId : 'None',
+                Icons.search,
+              ),
+              _buildInfoRow(
+                'Similarity',
+                '${(result.similarity * 100).toStringAsFixed(1)}%',
+                Icons.analytics,
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Score below recognition threshold',
+                        style: TextStyle(fontSize: 13, color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (result.isMatch)
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+              ),
+              child: const Text('Done'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: const Color(0xFFB14ABA)),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+              textAlign: TextAlign.end,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _captureImage() async {
@@ -391,6 +564,7 @@ class _CameraScreenState extends State<CameraScreen> {
       _selectedImagePath = null;
       _extractedText = "";
       _detectedColor = "";
+      _faceResult = null;
     });
   }
 
@@ -400,6 +574,8 @@ class _CameraScreenState extends State<CameraScreen> {
         return 'Text Reading Mode';
       case 'color':
         return 'Color Detection Mode';
+      case 'face':
+        return 'Face Recognition Mode';
       default:
         return 'Unknown mode';
     }
@@ -411,6 +587,8 @@ class _CameraScreenState extends State<CameraScreen> {
         return Icons.text_fields;
       case 'color':
         return Icons.color_lens;
+      case 'face':
+        return Icons.face;
       default:
         return Icons.help;
     }
@@ -433,28 +611,74 @@ class _CameraScreenState extends State<CameraScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                // Show selected image or camera preview
+                // Camera Preview or Selected Image
                 Positioned.fill(
                   child: _selectedImagePath != null
                       ? Image.file(File(_selectedImagePath!), fit: BoxFit.cover)
-                      : Positioned.fill(
-  child: _selectedImagePath != null
-      ? Image.file(File(_selectedImagePath!), fit: BoxFit.cover)
-      : ClipRect(
-          child: OverflowBox(
-            alignment: Alignment.center,
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: size.width,
-                height: size.width * _controller!.value.aspectRatio,
-                child: CameraPreview(_controller!),
-              ),
-            ),
-          ),
-        ),
-),
+                      : ClipRect(
+                          child: OverflowBox(
+                            alignment: Alignment.center,
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: size.width,
+                                height: size.width * _controller!.value.aspectRatio,
+                                child: CameraPreview(_controller!),
+                              ),
+                            ),
+                          ),
+                        ),
                 ),
+
+                // Face Detection Frame (only for face mode)
+                if (_processingMode == 'face' && _selectedImagePath == null)
+                  Center(
+                    child: Container(
+                      width: 280,
+                      height: 350,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _busy
+                              ? Colors.orange
+                              : (_faceResult != null
+                                  ? (_faceResult!.isMatch ? Colors.green : Colors.red)
+                                  : Colors.white),
+                          width: 3,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Stack(
+                        children: [
+                          // Corner indicators
+                          Positioned(top: -2, left: -2, child: _buildCornerIndicator()),
+                          Positioned(
+                            top: -2,
+                            right: -2,
+                            child: Transform.rotate(
+                              angle: 1.5708,
+                              child: _buildCornerIndicator(),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: -2,
+                            left: -2,
+                            child: Transform.rotate(
+                              angle: -1.5708,
+                              child: _buildCornerIndicator(),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: -2,
+                            right: -2,
+                            child: Transform.rotate(
+                              angle: 3.14159,
+                              child: _buildCornerIndicator(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
                 // Back button
                 Positioned(
@@ -477,16 +701,13 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
                 ),
 
-                // Mode info (no switch button - mode is fixed from home page)
+                // Mode info
                 Positioned(
                   top: 40,
                   right: 16,
                   left: 80,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(20),
@@ -495,11 +716,11 @@ class _CameraScreenState extends State<CameraScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(_getModeIcon, color: Colors.white, size: 16),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _getModeDescription,
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
@@ -512,7 +733,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
                 ),
 
-                // Return to camera button when image is selected
+                // Return to camera button
                 if (_selectedImagePath != null)
                   Positioned(
                     top: 100,
@@ -525,21 +746,14 @@ class _CameraScreenState extends State<CameraScreen> {
                           color: Colors.black.withOpacity(0.6),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: Row(
+                        child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.camera_alt,
-                              color: Colors.white,
-                              size: 20,
-                            ),
+                            Icon(Icons.camera_alt, color: Colors.white, size: 20),
                             SizedBox(width: 4),
                             Text(
                               'New Photo',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                              ),
+                              style: TextStyle(color: Colors.white, fontSize: 12),
                             ),
                           ],
                         ),
@@ -547,9 +761,10 @@ class _CameraScreenState extends State<CameraScreen> {
                     ),
                   ),
 
-                // Results display - only show relevant result based on mode
+                // Results display
                 if ((_processingMode == 'text' && _extractedText.isNotEmpty) ||
-                    (_processingMode == 'color' && _detectedColor.isNotEmpty))
+                    (_processingMode == 'color' && _detectedColor.isNotEmpty) ||
+                    (_processingMode == 'face' && _faceResult != null))
                   Positioned(
                     top: 140,
                     left: 16,
@@ -563,9 +778,8 @@ class _CameraScreenState extends State<CameraScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (_processingMode == 'text' &&
-                              _extractedText.isNotEmpty) ...[
-                            Text(
+                          if (_processingMode == 'text' && _extractedText.isNotEmpty) ...[
+                            const Text(
                               'Extracted Text:',
                               style: TextStyle(
                                 color: Colors.white,
@@ -573,10 +787,10 @@ class _CameraScreenState extends State<CameraScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            SizedBox(height: 8),
+                            const SizedBox(height: 8),
                             Text(
                               _extractedText,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14,
                               ),
@@ -584,9 +798,8 @@ class _CameraScreenState extends State<CameraScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ],
-                          if (_processingMode == 'color' &&
-                              _detectedColor.isNotEmpty) ...[
-                            Text(
+                          if (_processingMode == 'color' && _detectedColor.isNotEmpty) ...[
+                            const Text(
                               'Detected Color:',
                               style: TextStyle(
                                 color: Colors.white,
@@ -594,10 +807,39 @@ class _CameraScreenState extends State<CameraScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            SizedBox(height: 8),
+                            const SizedBox(height: 8),
                             Text(
                               _detectedColor,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                          if (_processingMode == 'face' && _faceResult != null) ...[
+                            Text(
+                              _faceResult!.isMatch ? 'Recognized:' : 'Status:',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _faceResult!.isMatch
+                                  ? _faceResult!.personId
+                                  : 'Unknown Person',
                               style: TextStyle(
+                                color: _faceResult!.isMatch ? Colors.greenAccent : Colors.redAccent,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Match: ${(_faceResult!.similarity * 100).toStringAsFixed(1)}%',
+                              style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14,
                               ),
@@ -659,7 +901,7 @@ class _CameraScreenState extends State<CameraScreen> {
                                   shape: BoxShape.circle,
                                 ),
                                 child: _busy
-                                    ? Padding(
+                                    ? const Padding(
                                         padding: EdgeInsets.all(16),
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
@@ -676,7 +918,7 @@ class _CameraScreenState extends State<CameraScreen> {
                           ),
                         ),
 
-                        // Camera switch (only show when in camera mode)
+                        // Camera switch
                         GestureDetector(
                           onTap: _busy || _selectedImagePath != null
                               ? null
@@ -712,16 +954,18 @@ class _CameraScreenState extends State<CameraScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            CircularProgressIndicator(
+                            const CircularProgressIndicator(
                               strokeWidth: 3,
                               color: Colors.white,
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             Text(
                               _processingMode == 'color'
                                   ? 'Detecting color...'
-                                  : 'Processing text...',
-                              style: TextStyle(
+                                  : _processingMode == 'face'
+                                      ? 'Recognizing face...'
+                                      : 'Processing text...',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
@@ -734,6 +978,33 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
               ],
             ),
+    );
+  }
+
+  Widget _buildCornerIndicator() {
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: _busy
+                ? Colors.orange
+                : (_faceResult != null
+                    ? (_faceResult!.isMatch ? Colors.green : Colors.red)
+                    : Colors.white),
+            width: 4,
+          ),
+          left: BorderSide(
+            color: _busy
+                ? Colors.orange
+                : (_faceResult != null
+                    ? (_faceResult!.isMatch ? Colors.green : Colors.red)
+                    : Colors.white),
+            width: 4,
+          ),
+        ),
+      ),
     );
   }
 }

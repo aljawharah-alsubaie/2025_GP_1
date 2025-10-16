@@ -9,7 +9,8 @@ class WelcomeScreen extends StatefulWidget {
   State<WelcomeScreen> createState() => _WelcomeScreenState();
 }
 
-class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateMixin {
+class _WelcomeScreenState extends State<WelcomeScreen>
+    with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -21,23 +22,19 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
-    
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
-    
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutBack,
-    ));
-    
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutBack,
+          ),
+        );
+
     _animationController.forward();
   }
 
@@ -45,21 +42,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
   void dispose() {
     _animationController.dispose();
     super.dispose();
-  }
-
-  // Google Sign-in function
-  Future<void> _signUpWithGoogle() async {
-    try {
-      // Add your Google Sign-in handler here
-      // await GoogleSignInHandler.signInWithGoogle(context);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Google sign-in failed: ${e.toString()}"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   @override
@@ -102,7 +84,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                   child: Column(
                     children: [
                       const SizedBox(height: 0),
-                      
+
                       // Logo and title section
                       Container(
                         padding: const EdgeInsets.all(0),
@@ -125,8 +107,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                                 },
                               ),
                             ),
-                            const SizedBox(height:0),
-                            
+                            const SizedBox(height: 0),
+
                             Text(
                               "Welcome to your new journey",
                               style: TextStyle(
@@ -138,7 +120,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                           ],
                         ),
                       ),
-                      
+
                       const SizedBox(height: 20),
 
                       // Create Account button
@@ -149,29 +131,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const SignupScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const SignupScreen(),
+                            ),
                           );
                         },
                       ),
 
                       const SizedBox(height: 20),
-
-                      // Login button
-                      _buildButton(
-                        title: 'Login',
-                        icon: Icons.login_outlined,
-                        isPrimary: false,
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => const LoginScreen()),
-                          );
-                        },
-                      ),
-
-                      const SizedBox(height: 40),
-
-                      // Divider
                       Row(
                         children: [
                           Expanded(
@@ -180,36 +147,23 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
                               color: Colors.white.withOpacity(0.3),
                             ),
                           ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              "OR",
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Container(
-                              height: 1,
-                              color: Colors.white.withOpacity(0.3),
-                            ),
-                          ),
                         ],
                       ),
-
-                      const SizedBox(height: 30),
-
-                      // Google button
-                      _buildSocialButton(
-                        icon: Icons.g_mobiledata,
-                        label: "Sign up with Google",
-                        onTap: _signUpWithGoogle,
+                      const SizedBox(height: 35),
+                      // Login button
+                      _buildButton(
+                        title: 'Login',
+                        icon: Icons.login_outlined,
+                        isPrimary: false,
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LoginScreen(),
+                            ),
+                          );
+                        },
                       ),
-
-                      const SizedBox(height: 30),
-
                     ],
                   ),
                 ),
@@ -243,83 +197,26 @@ class _WelcomeScreenState extends State<WelcomeScreen> with TickerProviderStateM
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isPrimary 
-              ? const Color.fromARGB(255, 162, 68, 172) 
+          backgroundColor: isPrimary
+              ? const Color.fromARGB(255, 162, 68, 172)
               : Colors.white.withOpacity(0.1),
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: isPrimary 
+            side: isPrimary
                 ? BorderSide.none
-                : BorderSide(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 1,
-                  ),
+                : BorderSide(color: Colors.white.withOpacity(0.3), width: 1),
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              color: Colors.white,
-              size: 20,
-            ),
+            Icon(icon, color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSocialButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: Colors.white.withOpacity(0.3),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: Colors.white,
-              size: 24,
-            ),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w500,
-                fontSize: 16,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ],
         ),
