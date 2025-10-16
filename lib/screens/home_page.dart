@@ -105,10 +105,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           final data = doc.data();
           final bool isIncomplete =
               (data?['full_name']?.toString().trim().isEmpty ?? true) ||
-              (data?['phone']?.toString().trim().isEmpty ?? true) ||
-              (data?['address']?.toString().trim().isEmpty ?? true) ||
-              (data?['country']?.toString().trim().isEmpty ?? true) ||
-              (data?['city']?.toString().trim().isEmpty ?? true);
+              (data?['phone']?.toString().trim().isEmpty ?? true);
 
           final lastShown = data?['profile_reminder_last_shown'] as Timestamp?;
           final now = DateTime.now();
@@ -205,12 +202,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 🎯 هيدر جديد - النظارة يسار، Profile يمين ثابت
+  // 🎯 هيدر جديد - أكبر حجماً
   Widget _buildModernHeader() {
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        padding: const EdgeInsets.fromLTRB(
+          25,
+          45,
+          25,
+          55,
+        ), // زيادة المسافة من الأعلى والأسفل
+
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -223,125 +226,118 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ],
           ),
         ),
-        child: Column(
+        child: Row(
           children: [
-            // الصف الأول: نظارة + اسم + بروفايل
-            Row(
-              children: [
-                // 🕶️ نظارة متحركة على اليسار
-                AnimatedBuilder(
-                  animation: _floatController,
-                  builder: (context, child) {
-                    return Transform.translate(
-                      offset: Offset(0, -5 * _floatController.value),
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
-                            BoxShadow(
-                              color: vibrantPurple.withOpacity(0.15),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+            // 🕶️ نظارة متحركة على اليسار - أكبر
+            AnimatedBuilder(
+              animation: _floatController,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, -5 * _floatController.value),
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: vibrantPurple.withOpacity(0.15),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
-                        child: Center(
-                          child: Text('🕶️', style: TextStyle(fontSize: 24)),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Text('🕶️', style: TextStyle(fontSize: 32)),
+                    ),
+                  ),
+                );
+              },
+            ),
 
-                const SizedBox(width: 12),
+            const SizedBox(width: 16),
 
-                // النص في المنتصف
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Welcome Back',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: deepPurple.withOpacity(0.5),
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _userName,
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          foreground: Paint()
-                            ..shader = LinearGradient(
-                              colors: [deepPurple, vibrantPurple],
-                            ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
-                        ),
-                        overflow: TextOverflow.ellipsis,
+            // النص في المنتصف - أكبر
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Welcome Back',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: deepPurple.withOpacity(0.5),
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _userName,
+                    style: TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.w900,
+                      foreground: Paint()
+                        ..shader = LinearGradient(
+                          colors: [deepPurple, vibrantPurple],
+                        ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+
+            // زر البروفايل ثابت على اليمين - أكبر
+            Semantics(
+              label: 'Profile settings',
+              button: true,
+              child: GestureDetector(
+                onTap: () {
+                  _hapticFeedback();
+                  _speak('Profile');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ProfilePage(),
+                    ),
+                  ).then((_) {
+                    _checkProfileCompleteness();
+                    _loadUserName();
+                  });
+                },
+                child: Container(
+                  width: 53,
+                  height: 53,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [vibrantPurple, primaryPurple],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: vibrantPurple.withOpacity(0.3),
+                        blurRadius: 5,
+                        offset: const Offset(0, 1),
                       ),
                     ],
                   ),
-                ),
-
-                // زر البروفايل ثابت على اليمين
-                Semantics(
-                  label: 'Profile settings',
-                  button: true,
-                  child: GestureDetector(
-                    onTap: () {
-                      _hapticFeedback();
-                      _speak('Profile');
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ProfilePage(),
-                        ),
-                      ).then((_) {
-                        _checkProfileCompleteness();
-                        _loadUserName();
-                      });
-                    },
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [vibrantPurple, primaryPurple],
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: vibrantPurple.withOpacity(0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.person_outline,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
+                  child: const Icon(
+                    Icons.person_outline,
+                    color: Colors.white,
+                    size: 25,
                   ),
                 ),
-              ],
+              ),
             ),
-
-            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
-  // 📜 قائمة الميزات - أصغر
+  // 📜 قائمة الميزات - مسافات أكبر
   Widget _buildFeaturesList() {
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
@@ -354,10 +350,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
           16,
-          6,
+          20,
           16,
           16,
-        ), // ✅ إزالة المسافة الزائدة
+        ), // زيادة المسافة من الأعلى
         children: [
           _buildNeumorphicCard(
             title: 'Face Recognition',
@@ -446,7 +442,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 🎯 كارت Neumorphic أصغر
+  // 🎯 كارت Neumorphic مع مسافات أكبر ونص أكبر وسهم على اليمين
   Widget _buildNeumorphicCard({
     required String title,
     required String subtitle,
@@ -458,7 +454,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       label: '$title. $subtitle. Double tap to open',
       button: true,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 18), // ✅ زيادة المسافة قليلاً
+        margin: const EdgeInsets.only(bottom: 24),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -503,7 +499,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
 
                   const SizedBox(width: 14),
-                  // النص
+                  // النص - أكبر حجماً
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -511,16 +507,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         Text(
                           title,
                           style: TextStyle(
-                            fontSize: 15,
+                            fontSize: 17, // حجم متوسط
                             fontWeight: FontWeight.w700,
                             color: deepPurple,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 4),
                         Text(
                           subtitle,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 13, // حجم متوسط
                             color: deepPurple.withOpacity(0.5),
                             fontWeight: FontWeight.w500,
                           ),
@@ -529,7 +525,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // سهم متدرج
+                  const SizedBox(width: 8),
+                  // سهم متدرج على اليمين
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(

@@ -27,7 +27,7 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
   bool _isUploading = false;
   bool _isProcessing = false; // ⭐ إضافة جديدة
   String _searchQuery = '';
-  
+
   // Multiple images support
   List<File> _selectedImages = [];
   final int _minImages = 3;
@@ -79,7 +79,9 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
           final data = doc.data();
           if (data['embeddings'] != null) {
             List<List<double>> personEmbeddings = (data['embeddings'] as List)
-                .map((e) => (e as List).map((v) => (v as num).toDouble()).toList())
+                .map(
+                  (e) => (e as List).map((v) => (v as num).toDouble()).toList(),
+                )
                 .toList();
             allEmbeddings[doc.id] = personEmbeddings;
           }
@@ -106,12 +108,12 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
             .collection('face_embeddings')
             .doc(personId)
             .set({
-          'name': personId,
-          'embeddings': embeddings[personId],
-          'image_count': (embeddings[personId] as List).length,
-          'created_at': FieldValue.serverTimestamp(),
-          'updated_at': FieldValue.serverTimestamp(),
-        });
+              'name': personId,
+              'embeddings': embeddings[personId],
+              'image_count': (embeddings[personId] as List).length,
+              'created_at': FieldValue.serverTimestamp(),
+              'updated_at': FieldValue.serverTimestamp(),
+            });
       }
     } catch (e) {
       print('Error saving embeddings: $e');
@@ -141,9 +143,9 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading people: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading people: $e')));
       }
     }
   }
@@ -155,7 +157,9 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
     }
 
     try {
-      final List<XFile> images = await ImagePicker().pickMultiImage(imageQuality: 90);
+      final List<XFile> images = await ImagePicker().pickMultiImage(
+        imageQuality: 90,
+      );
 
       if (images.isNotEmpty) {
         int added = 0;
@@ -218,7 +222,7 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
 
     // ⭐ تحقق من أن العملية ما بدأت
     if (_isProcessing) return;
-    
+
     setState(() {
       _isUploading = true;
       _isProcessing = true;
@@ -234,8 +238,10 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
       for (int i = 0; i < _selectedImages.length; i++) {
         try {
           // Detect and crop face
-          final faceRect = await FaceRecognitionService.detectFaceEnhanced(_selectedImages[i]);
-          
+          final faceRect = await FaceRecognitionService.detectFaceEnhanced(
+            _selectedImages[i],
+          );
+
           if (faceRect != null) {
             final croppedFace = await FaceRecognitionService.cropFaceEnhanced(
               _selectedImages[i],
@@ -255,7 +261,7 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
               // Save cropped face as proper file
               final tempDir = await Directory.systemTemp.createTemp();
               final tempFile = File('${tempDir.path}/face_$i.jpg');
-              
+
               // Use image package to encode properly
               final jpg = img.encodeJpg(croppedFace);
               await tempFile.writeAsBytes(jpg);
@@ -269,7 +275,7 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
 
               if (success) {
                 successCount++;
-                
+
                 // Only upload if embedding succeeded
                 final uploadTask = await storageRef.putFile(tempFile);
                 final photoUrl = await uploadTask.ref.getDownloadURL();
@@ -304,13 +310,13 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
             .doc(user.uid)
             .collection('people')
             .add({
-          'name': personName,
-          'photoUrls': photoUrls,
-          'photoCount': photoUrls.length,
-          'embeddingCount': successCount,
-          'faceDetected': true,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+              'name': personName,
+              'photoUrls': photoUrls,
+              'photoCount': photoUrls.length,
+              'embeddingCount': successCount,
+              'faceDetected': true,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
 
         // Save embeddings
         await _saveEmbeddingsToFirestore(personName);
@@ -319,13 +325,13 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
         if (mounted) {
           // ⭐ أغلق الـ dialog أولاً
           Navigator.pop(context);
-          
+
           // ⭐ انتظر frame واحد قبل ما تنضف
           await Future.delayed(const Duration(milliseconds: 100));
-          
+
           // ⭐ نضف البيانات بعد ما ينغلق الـ dialog
           _resetForm();
-          
+
           // ⭐ اعرض رسالة النجاح
           _showSuccessDialog(personName, successCount, failedCount);
         }
@@ -352,14 +358,17 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
   void _showSuccessDialog(String personName, int success, int failed) {
     // ⭐ تأكد إن الـ context لسه موجود
     if (!mounted) return;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false, // ⭐ امنع الإغلاق بالضغط برا
-      builder: (context) => WillPopScope( // ⭐ امنع الرجوع بزر الباك
+      builder: (context) => WillPopScope(
+        // ⭐ امنع الرجوع بزر الباك
         onWillPop: () async => false,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Row(
             children: [
               Icon(Icons.check_circle, color: Colors.green, size: 32),
@@ -371,16 +380,25 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Person: $personName', 
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(
+                'Person: $personName',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 8),
               Text('✅ Successful: $success photos'),
-              if (failed > 0) 
-                Text('❌ Failed: $failed photos', 
-                  style: const TextStyle(color: Colors.orange)),
+              if (failed > 0)
+                Text(
+                  '❌ Failed: $failed photos',
+                  style: const TextStyle(color: Colors.orange),
+                ),
               const SizedBox(height: 12),
-              const Text('Face recognition trained successfully!',
-                style: TextStyle(fontSize: 14, color: Colors.green)),
+              const Text(
+                'Face recognition trained successfully!',
+                style: TextStyle(fontSize: 14, color: Colors.green),
+              ),
             ],
           ),
           actions: [
@@ -460,7 +478,10 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
           'Delete Person',
-          style: TextStyle(color: Color(0xFF6B1D73), fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Color(0xFF6B1D73),
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Text('Are you sure you want to delete "$personName"?'),
         actions: [
@@ -473,9 +494,7 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
               Navigator.pop(context);
               await _deletePerson(personId, personName);
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete'),
           ),
         ],
@@ -497,8 +516,10 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
   List<Map<String, dynamic>> get _filteredPeople {
     if (_searchQuery.isEmpty) return _people;
     return _people
-        .where((person) =>
-            person['name'].toLowerCase().contains(_searchQuery.toLowerCase()))
+        .where(
+          (person) =>
+              person['name'].toLowerCase().contains(_searchQuery.toLowerCase()),
+        )
         .toList();
   }
 
@@ -608,149 +629,144 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                         ),
                       )
                     : _filteredPeople.isEmpty && _searchQuery.isNotEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(40.0),
-                              child: Column(
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40.0),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.search_off,
+                                size: 40,
+                                color: Colors.grey.withOpacity(0.6),
+                              ),
+                              const SizedBox(height: 15),
+                              const Text(
+                                "No people found matching your search",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : _people.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.person_add_outlined,
+                                size: 40,
+                                color: const Color(0xFFB14ABA).withOpacity(0.6),
+                              ),
+                              const SizedBox(height: 15),
+                              const Text(
+                                "You haven't added people yet",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          children: _filteredPeople.map((person) {
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 20),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF640B6D),
+                                    Color(0xFFCEA5D2),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Stack(
                                 children: [
-                                  Icon(
-                                    Icons.search_off,
-                                    size: 40,
-                                    color: Colors.grey.withOpacity(0.6),
-                                  ),
-                                  const SizedBox(height: 15),
-                                  const Text(
-                                    "No people found matching your search",
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey,
+                                  ListTile(
+                                    contentPadding: const EdgeInsets.all(16),
+                                    leading: CircleAvatar(
+                                      radius: 30,
+                                      backgroundColor: Colors.white,
+                                      backgroundImage:
+                                          person['photoUrls'] != null &&
+                                              (person['photoUrls'] as List)
+                                                  .isNotEmpty
+                                          ? NetworkImage(person['photoUrls'][0])
+                                          : null,
+                                      child:
+                                          person['photoUrls'] == null ||
+                                              (person['photoUrls'] as List)
+                                                  .isEmpty
+                                          ? const Icon(
+                                              Icons.person,
+                                              color: Colors.grey,
+                                            )
+                                          : null,
                                     ),
-                                    textAlign: TextAlign.center,
+                                    title: Text(
+                                      person['name'] ?? 'Unknown',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      '${person['photoCount'] ?? 0} photos',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 10,
+                                    right: 10,
+                                    child: GestureDetector(
+                                      onTap: () => _showDeleteConfirmation(
+                                        person['id'],
+                                        person['name'] ?? 'Unknown',
+                                      ),
+                                      child: Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.25),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.white.withOpacity(
+                                              0.4,
+                                            ),
+                                            width: 2,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.white,
+                                          size: 22,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
-                            ),
-                          )
-                        : _people.isEmpty
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(40.0),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.person_add_outlined,
-                                        size: 40,
-                                        color: const Color(0xFFB14ABA)
-                                            .withOpacity(0.6),
-                                      ),
-                                      const SizedBox(height: 15),
-                                      const Text(
-                                        "You haven't added people yet",
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.grey,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            : Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
-                                child: Column(
-                                  children: _filteredPeople.map((person) {
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 20),
-                                      decoration: BoxDecoration(
-                                        gradient: const LinearGradient(
-                                          colors: [
-                                            Color(0xFF640B6D),
-                                            Color(0xFFCEA5D2),
-                                          ],
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                        ),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Stack(
-                                        children: [
-                                          ListTile(
-                                            contentPadding:
-                                                const EdgeInsets.all(16),
-                                            leading: CircleAvatar(
-                                              radius: 30,
-                                              backgroundColor: Colors.white,
-                                              backgroundImage:
-                                                  person['photoUrls'] != null &&
-                                                          (person['photoUrls']
-                                                                  as List)
-                                                              .isNotEmpty
-                                                      ? NetworkImage(
-                                                          person['photoUrls'][0])
-                                                      : null,
-                                              child: person['photoUrls'] ==
-                                                          null ||
-                                                      (person['photoUrls']
-                                                              as List)
-                                                          .isEmpty
-                                                  ? const Icon(Icons.person,
-                                                      color: Colors.grey)
-                                                  : null,
-                                            ),
-                                            title: Text(
-                                              person['name'] ?? 'Unknown',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            subtitle: Text(
-                                              '${person['photoCount'] ?? 0} photos',
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            top: 10,
-                                            right: 10,
-                                            child: GestureDetector(
-                                              onTap: () =>
-                                                  _showDeleteConfirmation(
-                                                person['id'],
-                                                person['name'] ?? 'Unknown',
-                                              ),
-                                              child: Container(
-                                                width: 40,
-                                                height: 40,
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white
-                                                      .withOpacity(0.25),
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(
-                                                    color: Colors.white
-                                                        .withOpacity(0.4),
-                                                    width: 2,
-                                                  ),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.delete_outline,
-                                                  color: Colors.white,
-                                                  size: 22,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
                 const SizedBox(height: 80),
               ],
             ),
@@ -822,29 +838,43 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                   child: const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.home_outlined, size: 26, color: Color(0xFFB14ABA)),
+                      Icon(
+                        Icons.home_outlined,
+                        size: 26,
+                        color: Color(0xFFB14ABA),
+                      ),
                       SizedBox(height: 2),
-                      Text('Home',
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFFB14ABA))),
+                      Text(
+                        'Home',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFFB14ABA),
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 GestureDetector(
                   onTap: () => Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (context) => const RemindersPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const RemindersPage(),
+                    ),
                   ),
                   child: const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.notifications_none,
-                          size: 26, color: Colors.black54),
+                      Icon(
+                        Icons.notifications_none,
+                        size: 26,
+                        color: Colors.black54,
+                      ),
                       SizedBox(height: 2),
-                      Text('Reminders',
-                          style: TextStyle(fontSize: 12, color: Colors.black54)),
+                      Text(
+                        'Reminders',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
                     ],
                   ),
                 ),
@@ -856,26 +886,35 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                   child: const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.warning_amber_outlined,
-                          size: 26, color: Colors.black54),
+                      Icon(
+                        Icons.warning_amber_outlined,
+                        size: 26,
+                        color: Colors.black54,
+                      ),
                       SizedBox(height: 2),
-                      Text('Emergency',
-                          style: TextStyle(fontSize: 12, color: Colors.black54)),
+                      Text(
+                        'Emergency',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
                     ],
                   ),
                 ),
                 GestureDetector(
                   onTap: () => Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (context) => const SettingsPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsPage(),
+                    ),
                   ),
                   child: const Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.settings, size: 26, color: Colors.black54),
                       SizedBox(height: 2),
-                      Text('Settings',
-                          style: TextStyle(fontSize: 12, color: Colors.black54)),
+                      Text(
+                        'Settings',
+                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
                     ],
                   ),
                 ),
@@ -897,7 +936,9 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
         builder: (context, setDialogState) => WillPopScope(
           onWillPop: () async => !_isUploading, // ⭐ امنع الإغلاق لو في معالجة
           child: Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             insetPadding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
               width: double.infinity,
@@ -920,18 +961,27 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                           ),
                         ),
                         GestureDetector(
-                          onTap: _isUploading ? null : () { // ⭐ منع الإغلاق أثناء الرفع
-                            _resetForm();
-                            Navigator.pop(context);
-                          },
-                          child: Icon(Icons.close, 
-                            color: _isUploading ? Colors.grey : const Color(0xFF6B1D73)
+                          onTap: _isUploading
+                              ? null
+                              : () {
+                                  // ⭐ منع الإغلاق أثناء الرفع
+                                  _resetForm();
+                                  Navigator.pop(context);
+                                },
+                          child: Icon(
+                            Icons.close,
+                            color: _isUploading
+                                ? Colors.grey
+                                : const Color(0xFF6B1D73),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    const Text("Name", style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text(
+                      "Name",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 5),
                     TextField(
                       controller: _nameController,
@@ -948,7 +998,7 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    
+
                     // Status Badge
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -985,15 +1035,17 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                         ],
                       ),
                     ),
-                    
+
                     const SizedBox(height: 16),
-                    
+
                     // Action Buttons
                     Row(
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: _isUploading || _isProcessing // ⭐ إضافة _isProcessing
+                            onPressed:
+                                _isUploading ||
+                                    _isProcessing // ⭐ إضافة _isProcessing
                                 ? null
                                 : () async {
                                     await _pickSingleImage();
@@ -1014,7 +1066,9 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: _isUploading || _isProcessing // ⭐ إضافة _isProcessing
+                            onPressed:
+                                _isUploading ||
+                                    _isProcessing // ⭐ إضافة _isProcessing
                                 ? null
                                 : () async {
                                     await _pickImages();
@@ -1034,9 +1088,9 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                         ),
                       ],
                     ),
-                    
+
                     const SizedBox(height: 16),
-                    
+
                     // Images Grid
                     if (_selectedImages.isNotEmpty) ...[
                       Row(
@@ -1050,10 +1104,14 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                             ),
                           ),
                           TextButton.icon(
-                            onPressed: _isUploading || _isProcessing // ⭐ إضافة _isProcessing
+                            onPressed:
+                                _isUploading ||
+                                    _isProcessing // ⭐ إضافة _isProcessing
                                 ? null
                                 : () {
-                                    setDialogState(() => _selectedImages.clear());
+                                    setDialogState(
+                                      () => _selectedImages.clear(),
+                                    );
                                   },
                             icon: const Icon(Icons.delete_outline, size: 16),
                             label: const Text('Clear'),
@@ -1069,11 +1127,12 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                         height: 200,
                         child: GridView.builder(
                           shrinkWrap: true,
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
-                          ),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                              ),
                           itemCount: _selectedImages.length,
                           itemBuilder: (context, index) {
                             return Stack(
@@ -1090,16 +1149,20 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                                   top: 4,
                                   right: 4,
                                   child: GestureDetector(
-                                    onTap: _isUploading || _isProcessing // ⭐ منع الحذف أثناء المعالجة
+                                    onTap:
+                                        _isUploading ||
+                                            _isProcessing // ⭐ منع الحذف أثناء المعالجة
                                         ? null
                                         : () {
-                                            setDialogState(() => _removeImage(index));
+                                            setDialogState(
+                                              () => _removeImage(index),
+                                            );
                                           },
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
                                       decoration: BoxDecoration(
-                                        color: _isUploading || _isProcessing 
-                                            ? Colors.grey 
+                                        color: _isUploading || _isProcessing
+                                            ? Colors.grey
                                             : Colors.red,
                                         shape: BoxShape.circle,
                                       ),
@@ -1139,15 +1202,16 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                         ),
                       ),
                     ],
-                    
+
                     const SizedBox(height: 24),
-                    
+
                     // Submit Button - ⭐ التعديل الرئيسي
                     SizedBox(
                       width: double.infinity,
                       height: 45,
                       child: ElevatedButton(
-                        onPressed: _isUploading ||
+                        onPressed:
+                            _isUploading ||
                                 _isProcessing || // ⭐ إضافة
                                 _nameController.text.trim().isEmpty ||
                                 _selectedImages.length < _minImages
@@ -1157,10 +1221,10 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                                 setDialogState(() {
                                   _isUploading = true;
                                 });
-                                
+
                                 // ⭐ تنفيذ العملية
                                 await _addPerson();
-                                
+
                                 // ⭐ لو لسه موجود، حدّث الحالة
                                 if (mounted && Navigator.canPop(context)) {
                                   setDialogState(() {
@@ -1206,9 +1270,9 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                               ),
                       ),
                     ),
-                    
+
                     const SizedBox(height: 12),
-                    
+
                     // Info Text
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -1219,12 +1283,19 @@ class _FaceManagementPageState extends State<FaceManagementPage> {
                       ),
                       child: const Row(
                         children: [
-                          Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.blue,
+                            size: 18,
+                          ),
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Best results with 5-7 photos from different angles',
-                              style: TextStyle(fontSize: 11, color: Colors.blue),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blue,
+                              ),
                             ),
                           ),
                         ],

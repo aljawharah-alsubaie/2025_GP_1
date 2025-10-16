@@ -111,16 +111,16 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 🎯 Enhanced header with oval shape
+  // 🎯 Enhanced header with oval shape - Maximized
   Widget _buildModernHeader() {
     return FadeTransition(
       opacity: _fadeController ?? AlwaysStoppedAnimation(1.0),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Oval background shape
+          // Oval background shape - maximized height and curvature
           Container(
-            height: 160,
+            height: 200,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -128,8 +128,8 @@ class _FaceListPageState extends State<FaceListPage>
                 colors: [deepPurple, vibrantPurple, primaryPurple],
               ),
               borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.elliptical(200, 50),
-                bottomRight: Radius.elliptical(200, 50),
+                bottomLeft: Radius.elliptical(200, 75),
+                bottomRight: Radius.elliptical(225, 75),
               ),
               boxShadow: [
                 BoxShadow(
@@ -143,7 +143,7 @@ class _FaceListPageState extends State<FaceListPage>
 
           // Content on top of oval
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            padding: const EdgeInsets.fromLTRB(20, 20, 30, 25),
             child: Column(
               children: [
                 // Back button row
@@ -159,8 +159,8 @@ class _FaceListPageState extends State<FaceListPage>
                           Navigator.pop(context);
                         },
                         child: Container(
-                          width: 48,
-                          height: 48,
+                          width: 55,
+                          height: 55,
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(14),
@@ -172,7 +172,7 @@ class _FaceListPageState extends State<FaceListPage>
                           child: const Icon(
                             Icons.arrow_back_ios_new,
                             color: Colors.white,
-                            size: 20,
+                            size: 22,
                           ),
                         ),
                       ),
@@ -180,28 +180,26 @@ class _FaceListPageState extends State<FaceListPage>
                   ],
                 ),
 
-                const SizedBox(height: 8),
-
-                // Centered Title
+                const SizedBox(height: 15),
+                // Centered Title - smaller
                 Text(
                   'Face Recognition',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 32,
+                    fontSize: 30,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                     letterSpacing: 0.5,
                   ),
                 ),
 
-                const SizedBox(height: 4),
-
+                const SizedBox(height: 6),
                 // Centered Subtitle
                 Text(
                   'Manage face identification',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 14.5,
                     color: Colors.white.withOpacity(0.9),
                     fontWeight: FontWeight.w500,
                   ),
@@ -214,7 +212,7 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 📜 Options list with better spacing
+  // 📜 Options list with more spacing between header and items
   Widget _buildOptionsList() {
     return SlideTransition(
       position: _slideController != null
@@ -229,12 +227,17 @@ class _FaceListPageState extends State<FaceListPage>
             )
           : AlwaysStoppedAnimation(Offset.zero),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          60,
+          16,
+          16,
+        ), // Increased top padding for more space
         children: [
           // Add Person Card
           _buildOptionCard(
-            title: 'Add Person',
-            subtitle: 'Register a new person for recognition',
+            title: 'Face Management',
+            subtitle: 'Manage and organize all face recognition entries',
             icon: Icons.person_add,
             gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
             onTap: () {
@@ -249,8 +252,7 @@ class _FaceListPageState extends State<FaceListPage>
             },
           ),
 
-          const SizedBox(height: 20),
-
+          const SizedBox(height: 36), // More space between cards
           // Identify Person Card
           _buildOptionCard(
             title: 'Identify Person',
@@ -550,7 +552,7 @@ class _FaceListPageState extends State<FaceListPage>
                   color: isActive
                       ? Colors.white
                       : Colors.white.withOpacity(0.9),
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
