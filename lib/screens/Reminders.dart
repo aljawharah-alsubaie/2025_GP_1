@@ -84,6 +84,10 @@ class _RemindersPageState extends State<RemindersPage>
     await _tts.setLanguage("en-US");
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
+    // ✅ نضيف completion handler للتأكد من انتهاء الكلام
+    _tts.setCompletionHandler(() {
+      print('TTS completed');
+    });
   }
 
   Future<void> _initSpeech() async {
@@ -183,10 +187,16 @@ class _RemindersPageState extends State<RemindersPage>
     });
 
     _hapticFeedback();
+<<<<<<< HEAD
     await _speak(
       'Starting voice reminder. Please tell me the title of your reminder',
     );
     await Future.delayed(const Duration(milliseconds: 2500));
+=======
+    await _speak('Starting voice reminder. Please tell me the title of your reminder');
+    // ✅ ننتظر 1 ثانية إضافية بعد انتهاء TTS
+    await Future.delayed(const Duration(milliseconds: 3500));
+>>>>>>> 30a423b0f14a9ecd2ff5060ecb20c58eb2b65be0
     _listenForVoiceInput();
   }
 
@@ -204,9 +214,9 @@ class _RemindersPageState extends State<RemindersPage>
           _processVoiceInput(result.recognizedWords);
         }
       },
-      listenFor: const Duration(seconds: 10),
-      pauseFor: const Duration(seconds: 3),
-      localeId: 'en_US', // ✅ أضفنا اللغة
+      listenFor: const Duration(seconds: 15), // ✅ زودنا المدة من 10 إلى 15 ثانية
+      pauseFor: const Duration(seconds: 5), // ✅ زودنا المدة من 3 إلى 5 ثواني
+      localeId: 'en_US',
       cancelOnError: true,
       partialResults: false,
     );
@@ -217,7 +227,7 @@ class _RemindersPageState extends State<RemindersPage>
 
     if (input.isEmpty) {
       await _speak('I did not hear anything. Please try again');
-      await Future.delayed(const Duration(milliseconds: 2000));
+      await Future.delayed(const Duration(milliseconds: 2500)); // ✅ زودنا الوقت
       _listenForVoiceInput();
       return;
     }
@@ -229,7 +239,7 @@ class _RemindersPageState extends State<RemindersPage>
           'Got it. Title is: $input. Now, when would you like to be reminded? Say the date and time',
         );
         setState(() => _voiceStep = 1);
-        await Future.delayed(const Duration(milliseconds: 3000));
+        await Future.delayed(const Duration(milliseconds: 4000)); // ✅ زودنا الوقت من 3000 إلى 4000
         _listenForVoiceInput();
         break;
 
@@ -242,13 +252,18 @@ class _RemindersPageState extends State<RemindersPage>
             'Perfect. Reminder set for ${_formatDateForSpeech(dateTime)} at ${_voiceTime}. Would you like to add a note? Say yes or no',
           );
           setState(() => _voiceStep = 2);
-          await Future.delayed(const Duration(milliseconds: 3000));
+          await Future.delayed(const Duration(milliseconds: 4000)); // ✅ زودنا الوقت من 3000 إلى 4000
           _listenForVoiceInput();
         } else {
+<<<<<<< HEAD
           await _speak(
             'Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM',
           );
           await Future.delayed(const Duration(milliseconds: 3500));
+=======
+          await _speak('Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM');
+          await Future.delayed(const Duration(milliseconds: 4500)); // ✅ زودنا الوقت من 3500 إلى 4500
+>>>>>>> 30a423b0f14a9ecd2ff5060ecb20c58eb2b65be0
           _listenForVoiceInput();
         }
         break;
@@ -257,14 +272,14 @@ class _RemindersPageState extends State<RemindersPage>
         if (input.toLowerCase().contains('yes')) {
           await _speak('What would you like to add as a note?');
           setState(() => _voiceStep = 3);
-          await Future.delayed(const Duration(milliseconds: 2000));
+          await Future.delayed(const Duration(milliseconds: 2500)); // ✅ زودنا الوقت من 2000 إلى 2500
           _listenForVoiceInput();
         } else {
           await _speak(
             'Would you like this reminder to repeat? Say one time, daily, or weekly',
           );
           setState(() => _voiceStep = 4);
-          await Future.delayed(const Duration(milliseconds: 2500));
+          await Future.delayed(const Duration(milliseconds: 3500)); // ✅ زودنا الوقت من 2500 إلى 3500
           _listenForVoiceInput();
         }
         break;
@@ -275,7 +290,7 @@ class _RemindersPageState extends State<RemindersPage>
           'Note added. Would you like this reminder to repeat? Say one time, daily, or weekly',
         );
         setState(() => _voiceStep = 4);
-        await Future.delayed(const Duration(milliseconds: 2500));
+        await Future.delayed(const Duration(milliseconds: 3500)); // ✅ زودنا الوقت من 2500 إلى 3500
         _listenForVoiceInput();
         break;
 
@@ -287,11 +302,17 @@ class _RemindersPageState extends State<RemindersPage>
         } else {
           _voiceFrequency = 'One time';
         }
+<<<<<<< HEAD
 
         await _speak(
           'Understood. Frequency is ${_voiceFrequency}. Creating your reminder now',
         );
         await Future.delayed(const Duration(milliseconds: 2000));
+=======
+        
+        await _speak('Understood. Frequency is ${_voiceFrequency}. Creating your reminder now');
+        await Future.delayed(const Duration(milliseconds: 2500)); // ✅ زودنا الوقت من 2000 إلى 2500
+>>>>>>> 30a423b0f14a9ecd2ff5060ecb20c58eb2b65be0
         await _saveVoiceReminder();
         break;
     }
