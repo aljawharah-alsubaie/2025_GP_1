@@ -696,131 +696,136 @@ class _SignupScreenState extends State<SignupScreen>
               ),
             ),
             const SizedBox(height: 32),
-            // Create Account Button - Solid Purple like the image
-            Semantics(
-              label: 'Create account button',
-              hint: 'Double tap to create your account',
-              button: true,
-              child: SizedBox(
-                width: double.infinity,
-                height: 64,
-                child: ElevatedButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () {
-                          HapticFeedback.mediumImpact();
-                          _registerUser();
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6B1D73),
-                    foregroundColor: Colors.white,
-                    elevation: 12,
-                    shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 28,
-                          width: 28,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 3,
-                          ),
-                        )
-                      : const Text(
-                          "Create Account",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
+
+// Create Account Button - Match Login button size (56 height)
+Semantics(
+  label: 'Create account button',
+  hint: 'Double tap to create your account',
+  button: true,
+  child: SizedBox(
+    width: double.infinity,
+    height: 56,  // ✅ Changed from 64 to 56
+    child: ElevatedButton(
+      onPressed: _isLoading
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              _registerUser();
+            },
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF6B1D73),
+        foregroundColor: Colors.white,
+        elevation: 12,
+        shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      child: _isLoading
+          ? const SizedBox(
+              height: 24,  // ✅ Changed from 28 to 24
+              width: 24,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,  // ✅ Changed from 3 to 2
+              ),
+            )
+          : const Text(
+              "Create Account",
+              style: TextStyle(
+                fontSize: 18,  // ✅ Changed from 20 to 18
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 32),
-            Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    height: 1,
-                    color: Colors.white.withOpacity(0.3),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    "OR",
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Container(
-                    height: 1,
-                    color: Colors.white.withOpacity(0.3),
-                  ),
-                ),
-              ],
+    ),
+  ),
+),
+
+const SizedBox(height: 32),
+
+Row(
+  children: [
+    Expanded(
+      child: Container(
+        height: 1,
+        color: Colors.white.withOpacity(0.3),
+      ),
+    ),
+    Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Text(
+        "OR",
+        style: TextStyle(
+          color: Colors.white.withOpacity(0.7),
+          fontWeight: FontWeight.w500,
+          fontSize: 16,
+        ),
+      ),
+    ),
+    Expanded(
+      child: Container(
+        height: 1,
+        color: Colors.white.withOpacity(0.3),
+      ),
+    ),
+  ],
+),
+
+const SizedBox(height: 32),
+
+// Google Sign Up Button - Match Login Google button style
+Semantics(
+  label: 'Sign up with Google button',
+  button: true,
+  hint: 'Double tap to sign up using your Google account',
+  child: SizedBox(
+    width: double.infinity,
+    height: 56,  // ✅ Changed from 64 to 56
+    child: Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.3),
+          width: 1.5,
+        ),
+      ),
+      child: ElevatedButton(
+        onPressed: _isLoading
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                _signUpWithGoogle();
+              },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          shadowColor: Colors.transparent,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ExcludeSemantics(
+              child: Icon(Icons.g_mobiledata, size: 28),  // ✅ Changed from 32 to 28
             ),
-            const SizedBox(height: 32),
-            // Google Sign Up Button - Transparent with border
-            Semantics(
-              label: 'Sign up with Google button',
-              button: true,
-              hint: 'Double tap to sign up using your Google account',
-              child: SizedBox(
-                width: double.infinity,
-                height: 64,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.3),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: _isLoading
-                        ? null
-                        : () {
-                            HapticFeedback.selectionClick();
-                            _signUpWithGoogle();
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: Colors.white,
-                      shadowColor: Colors.transparent,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        ExcludeSemantics(
-                          child: Icon(Icons.g_mobiledata, size: 32),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          "Continue with Google",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+            const SizedBox(width: 12),
+            const Text(
+              "Continue with Google",
+              style: TextStyle(
+                fontSize: 16,  // ✅ Changed from 18 to 16
+                fontWeight: FontWeight.w600,
               ),
             ),
+          ],
+        ),
+      ),
+    ),
+  ),
+),
             const SizedBox(height: 30),
             // Already have account - Button style like the image
             Semantics(
