@@ -342,7 +342,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 35, 16, 16),
         children: [
           _buildNeumorphicCard(
             title: 'Face Recognition',
@@ -386,9 +386,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           await _firestore
                               .collection('users')
                               .doc(user.uid)
-                              .update({
-                                'location_permission_granted': true,
-                              });
+                              .update({'location_permission_granted': true});
                           Navigator.pushReplacement(
                             context,
                             MaterialPageRoute(
@@ -402,9 +400,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 } else {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (context) => const SosScreen(),
-                    ),
+                    MaterialPageRoute(builder: (context) => const SosScreen()),
                   );
                 }
               }
@@ -485,7 +481,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             onTap: onTap,
             borderRadius: BorderRadius.circular(20),
             child: Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
@@ -506,8 +502,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 children: [
                   // الأيقونة المتدرجة
                   Container(
-                    width: 54,
-                    height: 54,
+                    width: 58,
+                    height: 58,
                     decoration: BoxDecoration(
                       gradient: gradient,
                       borderRadius: BorderRadius.circular(15),
@@ -519,10 +515,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
-                    child: Icon(icon, color: Colors.white, size: 28),
+                    child: Icon(icon, color: Colors.white, size: 30),
                   ),
 
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 15),
                   // النص - أكبر حجماً
                   Expanded(
                     child: Column(
@@ -531,7 +527,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         Text(
                           title,
                           style: TextStyle(
-                            fontSize: 17,
+                            fontSize: 17.5,
                             fontWeight: FontWeight.w700,
                             color: deepPurple,
                           ),
@@ -549,10 +545,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 10),
                   // سهم متدرج على اليمين
                   Container(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
@@ -564,7 +560,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                     child: Icon(
                       Icons.arrow_forward_ios,
-                      size: 14,
+                      size: 15,
                       color: gradient.colors.first,
                     ),
                   ),

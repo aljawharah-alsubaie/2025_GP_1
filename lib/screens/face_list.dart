@@ -5,11 +5,8 @@ import './face_management.dart';
 import './camera.dart';
 import './home_page.dart';
 import './reminders.dart';
-import './sos_screen.dart';
 import './settings.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import './location_permission_screen.dart';
+import './contact_info_page.dart';
 
 class FaceListPage extends StatefulWidget {
   const FaceListPage({super.key});
@@ -21,8 +18,6 @@ class FaceListPage extends StatefulWidget {
 class _FaceListPageState extends State<FaceListPage>
     with TickerProviderStateMixin {
   final FlutterTts _tts = FlutterTts();
-  final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
 
   AnimationController? _fadeController;
   AnimationController? _slideController;
@@ -111,108 +106,102 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 🎯 Enhanced header with oval shape - Maximized
+  // 🎯 هيدر مطابق تماماً للهوم بيج
   Widget _buildModernHeader() {
     return FadeTransition(
       opacity: _fadeController ?? AlwaysStoppedAnimation(1.0),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Oval background shape - maximized height and curvature
-          Container(
-            height: 200,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [deepPurple, vibrantPurple, primaryPurple],
-              ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.elliptical(200, 75),
-                bottomRight: Radius.elliptical(225, 75),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: vibrantPurple.withOpacity(0.4),
-                  blurRadius: 30,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(25, 50, 25, 65),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.white.withOpacity(0.9),
+              Colors.white.withOpacity(0.7),
+              const Color.fromARGB(198, 255, 255, 255),
+              const Color.fromARGB(195, 240, 224, 245),
+            ],
           ),
-
-          // Content on top of oval
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 30, 25),
-            child: Column(
-              children: [
-                // Back button row
-                Row(
-                  children: [
-                    Semantics(
-                      label: 'Go back to previous page',
-                      button: true,
-                      child: GestureDetector(
-                        onTap: () {
-                          _hapticFeedback();
-                          _speak('Going back');
-                          Navigator.pop(context);
-                        },
-                        child: Container(
-                          width: 55,
-                          height: 55,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.arrow_back_ios_new,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                        ),
-                      ),
+        ),
+        child: Row(
+          children: [
+            // 🔙 زر الرجوع على اليسار - بنفسجي
+            Semantics(
+              label: 'Go back to previous page',
+              button: true,
+              child: GestureDetector(
+                onTap: () {
+                  _hapticFeedback();
+                  _speak('Going back');
+                  Navigator.pop(context);
+                },
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [vibrantPurple, primaryPurple],
                     ),
-                  ],
-                ),
-
-                const SizedBox(height: 15),
-                // Centered Title - smaller
-                Text(
-                  'Face Recognition',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: 0.5,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: vibrantPurple.withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.arrow_back_ios_new,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
-
-                const SizedBox(height: 6),
-                // Centered Subtitle
-                Text(
-                  'Manage face identification',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    color: Colors.white.withOpacity(0.9),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+
+            const SizedBox(width: 16),
+
+            // النص في المنتصف
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Face Recognition',
+                    style: TextStyle(
+                      fontSize: 25,
+                      fontWeight: FontWeight.w900,
+                      foreground: Paint()
+                        ..shader = LinearGradient(
+                          colors: [deepPurple, vibrantPurple],
+                        ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Manage face identification',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: deepPurple.withOpacity(0.5),
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // 📜 Options list with more spacing between header and items
+  // 📜 Options list - UNIFIED spacing with HomePage
   Widget _buildOptionsList() {
     return SlideTransition(
       position: _slideController != null
@@ -227,12 +216,7 @@ class _FaceListPageState extends State<FaceListPage>
             )
           : AlwaysStoppedAnimation(Offset.zero),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          16,
-          60,
-          16,
-          16,
-        ), // Increased top padding for more space
+        padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
         children: [
           // Add Person Card
           _buildOptionCard(
@@ -252,7 +236,7 @@ class _FaceListPageState extends State<FaceListPage>
             },
           ),
 
-          const SizedBox(height: 36), // More space between cards
+          const SizedBox(height: 10), // ✅ مسافة إضافية بين الخيارين
           // Identify Person Card
           _buildOptionCard(
             title: 'Identify Person',
@@ -275,7 +259,7 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 🎯 Option card
+  // 🎯 Option card - UNIFIED with HomePage
   Widget _buildOptionCard({
     required String title,
     required String subtitle,
@@ -286,96 +270,100 @@ class _FaceListPageState extends State<FaceListPage>
     return Semantics(
       label: '$title. $subtitle. Double tap to open',
       button: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: palePurple.withOpacity(0.35),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.8),
-                  blurRadius: 12,
-                  offset: const Offset(-2, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Icon
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    gradient: gradient,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: gradient.colors.first.withOpacity(0.35),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 24),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: palePurple.withOpacity(0.35),
+                    blurRadius: 15,
+                    offset: const Offset(0, 8),
                   ),
-                  child: Icon(icon, color: Colors.white, size: 32),
-                ),
-
-                const SizedBox(width: 16),
-
-                // Text
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: deepPurple,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: deepPurple.withOpacity(0.5),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.8),
+                    blurRadius: 12,
+                    offset: const Offset(-2, -2),
                   ),
-                ),
-
-                // Arrow
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        gradient.colors.first.withOpacity(0.1),
-                        gradient.colors.last.withOpacity(0.1),
+                ],
+              ),
+              child: Row(
+                children: [
+                  // الأيقونة المتدرجة
+                  Container(
+                    width: 58,
+                    height: 58,
+                    decoration: BoxDecoration(
+                      gradient: gradient,
+                      borderRadius: BorderRadius.circular(15),
+                      boxShadow: [
+                        BoxShadow(
+                          color: gradient.colors.first.withOpacity(0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(10),
+                    child: Icon(icon, color: Colors.white, size: 30),
                   ),
-                  child: Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: gradient.colors.first,
+
+                  const SizedBox(width: 15),
+
+                  // النص
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 17.5,
+                            fontWeight: FontWeight.w700,
+                            color: deepPurple,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: deepPurple.withOpacity(0.5),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+
+                  const SizedBox(width: 10),
+                  // سهم متدرج على اليمين
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          gradient.colors.first.withOpacity(0.1),
+                          gradient.colors.last.withOpacity(0.1),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.arrow_forward_ios,
+                      size: 15,
+                      color: gradient.colors.first,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -419,6 +407,7 @@ class _FaceListPageState extends State<FaceListPage>
                 _buildNavButton(
                   icon: Icons.home_rounded,
                   label: 'Home',
+                  isActive: true,
                   onTap: () {
                     _hapticFeedback();
                     _speak('Home');
@@ -431,6 +420,7 @@ class _FaceListPageState extends State<FaceListPage>
                 _buildNavButton(
                   icon: Icons.notifications_rounded,
                   label: 'Reminders',
+                  isActive: false,
                   onTap: () {
                     _hapticFeedback();
                     _speak('Reminders');
@@ -443,56 +433,24 @@ class _FaceListPageState extends State<FaceListPage>
                   },
                 ),
                 _buildNavButton(
-                  icon: Icons.emergency,
+                  icon: Icons.contact_phone,
                   label: 'Emergency',
-                  onTap: () async {
+                  isActive: false,
+                  onTap: () {
                     _hapticFeedback();
-                    _speak('Emergency');
-                    final user = _auth.currentUser;
-                    if (user != null) {
-                      final doc = await _firestore
-                          .collection('users')
-                          .doc(user.uid)
-                          .get();
-                      final data = doc.data();
-                      final permissionGranted =
-                          data?['location_permission_granted'] ?? false;
-                      if (!permissionGranted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => LocationPermissionScreen(
-                              onPermissionGranted: () async {
-                                await _firestore
-                                    .collection('users')
-                                    .doc(user.uid)
-                                    .update({
-                                      'location_permission_granted': true,
-                                    });
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const SosScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      } else {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SosScreen(),
-                          ),
-                        );
-                      }
-                    }
+                    _speak('Emergency Contact');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ContactInfoPage(),
+                      ),
+                    );
                   },
                 ),
                 _buildNavButton(
                   icon: Icons.settings_rounded,
                   label: 'Settings',
+                  isActive: false,
                   onTap: () {
                     _hapticFeedback();
                     _speak('Settings');
