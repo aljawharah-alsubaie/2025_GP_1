@@ -15,11 +15,11 @@ class FaceRecognitionService {
   
   // إعدادات النموذج (متغيرة حسب الموديل)
   static const int INPUT_SIZE = 112;
-  static int EMBEDDING_SIZE = 512; // تغيّر تلقائياً حسب الموديل
+  static int EMBEDDING_SIZE = 512;
   
-  // إعدادات محسّنة للدقة
-  static const double MIN_FACE_SIZE = 0.1;
-  static const double DEFAULT_THRESHOLD = 0.25;
+  // إعدادات محسّنة مطابقة لـ Colab
+  static const double MIN_FACE_SIZE = 0.15;
+  static const double DEFAULT_THRESHOLD = 0.35;
   
   /// تحديث حجم الـ embedding تلقائياً
   static void _updateEmbeddingSize(int newSize) {
@@ -34,19 +34,16 @@ class FaceRecognitionService {
     try {
       print('🚀 Loading face recognition model...');
       
-      // قائمة الموديلات الجديدة (float16 للأداء الأفضل)
       final modelPaths = [
         'assets/models/w600k_r50.tflite',
         'assets/models/1k3d68_float16.tflite',
         'assets/models/2d106det_float16.tflite',
         'assets/models/det_10g_simplified_float16.tflite',
-        // نسخ float32 كـ backup
         'assets/models/1k3d68_float32.tflite',
         'assets/models/2d106det_float32.tflite',
         'assets/models/det_10g_simplified_float32.tflite',
       ];
       
-      // محاولة تحميل أي موديل متوفر
       for (String path in modelPaths) {
         try {
           _interpreter = await Interpreter.fromAsset(path);
@@ -57,15 +54,11 @@ class FaceRecognitionService {
           print('📊 Input shape: ${inputDetails.shape}, type: ${inputDetails.type}');
           print('📊 Output shape: ${outputDetails.shape}, type: ${outputDetails.type}');
           
-          // تحديث EMBEDDING_SIZE تلقائياً من الموديل
           if (outputDetails.shape.length == 4) {
-            // Shape: [1, 1, 1, 512]
             _updateEmbeddingSize(outputDetails.shape[3]);
           } else if (outputDetails.shape.length == 2) {
-            // Shape: [1, 512]
             _updateEmbeddingSize(outputDetails.shape[1]);
           } else if (outputDetails.shape.length == 1) {
-            // Shape: [512]
             _updateEmbeddingSize(outputDetails.shape[0]);
           }
           
@@ -78,10 +71,6 @@ class FaceRecognitionService {
       }
       
       print('❌ All models failed to load');
-      print('💡 Make sure you added the models in pubspec.yaml under assets:');
-      print('   flutter:');
-      print('     assets:');
-      print('       - assets/models/');
       return false;
     } catch (e) {
       print('❌ Initialization error: $e');
@@ -89,111 +78,81 @@ class FaceRecognitionService {
     }
   }
 
-  /// تحسين الصورة باحترافية
+  /// تحسين الصورة - نسخة مستقرة وآمنة
   static img.Image _enhanceImage(img.Image image) {
-    // 1. تحسين التباين (Contrast enhancement)
-    image = img.adjustColor(image, contrast: 1.2);
-    
-    // 2. تحسين الإضاءة (Brightness adjustment)
-    image = img.adjustColor(image, brightness: 1.05);
-    
-    // 3. تحسين الألوان (Color correction)
-    image = img.adjustColor(
-      image,
-      saturation: 1.1,
-      brightness: 1.02,
-      contrast: 1.1,
-    );
-    
-    // 4. زيادة الوضوح (Sharpening) - طريقة محسّنة
     try {
-      // استخدام gaussian blur ثم طرحه من الصورة الأصلية (Unsharp Mask)
-      final blurred = img.gaussianBlur(image, radius: 1);
+      final gamma = 1.3;
       
-      // تطبيق unsharp mask يدوياً
       for (int y = 0; y < image.height; y++) {
         for (int x = 0; x < image.width; x++) {
-          final original = image.getPixel(x, y);
-          final blurredPixel = blurred.getPixel(x, y);
+          final pixel = image.getPixel(x, y);
           
-          // تطبيق المعادلة: sharpened = original + amount * (original - blurred)
-          final amount = 1.5;
-          final r = (original.r + amount * (original.r - blurredPixel.r)).clamp(0, 255).toInt();
-          final g = (original.g + amount * (original.g - blurredPixel.g)).clamp(0, 255).toInt();
-          final b = (original.b + amount * (original.b - blurredPixel.b)).clamp(0, 255).toInt();
+          final r = (255.0 * math.pow(pixel.r / 255.0, 1.0 / gamma)).clamp(0, 255).toInt();
+          final g = (255.0 * math.pow(pixel.g / 255.0, 1.0 / gamma)).clamp(0, 255).toInt();
+          final b = (255.0 * math.pow(pixel.b / 255.0, 1.0 / gamma)).clamp(0, 255).toInt();
           
           image.setPixel(x, y, img.ColorRgb8(r, g, b));
         }
       }
+      
+      image = img.adjustColor(image, contrast: 1.15);
+      
+      print('✅ Image enhancement completed');
+      return image;
+      
     } catch (e) {
-      // إذا فشل الـ sharpening، نكمل بدونه
-      print('⚠️ Sharpening skipped: $e');
+      print('⚠️ Enhancement failed: $e');
+      return image;
     }
-    
-    return image;
   }
 
-  /// معالجة الصورة قبل إدخالها للموديل
-  static Float32List preprocessImage(
-    img.Image faceImage,
-    {String normalizationType = 'arcface'}
-  ) {
-    // تحسين جودة الصورة أولاً
-    var processedImage = _enhanceImage(faceImage);
-    
-    // تغيير الحجم إلى 112x112
-    processedImage = img.copyResize(
-      processedImage,
-      width: INPUT_SIZE,
-      height: INPUT_SIZE,
-      interpolation: img.Interpolation.cubic,
-    );
-    
-    final input = Float32List(INPUT_SIZE * INPUT_SIZE * 3);
-    int pixelIndex = 0;
-    
-    // تحويل الصورة إلى array مع normalization
-    for (int y = 0; y < INPUT_SIZE; y++) {
-      for (int x = 0; x < INPUT_SIZE; x++) {
-        final pixel = processedImage.getPixel(x, y);
-        
-        // أنواع مختلفة من Normalization حسب الموديل
-        switch (normalizationType.toLowerCase()) {
-          case 'arcface':
-            input[pixelIndex] = (pixel.r / 127.5) - 1.0;
-            input[pixelIndex + 1] = (pixel.g / 127.5) - 1.0;
-            input[pixelIndex + 2] = (pixel.b / 127.5) - 1.0;
-            break;
-          case 'facenet':
-            input[pixelIndex] = (pixel.r - 127.5) / 128.0;
-            input[pixelIndex + 1] = (pixel.g - 127.5) / 128.0;
-            input[pixelIndex + 2] = (pixel.b - 127.5) / 128.0;
-            break;
-          case 'imagenet':
-            input[pixelIndex] = pixel.r / 255.0;
-            input[pixelIndex + 1] = pixel.g / 255.0;
-            input[pixelIndex + 2] = pixel.b / 255.0;
-            break;
-          default:
-            input[pixelIndex] = (pixel.r / 127.5) - 1.0;
-            input[pixelIndex + 1] = (pixel.g / 127.5) - 1.0;
-            input[pixelIndex + 2] = (pixel.b / 127.5) - 1.0;
+  /// معالجة الصورة - نسخة محسّنة وآمنة
+  static Float32List preprocessImage(img.Image faceImage) {
+    try {
+      print('🎨 Starting preprocessing...');
+      
+      var processedImage = _enhanceImage(faceImage);
+      
+      processedImage = img.copyResize(
+        processedImage,
+        width: INPUT_SIZE,
+        height: INPUT_SIZE,
+        interpolation: img.Interpolation.cubic,
+      );
+      
+      final input = Float32List(INPUT_SIZE * INPUT_SIZE * 3);
+      int pixelIndex = 0;
+      
+      for (int y = 0; y < INPUT_SIZE; y++) {
+        for (int x = 0; x < INPUT_SIZE; x++) {
+          final pixel = processedImage.getPixel(x, y);
+          
+          input[pixelIndex] = (pixel.r / 127.5) - 1.0;
+          input[pixelIndex + 1] = (pixel.g / 127.5) - 1.0;
+          input[pixelIndex + 2] = (pixel.b / 127.5) - 1.0;
+          
+          pixelIndex += 3;
         }
-        pixelIndex += 3;
       }
+      
+      print('✅ Preprocessing completed');
+      return input;
+      
+    } catch (e) {
+      print('❌ Preprocessing error: $e');
+      rethrow;
     }
-    
-    return input;
   }
 
-  /// توليد embedding لصورة وجه
-  static Future<List<double>?> generateEmbedding(
-    File imageFile,
-    {String normalizationType = 'arcface'}
-  ) async {
+  /// توليد embedding مع معالجة أفضل للأخطاء
+  static Future<List<double>?> generateEmbedding(File imageFile) async {
     if (!_isInitialized) {
+      print('⚠️ Model not initialized');
       final initialized = await initialize();
-      if (!initialized) return null;
+      if (!initialized) {
+        print('❌ Failed to initialize');
+        return null;
+      }
     }
     
     try {
@@ -202,36 +161,49 @@ class FaceRecognitionService {
         return null;
       }
       
-      print('🔍 Starting face detection...');
+      print('📸 Reading image...');
+      final imageBytes = await imageFile.readAsBytes();
+      final originalImage = img.decodeImage(imageBytes);
+      
+      if (originalImage == null) {
+        print('❌ Failed to decode image');
+        return null;
+      }
+      
+      print('✅ Image decoded: ${originalImage.width}x${originalImage.height}');
+      
+      print('🔍 Detecting face...');
       final faceRect = await detectFaceEnhanced(imageFile);
+      
       if (faceRect == null) {
         print('❌ No face detected');
         return null;
       }
       
+      print('✅ Face detected');
+      
       print('✂️ Cropping face...');
       final croppedFace = await cropFaceEnhanced(imageFile, faceRect);
+      
       if (croppedFace == null) {
-        print('❌ Face cropping failed');
+        print('❌ Failed to crop face');
         return null;
       }
       
-      print('🎨 Preprocessing image...');
-      final input = preprocessImage(croppedFace, normalizationType: normalizationType);
+      print('✅ Face cropped');
+      
+      final input = preprocessImage(croppedFace);
       final inputTensor = input.reshape([1, INPUT_SIZE, INPUT_SIZE, 3]);
       
       final outputShape = _interpreter!.getOutputTensor(0).shape;
-      print('📊 Model output shape: $outputShape');
+      print('📊 Output shape: $outputShape');
 
       List<double> rawEmbedding;
       final stopwatch = Stopwatch()..start();
 
-      // معالجة output حسب شكله
       if (outputShape.length == 4) {
-        // Shape: [1, 1, 1, EMBEDDING_SIZE]
-        print('🔧 Using 4D output structure');
+        print('🔧 Using 4D output');
         final embeddingSize = outputShape[3];
-        
         final outputTensor = List.generate(
           outputShape[0],
           (i) => List.generate(
@@ -243,61 +215,57 @@ class FaceRecognitionService {
           ),
         );
         
-        print('🚀 Running model inference...');
         _interpreter!.run(inputTensor, outputTensor);
         stopwatch.stop();
         
-        print('⏱️ Inference time: ${stopwatch.elapsedMilliseconds}ms');
         rawEmbedding = List<double>.from(outputTensor[0][0][0]);
-        print('✅ Extracted ${rawEmbedding.length} values from 4D output');
         
       } else if (outputShape.length == 2) {
-        // Shape: [1, EMBEDDING_SIZE]
-        print('🔧 Using 2D output structure');
+        print('🔧 Using 2D output');
         final embeddingSize = outputShape[1];
         final outputTensor = List.generate(1, (i) => List.filled(embeddingSize, 0.0));
         
-        print('🚀 Running model inference...');
         _interpreter!.run(inputTensor, outputTensor);
         stopwatch.stop();
         
-        print('⏱️ Inference time: ${stopwatch.elapsedMilliseconds}ms');
         rawEmbedding = List<double>.from(outputTensor[0]);
-        print('✅ Extracted ${rawEmbedding.length} values from 2D output');
         
       } else if (outputShape.length == 1) {
-        // Shape: [EMBEDDING_SIZE]
-        print('🔧 Using 1D output structure');
+        print('🔧 Using 1D output');
         final embeddingSize = outputShape[0];
         final outputTensor = List.filled(embeddingSize, 0.0);
         
-        print('🚀 Running model inference...');
         _interpreter!.run(inputTensor, outputTensor);
         stopwatch.stop();
         
-        print('⏱️ Inference time: ${stopwatch.elapsedMilliseconds}ms');
         rawEmbedding = List<double>.from(outputTensor);
-        print('✅ Extracted ${rawEmbedding.length} values from 1D output');
         
       } else {
         print('❌ Unsupported output shape: $outputShape');
         return null;
       }
       
-      print('📏 Normalizing embedding...');
+      print('⏱️ Inference: ${stopwatch.elapsedMilliseconds}ms');
+      
+      print('📏 Normalizing...');
       final normalizedEmbedding = _normalizeEmbeddingEnhanced(rawEmbedding);
       
-      print('✅ Embedding generated successfully: ${normalizedEmbedding.length} dimensions');
+      if (normalizedEmbedding.isEmpty) {
+        print('❌ Normalization failed');
+        return null;
+      }
+      
+      print('✅ Embedding generated: ${normalizedEmbedding.length}D');
       return normalizedEmbedding;
       
     } catch (e, stackTrace) {
-      print('❌ Embedding generation error: $e');
-      print('Stack trace: $stackTrace');
+      print('❌ Error: $e');
+      print('Stack: $stackTrace');
       return null;
     }
   }
 
-  /// كشف الوجه في الصورة باستخدام Google ML Kit
+  /// كشف الوجه في الصورة
   static Future<Rect?> detectFaceEnhanced(File imageFile) async {
     final options = FaceDetectorOptions(
       enableContours: false,
@@ -319,7 +287,6 @@ class FaceRecognitionService {
       Face? bestFace;
       double bestScore = 0;
       
-      // اختيار أفضل وجه بناءً على معايير الجودة
       for (Face face in faces) {
         double qualityScore = _calculateFaceQuality(face);
         if (qualityScore > bestScore) {
@@ -329,7 +296,7 @@ class FaceRecognitionService {
       }
       
       if (bestFace != null) {
-        print('✅ Selected best face with score: ${bestScore.toStringAsFixed(2)}');
+        print('✅ Best face score: ${bestScore.toStringAsFixed(2)}');
         return bestFace.boundingBox;
       }
     }
@@ -337,25 +304,21 @@ class FaceRecognitionService {
     return null;
   }
 
-  /// حساب جودة الوجه المكتشف
+  /// حساب جودة الوجه
   static double _calculateFaceQuality(Face face) {
     double score = 0;
     
-    // حجم الوجه (كلما أكبر كلما أفضل)
     final faceArea = face.boundingBox.width * face.boundingBox.height;
     score += math.min(faceArea / 10000, 1.0) * 30;
     
-    // زاوية الرأس الأفقية (كلما أقل كلما أفضل)
     if (face.headEulerAngleY != null) {
       score += (90 - face.headEulerAngleY!.abs()) / 90 * 25;
     }
     
-    // زاوية الرأس العمودية
     if (face.headEulerAngleZ != null) {
       score += (90 - face.headEulerAngleZ!.abs()) / 90 * 25;
     }
     
-    // عدد نقاط الوجه المكتشفة
     if (face.landmarks.isNotEmpty) {
       score += math.min(face.landmarks.length / 10, 1.0) * 20;
     }
@@ -363,7 +326,7 @@ class FaceRecognitionService {
     return score;
   }
 
-  /// قص الوجه من الصورة مع padding محسّن
+  /// قص الوجه من الصورة
   static Future<img.Image?> cropFaceEnhanced(File imageFile, Rect faceRect) async {
     try {
       final imageBytes = await imageFile.readAsBytes();
@@ -391,7 +354,6 @@ class FaceRecognitionService {
         height: height,
       );
       
-      // جعل الصورة مربعة (square)
       final targetSize = math.max(croppedImage.width, croppedImage.height);
       final squareImage = img.Image(width: targetSize, height: targetSize);
       img.fill(squareImage, color: img.ColorRgb8(128, 128, 128));
@@ -403,12 +365,12 @@ class FaceRecognitionService {
       return squareImage;
       
     } catch (e) {
-      print('❌ Enhanced face cropping error: $e');
+      print('❌ Crop error: $e');
       return null;
     }
   }
 
-  /// حساب padding مثالي حسب حجم الوجه
+  /// حساب padding مثالي
   static double _calculateOptimalPadding(double faceSize) {
     if (faceSize < 100) return 0.5;
     if (faceSize < 200) return 0.35;
@@ -425,17 +387,16 @@ class FaceRecognitionService {
     norm = math.sqrt(norm);
     
     if (norm == 0.0 || norm.isNaN || norm.isInfinite) {
-      print('⚠️ Warning: Invalid norm value: $norm');
+      print('⚠️ Invalid norm: $norm');
       return embedding;
     }
     
     final normalized = embedding.map((value) => value / norm).toList();
     
-    // التحقق من صحة النتيجة
     double checkNorm = 0.0;
     for (double value in normalized) {
       if (value.isNaN || value.isInfinite) {
-        print('⚠️ Warning: Invalid normalized value detected');
+        print('⚠️ Invalid normalized value');
         return embedding;
       }
       checkNorm += value * value;
@@ -444,49 +405,38 @@ class FaceRecognitionService {
     return normalized;
   }
 
-  /// حساب التشابه بين embedding vectors (Cosine Similarity)
+  /// حساب التشابه (Cosine Similarity)
   static double calculateSimilarity(List<double> embedding1, List<double> embedding2) {
     if (embedding1.length != embedding2.length) {
       throw ArgumentError('Embedding length mismatch: ${embedding1.length} vs ${embedding2.length}');
     }
     
     double dotProduct = 0.0;
-    double norm1 = 0.0;
-    double norm2 = 0.0;
     
     for (int i = 0; i < embedding1.length; i++) {
       dotProduct += embedding1[i] * embedding2[i];
-      norm1 += embedding1[i] * embedding1[i];
-      norm2 += embedding2[i] * embedding2[i];
     }
     
-    norm1 = math.sqrt(norm1);
-    norm2 = math.sqrt(norm2);
-    
-    if (norm1 == 0.0 || norm2 == 0.0) return 0.0;
-    
-    final similarity = dotProduct / (norm1 * norm2);
-    return math.max(0.0, math.min(1.0, similarity));
+    return math.max(0.0, math.min(1.0, dotProduct));
   }
 
-  /// التعرف على وجه مع دعم embeddings متعددة
+  /// التعرف على وجه
   static Future<RecognitionResult?> recognizeFace(
     File imageFile, {
     double threshold = DEFAULT_THRESHOLD,
-    String normalizationType = 'arcface',
     bool useAdaptiveThreshold = true,
   }) async {
-    print('=== 🔍 Enhanced Face Recognition (Multi-Embedding) ===');
-    print('📊 Using threshold: ${(threshold * 100).toStringAsFixed(1)}%, normalization: $normalizationType');
+    print('=== 🔍 Face Recognition ===');
+    print('📊 Threshold: ${(threshold * 100).toStringAsFixed(1)}%');
     
-    final queryEmbedding = await generateEmbedding(imageFile, normalizationType: normalizationType);
+    final queryEmbedding = await generateEmbedding(imageFile);
     if (queryEmbedding == null) {
-      print('❌ Failed to generate query embedding');
+      print('❌ Failed to generate embedding');
       return null;
     }
     
     if (_storedMultipleEmbeddings.isEmpty) {
-      print('⚠️ No stored embeddings available');
+      print('⚠️ No stored embeddings');
       return RecognitionResult(personId: 'unknown', similarity: 0.0, isMatch: false);
     }
     
@@ -496,36 +446,31 @@ class FaceRecognitionService {
     
     print('🔎 Comparing with ${_storedMultipleEmbeddings.length} persons...');
     
-    // مقارنة مع كل embeddings لكل شخص
     for (var personEntry in _storedMultipleEmbeddings.entries) {
       String personId = personEntry.key;
       List<List<double>> personEmbeddings = personEntry.value;
       
-      double personBestSimilarity = -1.0;
-      
-      // إيجاد أفضل تطابق من بين كل embeddings الشخص
+      List<double> similarities = [];
       for (int i = 0; i < personEmbeddings.length; i++) {
         try {
           final similarity = calculateSimilarity(queryEmbedding, personEmbeddings[i]);
-          
-          if (similarity > personBestSimilarity) {
-            personBestSimilarity = similarity;
-          }
+          similarities.add(similarity);
         } catch (e) {
-          print('⚠️ Error comparing with $personId embedding $i: $e');
+          print('⚠️ Error comparing with $personId: $e');
         }
       }
       
-      personBestSimilarities[personId] = personBestSimilarity;
-      print('  👤 $personId: ${(personBestSimilarity * 100).toStringAsFixed(1)}% (from ${personEmbeddings.length} embeddings)');
+      double maxSimilarity = similarities.isEmpty ? 0.0 : similarities.reduce((a, b) => a > b ? a : b);
+      personBestSimilarities[personId] = maxSimilarity;
       
-      if (personBestSimilarity > highestSimilarity) {
-        highestSimilarity = personBestSimilarity;
+      print('  👤 $personId: ${(maxSimilarity * 100).toStringAsFixed(1)}%');
+      
+      if (maxSimilarity > highestSimilarity) {
+        highestSimilarity = maxSimilarity;
         bestMatchId = personId;
       }
     }
     
-    // Adaptive threshold (ذكي)
     double finalThreshold = threshold;
     if (useAdaptiveThreshold && personBestSimilarities.isNotEmpty) {
       var sortedSimilarities = personBestSimilarities.values.toList()..sort((a, b) => b.compareTo(a));
@@ -534,10 +479,9 @@ class FaceRecognitionService {
         final secondHighest = sortedSimilarities[1];
         final gap = highestSimilarity - secondHighest;
         
-        // إذا كان هناك فجوة كبيرة بين الأول والثاني
         if (gap > 0.15) {
           finalThreshold = math.min(threshold, highestSimilarity - 0.05);
-          print('🎯 Adaptive threshold applied: ${(finalThreshold * 100).toStringAsFixed(1)}% (gap: ${(gap * 100).toStringAsFixed(1)}%)');
+          print('🎯 Adaptive threshold: ${(finalThreshold * 100).toStringAsFixed(1)}%');
         }
       }
     }
@@ -545,9 +489,9 @@ class FaceRecognitionService {
     final isMatch = highestSimilarity >= finalThreshold;
     
     if (isMatch) {
-      print('✅ MATCH FOUND: $bestMatchId (${(highestSimilarity * 100).toStringAsFixed(1)}%)');
+      print('✅ MATCH: $bestMatchId (${(highestSimilarity * 100).toStringAsFixed(1)}%)');
     } else {
-      print('❌ NO MATCH: Best was ${(highestSimilarity * 100).toStringAsFixed(1)}% < ${(finalThreshold * 100).toStringAsFixed(1)}%');
+      print('❌ NO MATCH: ${(highestSimilarity * 100).toStringAsFixed(1)}% < ${(finalThreshold * 100).toStringAsFixed(1)}%');
     }
     
     return RecognitionResult(
@@ -558,32 +502,26 @@ class FaceRecognitionService {
     );
   }
 
-  /// تخزين embedding جديد لشخص
-  static Future<bool> storeFaceEmbedding(
-    String personId,
-    File imageFile,
-    {String normalizationType = 'arcface'}
-  ) async {
-    final embedding = await generateEmbedding(imageFile, normalizationType: normalizationType);
+  /// تخزين embedding
+  static Future<bool> storeFaceEmbedding(String personId, File imageFile) async {
+    final embedding = await generateEmbedding(imageFile);
     if (embedding != null && embedding.isNotEmpty) {
-      // إذا الشخص موجود، نضيف embedding جديد
       if (_storedMultipleEmbeddings.containsKey(personId)) {
         _storedMultipleEmbeddings[personId]!.add(embedding);
         print('✅ Added embedding #${_storedMultipleEmbeddings[personId]!.length} for $personId');
       } else {
-        // إذا الشخص جديد، ننشئ قائمة جديدة
         _storedMultipleEmbeddings[personId] = [embedding];
-        print('✅ Created new person $personId with first embedding');
+        print('✅ Created new person $personId');
       }
       
       print('📊 $personId now has ${_storedMultipleEmbeddings[personId]!.length} embeddings');
       return true;
     }
-    print('❌ Failed to store embedding for $personId');
+    print('❌ Failed to store embedding');
     return false;
   }
 
-  /// تحميل embeddings متعددة من Firestore
+  /// تحميل embeddings من Firestore
   static void loadMultipleEmbeddings(Map<String, List<List<double>>> embeddings) {
     _storedMultipleEmbeddings = Map.from(embeddings);
     int totalEmbeddings = 0;
@@ -591,26 +529,23 @@ class FaceRecognitionService {
       totalEmbeddings += embList.length;
       print('  👤 $personId: ${embList.length} embeddings');
     });
-    print('✅ Loaded ${embeddings.length} persons with $totalEmbeddings total embeddings');
+    print('✅ Loaded ${embeddings.length} persons with $totalEmbeddings embeddings');
   }
 
-  /// إرجاع embeddings بصيغة Firestore
+  /// إرجاع embeddings
   static Map<String, dynamic> getStoredEmbeddings() {
     Map<String, dynamic> result = {};
     _storedMultipleEmbeddings.forEach((personId, embeddings) {
       result[personId] = embeddings;
     });
-    print('📤 Exporting ${result.length} persons');
     return result;
   }
 
-  /// حذف جميع embeddings لشخص
+  /// حذف embeddings
   static void removeFaceEmbedding(String personId) {
     final removed = _storedMultipleEmbeddings.remove(personId);
     if (removed != null) {
       print('🗑️ Removed $personId (${removed.length} embeddings)');
-    } else {
-      print('⚠️ Person $personId not found');
     }
   }
 
@@ -627,10 +562,10 @@ class FaceRecognitionService {
     _interpreter = null;
     _isInitialized = false;
     _storedMultipleEmbeddings.clear();
-    print('🔌 Face recognition service disposed');
+    print('🔌 Service disposed');
   }
 
-  /// إحصائيات مفيدة
+  /// إحصائيات
   static Map<String, dynamic> getStatistics() {
     int totalEmbeddings = 0;
     Map<String, int> embeddingCounts = {};
@@ -663,7 +598,7 @@ class RecognitionResult {
     required this.personId,
     required this.similarity,
     required this.isMatch,
-    this.threshold = 0.25,
+    this.threshold = 0.35,
   });
   
   @override

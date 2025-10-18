@@ -331,12 +331,10 @@ class _CameraScreenState extends State<CameraScreen> {
         textToSpeak = detectedColor;
       } else if (_processingMode == 'face') {
         // Face Recognition
-        final result = await FaceRecognitionService.recognizeFace(
-          File(imagePath),
-          threshold: 0.25,
-          normalizationType: 'arcface',
-          useAdaptiveThreshold: true,
-        );
+      final result = await FaceRecognitionService.recognizeFace(
+        File(imagePath), // استخدم imagePath اللي موجود
+        threshold: 0.35,
+);
 
         setState(() {
           _faceResult = result;
