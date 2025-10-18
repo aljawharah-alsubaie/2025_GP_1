@@ -33,11 +33,19 @@ class InsightFacePipeline {
       print('📦 Loading detection model...');
       try {
         _detectionModel = await Interpreter.fromAsset(
-          'assets/models/det_10g_simplified_float16.tflite'
+          'assets/models/det_10g_simplified_float16.tflite',
+          options: InterpreterOptions()..threads = 4,
         );
+        
+        // طباعة معلومات الموديل
+        final inputShape = _detectionModel!.getInputTensor(0).shape;
+        final outputShape = _detectionModel!.getOutputTensor(0).shape;
         print('✅ Detection model loaded');
+        print('   Input shape: $inputShape');
+        print('   Output shape: $outputShape');
       } catch (e) {
         print('❌ Detection model failed: $e');
+        print('⚠️ Make sure the model file exists at: assets/models/det_10g_simplified_float16.tflite');
         return false;
       }
       
@@ -45,11 +53,18 @@ class InsightFacePipeline {
       print('📦 Loading landmark model...');
       try {
         _landmarkModel = await Interpreter.fromAsset(
-          'assets/models/2d106det_float16.tflite'
+          'assets/models/2d106det_float16.tflite',
+          options: InterpreterOptions()..threads = 4,
         );
+        
+        final inputShape = _landmarkModel!.getInputTensor(0).shape;
+        final outputShape = _landmarkModel!.getOutputTensor(0).shape;
         print('✅ Landmark model loaded');
+        print('   Input shape: $inputShape');
+        print('   Output shape: $outputShape');
       } catch (e) {
         print('❌ Landmark model failed: $e');
+        print('⚠️ Make sure the model file exists at: assets/models/2d106det_float16.tflite');
         return false;
       }
       
@@ -57,11 +72,15 @@ class InsightFacePipeline {
       print('📦 Loading recognition model...');
       try {
         _recognitionModel = await Interpreter.fromAsset(
-          'assets/models/w600k_r50.tflite'
+          'assets/models/w600k_r50_float16.tflite',
+          options: InterpreterOptions()..threads = 4,
         );
         
+        final inputShape = _recognitionModel!.getInputTensor(0).shape;
         final outputShape = _recognitionModel!.getOutputTensor(0).shape;
-        print('📊 Recognition output shape: $outputShape');
+        print('✅ Recognition model loaded');
+        print('   Input shape: $inputShape');
+        print('   Output shape: $outputShape');
         
         if (outputShape.length == 2) {
           EMBEDDING_SIZE = outputShape[1];
@@ -69,14 +88,16 @@ class InsightFacePipeline {
           EMBEDDING_SIZE = outputShape[3];
         }
         
-        print('✅ Recognition model loaded (embedding: $EMBEDDING_SIZE)');
+        print('   Embedding size: $EMBEDDING_SIZE');
       } catch (e) {
         print('❌ Recognition model failed: $e');
+        print('⚠️ Make sure the model file exists at: assets/models/w600k_r50_float16.tflite');
         return false;
       }
       
       _isInitialized = true;
       print('✅ InsightFace Pipeline initialized successfully!');
+      print('=' * 50);
       return true;
       
     } catch (e) {
@@ -412,17 +433,37 @@ class InsightFacePipeline {
       
       if (outputShape.length == 3) {
         // [1, num_boxes, values]
+        final batchOutput = output as List;
+        if (batchOutput.isEmpty) {
+          print('⚠️ Empty output from detection model');
+          return faces;
+        }
+        
         detections = List<List<double>>.from(
-          output[0].map((det) => List<double>.from(det))
+          batchOutput[0].map((det) => List<double>.from(det))
         );
       } else if (outputShape.length == 2) {
         // [num_boxes, values]
         detections = List<List<double>>.from(
           output.map((det) => List<double>.from(det))
         );
+      } else {
+        print('❌ Unsupported output shape: $outputShape');
+        return faces;
       }
       
       print('📦 Total detections: ${detections.length}');
+      
+      if (detections.isEmpty) {
+        print('⚠️ No detections in output');
+        return faces;
+      }
+      
+      // طباعة شكل أول detection للتحليل
+      if (detections.isNotEmpty) {
+        print('📋 First detection length: ${detections[0].length}');
+        print('📋 First detection sample: ${detections[0].take(10).toList()}');
+      }
       
       const double confidenceThreshold = 0.5;
       int validDetections = 0;
@@ -432,6 +473,7 @@ class InsightFacePipeline {
         
         // تحقق من طول الـ detection
         if (detection.length < 5) {
+          print('⚠️ Detection $i has invalid length: ${detection.length}');
           continue;
         }
         
@@ -497,7 +539,7 @@ class InsightFacePipeline {
       
     } catch (e, stackTrace) {
       print('❌ Error parsing detections: $e');
-      print('Stack trace: $stackTrace');
+      print('📍 Stack trace: $stackTrace');
     }
     
     return faces;
