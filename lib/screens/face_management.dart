@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -35,10 +34,12 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   AnimationController? _fadeController;
   AnimationController? _slideController;
 
+  // Multiple images support
   List<File> _selectedImages = [];
   final int _minImages = 3;
   final int _maxImages = 10;
 
+  // 🎨 Purple color scheme matching HomePage
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -129,7 +130,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         }
 
         FaceRecognitionService.loadMultipleEmbeddings(allEmbeddings);
-        print('Loaded embeddings for ${allEmbeddings.length} persons');
+        print('✅ Loaded embeddings for ${allEmbeddings.length} persons');
       }
     } catch (e) {
       print('Error loading embeddings: $e');
@@ -300,11 +301,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               final jpg = img.encodeJpg(croppedFace);
               await tempFile.writeAsBytes(jpg);
 
-              final success = await FaceRecognitionService.storeFaceEmbedding(
-                personName,
-                tempFile,
-                normalizationType: 'arcface',
-              );
+              // عند إضافة شخص (السطر 337 تقريباً):
+             final success = await FaceRecognitionService.storeFaceEmbedding(
+               personName,
+               tempFile, // فقط اسم الشخص والملف
+               );
 
               if (success) {
                 successCount++;
@@ -632,10 +633,12 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       FaceRecognitionService.removeFaceEmbedding(oldName);
       await _loadStoredEmbeddings();
       await _loadPeople();
-    } catch (e) {
+
       if (mounted) {
-        _showSnackBar('Error updating name: $e', Colors.red);
+        _showSnackBar('Updated to "$newName" successfully!', Colors.green);
       }
+    } catch (e) {
+      _showSnackBar('Error updating name: $e', Colors.red);
     }
   }
 
@@ -672,468 +675,250 @@ class _FaceManagementPageState extends State<FaceManagementPage>
 
   void _showEditDialog(Map<String, dynamic> person) {
     final nameController = TextEditingController(text: person['name']);
-    bool isUploadingPhotos = false;
-    bool photosChanged = false;
-
-    final Color fieldBackground = vibrantPurple.withOpacity(0.08);
-    final Color fieldBorder = vibrantPurple.withOpacity(0.35);
-    final Color fieldFocus = vibrantPurple;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxWidth: 820),
-            padding: const EdgeInsets.all(28),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(11),
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: EdgeInsets.zero,
+        content: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [vibrantPurple, primaryPurple],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.edit,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        "Edit Person",
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        _hapticFeedback();
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [vibrantPurple, primaryPurple],
-                          ),
+                          color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
-                          Icons.edit,
+                          Icons.close,
                           color: Colors.white,
-                          size: 24,
+                          size: 20,
                         ),
                       ),
-                      const SizedBox(width: 13),
-                      Text(
-                        "Edit Person",
-                        style: TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.w800,
-                          color: deepPurple,
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [vibrantPurple, primaryPurple],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Color.fromARGB(76, 142, 58, 149),
+                              blurRadius: 15,
+                              offset: Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.white,
+                          backgroundImage:
+                              person['photoUrls'] != null &&
+                                  (person['photoUrls'] as List).isNotEmpty
+                              ? NetworkImage(person['photoUrls'][0])
+                              : null,
+                          child:
+                              person['photoUrls'] == null ||
+                                  (person['photoUrls'] as List).isEmpty
+                              ? Icon(
+                                  Icons.person,
+                                  color: deepPurple.withOpacity(0.5),
+                                  size: 50,
+                                )
+                              : null,
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
                       "Name",
                       style: TextStyle(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                         color: deepPurple,
-                        fontSize: 18,
-                        letterSpacing: 0.3,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: nameController,
-                    enabled: !isUploadingPhotos,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: deepPurple,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: "Enter person's name",
-                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                      filled: true,
-                      fillColor: fieldBackground,
-                      prefixIcon: Icon(
-                        Icons.person,
-                        color: vibrantPurple,
-                        size: 24,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldFocus, width: 2),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        hintText: "Enter person's name",
+                        hintStyle: TextStyle(color: Colors.grey.shade400),
+                        fillColor: ultraLightPurple,
+                        filled: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      "Photo",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: deepPurple,
-                        fontSize: 17,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: isUploadingPhotos
-                        ? null
-                        : () async {
-                            _hapticFeedback();
-
-                            try {
-                              final picker = ImagePicker();
-                              final List<XFile> picked = await picker
-                                  .pickMultiImage(imageQuality: 100);
-
-                              if (picked.isEmpty) return;
-
-                              setDialogState(() {
-                                isUploadingPhotos = true;
-                              });
-
-                              Future<Uint8List> compressImage(
-                                Uint8List input,
-                              ) async {
-                                final decoded = img.decodeImage(input);
-                                if (decoded == null) return input;
-
-                                final int maxSide = 1024;
-                                img.Image resized = decoded;
-                                if (decoded.width > maxSide ||
-                                    decoded.height > maxSide) {
-                                  resized = img.copyResize(
-                                    decoded,
-                                    width: decoded.width >= decoded.height
-                                        ? maxSide
-                                        : null,
-                                    height: decoded.height > decoded.width
-                                        ? maxSide
-                                        : null,
-                                    interpolation: img.Interpolation.average,
-                                  );
-                                }
-                                final jpg = img.encodeJpg(resized, quality: 85);
-                                return Uint8List.fromList(jpg);
-                              }
-
-                              Future<String> uploadBytes(
-                                Uint8List bytes,
-                                String filename,
-                              ) async {
-                                final uid =
-                                    FirebaseAuth.instance.currentUser!.uid;
-                                final ref = FirebaseStorage.instance.ref().child(
-                                  'users/$uid/faces/${person['name']}/$filename',
-                                );
-
-                                final task = await ref.putData(
-                                  bytes,
-                                  SettableMetadata(contentType: 'image/jpeg'),
-                                );
-                                return await task.ref.getDownloadURL();
-                              }
-
-                              final List<String> newUrls = [];
-                              for (final xf in picked) {
-                                final raw = await xf.readAsBytes();
-                                final comp = await compressImage(raw);
-                                final filename =
-                                    'img_${DateTime.now().millisecondsSinceEpoch}_${newUrls.length}.jpg';
-                                final url = await uploadBytes(comp, filename);
-                                newUrls.add(url);
-                              }
-
-                              if (newUrls.isEmpty) {
-                                setDialogState(() {
-                                  isUploadingPhotos = false;
-                                });
-                                return;
-                              }
-
-                              final uid =
-                                  FirebaseAuth.instance.currentUser!.uid;
-                              await FirebaseFirestore.instance
-                                  .collection('users')
-                                  .doc(uid)
-                                  .collection('people')
-                                  .doc(person['id'])
-                                  .update({
-                                    'photoUrls': FieldValue.arrayUnion(newUrls),
-                                    'photoCount': FieldValue.increment(
-                                      newUrls.length,
-                                    ),
-                                    'updatedAt': FieldValue.serverTimestamp(),
-                                  });
-
-                              if (context.mounted) {
-                                setDialogState(() {
-                                  final List<dynamic> currentUrls = List.from(
-                                    person['photoUrls'] ?? [],
-                                  );
-                                  currentUrls.insertAll(0, newUrls);
-                                  person['photoUrls'] = currentUrls;
-                                  person['photoCount'] =
-                                      (person['photoCount'] ?? 0) +
-                                      newUrls.length;
-                                  isUploadingPhotos = false;
-                                  photosChanged = true;
-                                });
-                              }
-
-                              await _loadPeople();
-
-                              if (mounted) {
-                                _showSnackBar(
-                                  'Photos updated successfully ✅',
-                                  Colors.green,
-                                );
-                              }
-                            } catch (e) {
-                              print('Error updating photos: $e');
-
-                              if (context.mounted) {
-                                setDialogState(() {
-                                  isUploadingPhotos = false;
-                                });
-                              }
-
-                              if (mounted) {
-                                _showSnackBar(
-                                  'Failed to update photos',
-                                  Colors.red,
-                                );
-                              }
-                            }
-                          },
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(18),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: fieldBackground,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: fieldBorder, width: 1.3),
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.blue.shade200),
                       ),
-                      child: isUploadingPhotos
-                          ? Row(
-                              children: [
-                                SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      vibrantPurple,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Uploading Photos...',
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w700,
-                                          color: deepPurple,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Please wait...',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: deepPurple.withOpacity(0.6),
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Row(
-                              children: [
-                                Container(
-                                  width: 66,
-                                  height: 66,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        vibrantPurple.withOpacity(0.15),
-                                        primaryPurple.withOpacity(0.15),
-                                      ],
-                                    ),
-                                  ),
-                                  child:
-                                      (person['photoUrls'] != null &&
-                                          (person['photoUrls'] as List)
-                                              .isNotEmpty)
-                                      ? ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            32.5,
-                                          ),
-                                          child: Image.network(
-                                            person['photoUrls'][0],
-                                            fit: BoxFit.cover,
-                                          ),
-                                        )
-                                      : Icon(
-                                          Icons.person,
-                                          color: vibrantPurple,
-                                          size: 32,
-                                        ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Upload Photo',
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w700,
-                                          color: deepPurple,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${person['photoCount'] ?? 0} photos stored',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[700],
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.cloud_upload_outlined,
-                                  color: vibrantPurple,
-                                  size: 30,
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 45),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: isUploadingPhotos
-                              ? null
-                              : () {
-                                  _hapticFeedback();
-                                  Navigator.pop(context);
-                                },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            backgroundColor: deepPurple.withOpacity(0.15),
-                            foregroundColor: deepPurple,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(
-                                color: vibrantPurple.withOpacity(0.35),
-                                width: 1.3,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: Colors.blue,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${person['photoCount'] ?? 0} photos stored for this person',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.blue.shade800,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              _hapticFeedback();
+                              Navigator.pop(context);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              side: BorderSide(
+                                color: deepPurple.withOpacity(0.3),
+                                width: 2,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: deepPurple,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: isUploadingPhotos
-                              ? null
-                              : () async {
-                                  final newName = nameController.text.trim();
-                                  if (newName.isEmpty) {
-                                    _showSnackBar(
-                                      'Please enter a name',
-                                      Colors.red,
-                                    );
-                                    return;
-                                  }
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              final newName = nameController.text.trim();
+                              if (newName.isEmpty) {
+                                _showSnackBar(
+                                  'Please enter a name',
+                                  Colors.red,
+                                );
+                                return;
+                              }
+                              if (newName == person['name']) {
+                                Navigator.pop(context);
+                                return;
+                              }
 
-                                  if (newName == person['name'] &&
-                                      !photosChanged) {
-                                    Navigator.pop(context);
-                                    _showSnackBar(
-                                      'No changes made',
-                                      Colors.orange,
-                                    );
-                                    return;
-                                  }
-
-                                  _hapticFeedback();
-                                  Navigator.pop(context);
-
-                                  if (newName != person['name']) {
-                                    await _updatePersonName(
-                                      person['id'],
-                                      person['name'],
-                                      newName,
-                                    );
-                                  }
-
-                                  if (mounted) {
-                                    _showSnackBar(
-                                      'Changes saved successfully! ✅',
-                                      Colors.green,
-                                    );
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            backgroundColor: primaryPurple,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              _hapticFeedback();
+                              Navigator.pop(context);
+                              await _updatePersonName(
+                                person['id'],
+                                person['name'],
+                                newName,
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: deepPurple,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              elevation: 0,
                             ),
-                            elevation: 0,
-                          ),
-                          child: const Text(
-                            'Save Changes',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
+                            child: const Text(
+                              'Save',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -1141,137 +926,148 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   void _showDeleteConfirmation(String personId, String personName) {
-    _hapticFeedback();
-    _speak('Delete $personName');
-
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxWidth: 500),
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: EdgeInsets.zero,
+        content: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Column(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(15),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.12),
+                        color: Colors.red.shade100,
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.delete_outline,
                         color: Colors.red,
-                        size: 28,
+                        size: 40,
                       ),
                     ),
-                    const SizedBox(width: 13),
-                    Text(
+                    const SizedBox(height: 16),
+                    const Text(
                       'Delete Person',
                       style: TextStyle(
-                        fontSize: 26,
+                        color: deepPurple,
                         fontWeight: FontWeight.w800,
+                        fontSize: 22,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text(
+                      'Are you sure you want to delete',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: deepPurple.withOpacity(0.7),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '"$personName"?',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
                         color: deepPurple,
                       ),
+                      textAlign: TextAlign.center,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                RichText(
-                  textAlign: TextAlign.center,
-                  text: TextSpan(
-                    text: 'Are you sure you want to delete ',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: deepPurple,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: '"$personName"',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          color: deepPurple,
-                          fontSize: 17,
-                        ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This action cannot be undone',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.red.shade600,
+                        fontStyle: FontStyle.italic,
                       ),
-                      const TextSpan(text: '?'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 60),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _hapticFeedback();
-                          _speak('Cancelled');
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          backgroundColor: deepPurple.withOpacity(0.15),
-                          foregroundColor: deepPurple,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(
-                              color: vibrantPurple.withOpacity(0.35),
-                              width: 1.3,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              _hapticFeedback();
+                              Navigator.pop(context);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              side: BorderSide(
+                                color: deepPurple.withOpacity(0.3),
+                                width: 2,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: deepPurple,
+                              ),
                             ),
                           ),
-                          elevation: 0,
                         ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              _hapticFeedback();
+                              Navigator.pop(context);
+                              await _deletePerson(personId, personName);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: const Text(
+                              'Delete',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          _hapticFeedback();
-                          Navigator.pop(context);
-                          await _deletePerson(personId, personName);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          backgroundColor: Colors.red,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Text(
-                          'Delete',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1337,7 +1133,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     return FadeTransition(
       opacity: _fadeController ?? const AlwaysStoppedAnimation(1.0),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(25, 50, 25, 45),
+        padding: const EdgeInsets.fromLTRB(25, 50, 25, 30),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -1406,8 +1202,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       Text(
                         'Manage saved faces',
                         style: TextStyle(
-                          fontSize: 14,
-                          color: deepPurple.withOpacity(0.6),
+                          fontSize: 13,
+                          color: deepPurple.withOpacity(0.5),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
                         ),
@@ -1421,22 +1217,13 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             Container(
               height: 50,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    lightPurple.withOpacity(0.3),
-                    palePurple.withOpacity(0.4),
-                  ],
-                ),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(15),
-                border: Border.all(
-                  color: deepPurple.withOpacity(0.3),
-                  width: 1.5,
-                ),
                 boxShadow: [
                   BoxShadow(
-                    color: vibrantPurple.withOpacity(0.15),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
+                    color: palePurple.withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
@@ -1454,16 +1241,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         hintText: "Search people...",
                         border: InputBorder.none,
                         hintStyle: TextStyle(
-                          color: deepPurple.withOpacity(0.7),
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
+                          color: deepPurple.withOpacity(0.4),
+                          fontSize: 15,
                         ),
                       ),
-                      style: const TextStyle(
-                        color: deepPurple,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: const TextStyle(color: deepPurple, fontSize: 15),
                     ),
                   ),
                 ],
@@ -1745,11 +1527,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
 
   Widget _buildAddButton() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 25),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
       child: GestureDetector(
         onTap: () {
           _hapticFeedback();
-          _speak('Add New Contact');
+          _speak('Add Contact');
           _showAddDialog();
         },
         child: Container(
