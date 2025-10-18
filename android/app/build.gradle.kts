@@ -23,6 +23,7 @@ android {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
+     
     defaultConfig {
         applicationId = "com.example.munir_app"
         minSdk = 26

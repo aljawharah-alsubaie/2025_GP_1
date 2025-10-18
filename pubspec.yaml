@@ -57,6 +57,7 @@ dependencies:
   google_mlkit_text_recognition: ^0.15.0
   google_mlkit_commons: ^0.11.0
 
+ 
   # 🔹 Local DB
   hive: ^2.2.3
   hive_flutter: ^1.1.0
@@ -80,6 +81,11 @@ flutter:
     - assets/models/feature_extractor.tflite
     - assets/models/mobilefacenet.tflite
     - assets/models/arcface.tflite
+     # الموديلات الجديدة
+    - assets/models/w600k_r50_float16.tflite
+    - assets/models/1k3d68_float16.tflite
+    - assets/models/2d106det_float16.tflite
+    - assets/models/det_10g_simplified_float16.tflite
 
   fonts:
     - family: PlayfairDisplay
