@@ -99,7 +99,12 @@ class InsightFacePipeline {
       
       final imageBytes = await imageFile.readAsBytes();
       final originalImage = img.decodeImage(imageBytes);
-      if (originalImage == null) return null;
+      if (originalImage == null) {
+        print('❌ Failed to decode image');
+        return null;
+      }
+      
+      print('📐 Original image size: ${originalImage.width}x${originalImage.height}');
       
       // تغيير الحجم لـ 640x640
       final resized = img.copyResize(
@@ -115,24 +120,47 @@ class InsightFacePipeline {
       
       // تشغيل الموديل
       final outputShape = _detectionModel!.getOutputTensor(0).shape;
-      final output = List.generate(
-        outputShape[0],
-        (i) => List.generate(
-          outputShape[1],
-          (j) => List.filled(outputShape[2], 0.0),
-        ),
-      );
+      print('📊 Detection output shape: $outputShape');
+      
+      // تحديد شكل الـ output بناءً على الموديل
+      dynamic output;
+      
+      if (outputShape.length == 3) {
+        // شكل [1, num_detections, 15] أو مشابه
+        output = List.generate(
+          outputShape[0],
+          (i) => List.generate(
+            outputShape[1],
+            (j) => List.filled(outputShape[2], 0.0),
+          ),
+        );
+      } else if (outputShape.length == 2) {
+        // شكل [num_detections, 15]
+        output = List.generate(
+          outputShape[0],
+          (i) => List.filled(outputShape[1], 0.0),
+        );
+      } else {
+        print('❌ Unsupported detection output shape: $outputShape');
+        return null;
+      }
       
       _detectionModel!.run(inputTensor, output);
       
       // استخراج bounding boxes
-      List<Rect> faces = _parseFaceDetections(output, originalImage.width, originalImage.height);
+      List<Rect> faces = _parseFaceDetections(
+        output, 
+        originalImage.width, 
+        originalImage.height,
+        outputShape,
+      );
       
-      print('✅ Detected ${faces.length} faces');
-      return faces;
+      print('✅ Detected ${faces.length} face(s)');
+      return faces.isNotEmpty ? faces : null;
       
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Face detection error: $e');
+      print('Stack trace: $stackTrace');
       return null;
     }
   }
@@ -142,19 +170,28 @@ class InsightFacePipeline {
     try {
       final imageBytes = await imageFile.readAsBytes();
       final originalImage = img.decodeImage(imageBytes);
-      if (originalImage == null) return null;
+      if (originalImage == null) {
+        print('❌ Failed to decode image for cropping');
+        return null;
+      }
       
       // التأكد من أن الإحداثيات داخل حدود الصورة
-      final x = math.max(0, faceRect.left.toInt());
-      final y = math.max(0, faceRect.top.toInt());
-      final width = math.min(
-        faceRect.width.toInt(),
-        originalImage.width - x,
-      );
-      final height = math.min(
-        faceRect.height.toInt(),
-        originalImage.height - y,
-      );
+      final x = math.max(0, math.min(faceRect.left.toInt(), originalImage.width - 1));
+      final y = math.max(0, math.min(faceRect.top.toInt(), originalImage.height - 1));
+      
+      final maxWidth = originalImage.width - x;
+      final maxHeight = originalImage.height - y;
+      
+      final width = math.max(1, math.min(faceRect.width.toInt(), maxWidth));
+      final height = math.max(1, math.min(faceRect.height.toInt(), maxHeight));
+      
+      print('📐 Cropping: x=$x, y=$y, w=$width, h=$height (image: ${originalImage.width}x${originalImage.height})');
+      
+      // التحقق من صحة الأبعاد
+      if (width <= 0 || height <= 0) {
+        print('❌ Invalid crop dimensions: ${width}x${height}');
+        return null;
+      }
       
       // قص الوجه
       final croppedFace = img.copyCrop(
@@ -165,11 +202,12 @@ class InsightFacePipeline {
         height: height,
       );
       
-      print('✅ Face cropped: ${width}x${height}');
+      print('✅ Face cropped successfully: ${croppedFace.width}x${croppedFace.height}');
       return croppedFace;
       
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Crop face error: $e');
+      print('Stack trace: $stackTrace');
       return null;
     }
   }
@@ -292,21 +330,16 @@ class InsightFacePipeline {
       
       // استخدم أول وجه فقط
       final faceRect = faces[0];
+      print('📦 Using face: ${faceRect.width.toInt()}x${faceRect.height.toInt()}');
       
       // قص الوجه
-      final imageBytes = await imageFile.readAsBytes();
-      final originalImage = img.decodeImage(imageBytes);
-      if (originalImage == null) return null;
+      final croppedFace = await cropFace(imageFile, faceRect);
+      if (croppedFace == null) {
+        print('❌ Failed to crop face');
+        return null;
+      }
       
-      final croppedFace = img.copyCrop(
-        originalImage,
-        x: faceRect.left.toInt(),
-        y: faceRect.top.toInt(),
-        width: faceRect.width.toInt(),
-        height: faceRect.height.toInt(),
-      );
-      
-      // 2️⃣ Landmark Detection
+      // 2️⃣ Landmark Detection (اختياري)
       final landmarks = await detectLandmarks(croppedFace);
       if (landmarks == null) {
         print('⚠️ Landmarks not detected, proceeding without alignment');
@@ -326,8 +359,9 @@ class InsightFacePipeline {
       
       return embedding;
       
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Pipeline error: $e');
+      print('Stack trace: $stackTrace');
       return null;
     }
   }
@@ -359,20 +393,111 @@ class InsightFacePipeline {
   }
   
   /// استخراج bounding boxes من نتائج Detection
-  static List<Rect> _parseFaceDetections(List<List<List<double>>> output, int imgWidth, int imgHeight) {
+  static List<Rect> _parseFaceDetections(
+    dynamic output, 
+    int imgWidth, 
+    int imgHeight,
+    List<int> outputShape,
+  ) {
     List<Rect> faces = [];
     
-    // هذا يعتمد على شكل output الموديل
-    // قد تحتاج تعديل حسب موديلك
-    for (var detection in output[0]) {
-      if (detection[4] > 0.5) { // confidence threshold
-        final x = detection[0] * imgWidth;
-        final y = detection[1] * imgHeight;
-        final width = detection[2] * imgWidth - x;
-        final height = detection[3] * imgHeight - y;
-        
-        faces.add(Rect.fromLTWH(x, y, width, height));
+    try {
+      print('🔍 Parsing detections...');
+      print('📊 Output shape: $outputShape');
+      
+      // SCRFD/RetinaFace format: [batch, num_boxes, values]
+      // values format: [x1, y1, x2, y2, score, landmarks...]
+      
+      List<List<double>> detections = [];
+      
+      if (outputShape.length == 3) {
+        // [1, num_boxes, values]
+        detections = List<List<double>>.from(
+          output[0].map((det) => List<double>.from(det))
+        );
+      } else if (outputShape.length == 2) {
+        // [num_boxes, values]
+        detections = List<List<double>>.from(
+          output.map((det) => List<double>.from(det))
+        );
       }
+      
+      print('📦 Total detections: ${detections.length}');
+      
+      const double confidenceThreshold = 0.5;
+      int validDetections = 0;
+      
+      for (int i = 0; i < detections.length; i++) {
+        final detection = detections[i];
+        
+        // تحقق من طول الـ detection
+        if (detection.length < 5) {
+          continue;
+        }
+        
+        // الصيغة المتوقعة: [x1, y1, x2, y2, score, ...]
+        final score = detection[4];
+        
+        if (score < confidenceThreshold) {
+          continue;
+        }
+        
+        // إحداثيات normalized (0-1)
+        double x1 = detection[0];
+        double y1 = detection[1];
+        double x2 = detection[2];
+        double y2 = detection[3];
+        
+        // تحويل إلى pixel coordinates
+        // تحقق إذا كانت القيم بالفعل normalized
+        if (x1 <= 1.0 && y1 <= 1.0 && x2 <= 1.0 && y2 <= 1.0) {
+          x1 *= imgWidth;
+          y1 *= imgHeight;
+          x2 *= imgWidth;
+          y2 *= imgHeight;
+        }
+        
+        // حساب width و height
+        final width = (x2 - x1).abs();
+        final height = (y2 - y1).abs();
+        
+        // تحقق من صحة الأبعاد
+        if (width <= 0 || height <= 0 || width > imgWidth || height > imgHeight) {
+          print('⚠️ Invalid box dimensions: ${width}x${height}');
+          continue;
+        }
+        
+        // التأكد من أن الإحداثيات داخل حدود الصورة
+        final left = math.max(0.0, math.min(x1, imgWidth.toDouble()));
+        final top = math.max(0.0, math.min(y1, imgHeight.toDouble()));
+        final right = math.max(0.0, math.min(x2, imgWidth.toDouble()));
+        final bottom = math.max(0.0, math.min(y2, imgHeight.toDouble()));
+        
+        final validWidth = right - left;
+        final validHeight = bottom - top;
+        
+        if (validWidth > 10 && validHeight > 10) {
+          faces.add(Rect.fromLTRB(left, top, right, bottom));
+          validDetections++;
+          print('✅ Face $validDetections: score=${score.toStringAsFixed(2)}, '
+                'bbox=(${left.toInt()}, ${top.toInt()}, ${validWidth.toInt()}, ${validHeight.toInt()})');
+        }
+      }
+      
+      print('✅ Valid faces found: $validDetections');
+      
+      // ترتيب الوجوه حسب الحجم (الأكبر أولاً)
+      if (faces.length > 1) {
+        faces.sort((a, b) {
+          final areaA = a.width * a.height;
+          final areaB = b.width * b.height;
+          return areaB.compareTo(areaA);
+        });
+      }
+      
+    } catch (e, stackTrace) {
+      print('❌ Error parsing detections: $e');
+      print('Stack trace: $stackTrace');
     }
     
     return faces;
