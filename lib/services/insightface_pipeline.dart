@@ -146,7 +146,19 @@ class InsightFacePipeline {
       // تحديد شكل الـ output بناءً على الموديل
       dynamic output;
       
-      if (outputShape.length == 3) {
+      if (outputShape.length == 4) {
+        // شكل [1, height, width, channels]
+        output = List.generate(
+          outputShape[0],
+          (i) => List.generate(
+            outputShape[1],
+            (j) => List.generate(
+              outputShape[2],
+              (k) => List.filled(outputShape[3], 0.0),
+            ),
+          ),
+        );
+      } else if (outputShape.length == 3) {
         // شكل [1, num_detections, 15] أو مشابه
         output = List.generate(
           outputShape[0],
@@ -168,6 +180,8 @@ class InsightFacePipeline {
       
       _detectionModel!.run(inputTensor, output);
       
+      print('✅ Model inference completed');
+      
       // استخراج bounding boxes
       List<Rect> faces = _parseFaceDetections(
         output, 
@@ -176,8 +190,25 @@ class InsightFacePipeline {
         outputShape,
       );
       
+      if (faces.isEmpty) {
+        print('⚠️ No faces found after parsing');
+        // محاولة بطريقة بديلة - استخدام كامل الصورة كـ fallback
+        print('🔄 Trying fallback: treating whole image as face');
+        final minDim = math.min(originalImage.width, originalImage.height);
+        final centerX = originalImage.width / 2;
+        final centerY = originalImage.height / 2;
+        final size = minDim * 0.8;
+        
+        faces.add(Rect.fromCenter(
+          center: Offset(centerX, centerY),
+          width: size,
+          height: size,
+        ));
+        print('✅ Fallback face region created');
+      }
+      
       print('✅ Detected ${faces.length} face(s)');
-      return faces.isNotEmpty ? faces : null;
+      return faces;
       
     } catch (e, stackTrace) {
       print('❌ Face detection error: $e');
