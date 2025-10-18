@@ -48,7 +48,7 @@ class _RemindersPageState extends State<RemindersPage>
   late AnimationController _slideController;
   late AnimationController _pulseController;
 
-  // 🎨 نظام ألوان موحد
+  // 🎨 نظام ألوان موحد - متطابق مع ContactInfoPage
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -84,7 +84,6 @@ class _RemindersPageState extends State<RemindersPage>
     await _tts.setLanguage("en-US");
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
-    // ✅ نضيف completion handler للتأكد من انتهاء الكلام
     _tts.setCompletionHandler(() {
       print('TTS completed');
     });
@@ -154,7 +153,6 @@ class _RemindersPageState extends State<RemindersPage>
 
   // 🎤 Voice Control Methods
   Future<void> _startVoiceReminder() async {
-    // Check if speech recognition is available
     if (!_speech.isAvailable) {
       _speak(
         'Speech recognition is not available. Please install Google Speech Services from Play Store',
@@ -194,7 +192,6 @@ class _RemindersPageState extends State<RemindersPage>
     await _speak(
       'Starting voice reminder. Please tell me the title of your reminder',
     );
-    // ✅ ننتظر 1 ثانية إضافية بعد انتهاء TTS
     await Future.delayed(const Duration(milliseconds: 3500));
     _listenForVoiceInput();
   }
@@ -213,10 +210,8 @@ class _RemindersPageState extends State<RemindersPage>
           _processVoiceInput(result.recognizedWords);
         }
       },
-      listenFor: const Duration(
-        seconds: 15,
-      ), // ✅ زودنا المدة من 10 إلى 15 ثانية
-      pauseFor: const Duration(seconds: 5), // ✅ زودنا المدة من 3 إلى 5 ثواني
+      listenFor: const Duration(seconds: 15),
+      pauseFor: const Duration(seconds: 5),
       localeId: 'en_US',
       cancelOnError: true,
       partialResults: false,
@@ -228,7 +223,7 @@ class _RemindersPageState extends State<RemindersPage>
 
     if (input.isEmpty) {
       await _speak('I did not hear anything. Please try again');
-      await Future.delayed(const Duration(milliseconds: 2500)); // ✅ زودنا الوقت
+      await Future.delayed(const Duration(milliseconds: 2500));
       _listenForVoiceInput();
       return;
     }
@@ -240,9 +235,7 @@ class _RemindersPageState extends State<RemindersPage>
           'Got it. Title is: $input. Now, when would you like to be reminded? Say the date and time',
         );
         setState(() => _voiceStep = 1);
-        await Future.delayed(
-          const Duration(milliseconds: 4000),
-        ); // ✅ زودنا الوقت من 3000 إلى 4000
+        await Future.delayed(const Duration(milliseconds: 4000));
         _listenForVoiceInput();
         break;
 
@@ -255,9 +248,7 @@ class _RemindersPageState extends State<RemindersPage>
             'Perfect. Reminder set for ${_formatDateForSpeech(dateTime)} at ${_voiceTime}. Would you like to add a note? Say yes or no',
           );
           setState(() => _voiceStep = 2);
-          await Future.delayed(
-            const Duration(milliseconds: 4000),
-          ); // ✅ زودنا الوقت من 3000 إلى 4000
+          await Future.delayed(const Duration(milliseconds: 4000));
           _listenForVoiceInput();
         } else {
           await _speak(
@@ -267,9 +258,7 @@ class _RemindersPageState extends State<RemindersPage>
           await _speak(
             'Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM',
           );
-          await Future.delayed(
-            const Duration(milliseconds: 4500),
-          ); // ✅ زودنا الوقت من 3500 إلى 4500
+          await Future.delayed(const Duration(milliseconds: 4500));
           _listenForVoiceInput();
         }
         break;
@@ -278,18 +267,14 @@ class _RemindersPageState extends State<RemindersPage>
         if (input.toLowerCase().contains('yes')) {
           await _speak('What would you like to add as a note?');
           setState(() => _voiceStep = 3);
-          await Future.delayed(
-            const Duration(milliseconds: 2500),
-          ); // ✅ زودنا الوقت من 2000 إلى 2500
+          await Future.delayed(const Duration(milliseconds: 2500));
           _listenForVoiceInput();
         } else {
           await _speak(
             'Would you like this reminder to repeat? Say one time, daily, or weekly',
           );
           setState(() => _voiceStep = 4);
-          await Future.delayed(
-            const Duration(milliseconds: 3500),
-          ); // ✅ زودنا الوقت من 2500 إلى 3500
+          await Future.delayed(const Duration(milliseconds: 3500));
           _listenForVoiceInput();
         }
         break;
@@ -300,9 +285,7 @@ class _RemindersPageState extends State<RemindersPage>
           'Note added. Would you like this reminder to repeat? Say one time, daily, or weekly',
         );
         setState(() => _voiceStep = 4);
-        await Future.delayed(
-          const Duration(milliseconds: 3500),
-        ); // ✅ زودنا الوقت من 2500 إلى 3500
+        await Future.delayed(const Duration(milliseconds: 3500));
         _listenForVoiceInput();
         break;
 
@@ -319,13 +302,10 @@ class _RemindersPageState extends State<RemindersPage>
           'Understood. Frequency is ${_voiceFrequency}. Creating your reminder now',
         );
         await Future.delayed(const Duration(milliseconds: 2000));
-
         await _speak(
           'Understood. Frequency is ${_voiceFrequency}. Creating your reminder now',
         );
-        await Future.delayed(
-          const Duration(milliseconds: 2500),
-        ); // ✅ زودنا الوقت من 2000 إلى 2500
+        await Future.delayed(const Duration(milliseconds: 2500));
         await _saveVoiceReminder();
         break;
     }
@@ -379,7 +359,7 @@ class _RemindersPageState extends State<RemindersPage>
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
     } else {
-      date = now; // Default to today
+      date = now;
     }
 
     // Parse time
@@ -402,7 +382,7 @@ class _RemindersPageState extends State<RemindersPage>
           lowerInput.contains('evening')) {
         hour += 12;
       } else if (period.isEmpty && hour < 8) {
-        hour += 12; // Assume PM for hours less than 8
+        hour += 12;
       }
 
       time = TimeOfDay(hour: hour, minute: 0);
@@ -561,9 +541,10 @@ class _RemindersPageState extends State<RemindersPage>
           if (_isVoiceMode || _isListening) _buildVoiceOverlay(),
         ],
       ),
-      floatingActionButton: _buildVoiceAddButton(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      bottomNavigationBar: _buildFloatingBottomNav(),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [_buildVoiceAddButton(), _buildFloatingBottomNav()],
+      ),
     );
   }
 
@@ -584,7 +565,7 @@ class _RemindersPageState extends State<RemindersPage>
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        padding: const EdgeInsets.fromLTRB(25, 50, 25, 45),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -605,34 +586,36 @@ class _RemindersPageState extends State<RemindersPage>
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
-                  _speak('Back');
+                  _speak('Going back');
                   Navigator.pop(context);
                 },
                 child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
+                  width: 52,
+                  height: 52,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [vibrantPurple, primaryPurple],
+                    ),
+                    borderRadius: BorderRadius.all(Radius.circular(18)),
                     boxShadow: [
                       BoxShadow(
-                        color: vibrantPurple.withOpacity(0.15),
+                        color: Color.fromARGB(76, 142, 58, 149),
                         blurRadius: 12,
-                        offset: const Offset(0, 4),
+                        offset: Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.arrow_back,
-                    color: deepPurple,
-                    size: 24,
+                  child: const Center(
+                    child: Icon(
+                      Icons.arrow_back_ios_new,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
             ),
-
-            const SizedBox(width: 12),
-
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -640,22 +623,23 @@ class _RemindersPageState extends State<RemindersPage>
                   Text(
                     'My Reminders',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: deepPurple.withOpacity(0.5),
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${reminders.length} Active',
-                    style: TextStyle(
-                      fontSize: 24,
+                      fontSize: 25,
                       fontWeight: FontWeight.w900,
                       foreground: Paint()
-                        ..shader = LinearGradient(
+                        ..shader = const LinearGradient(
                           colors: [deepPurple, vibrantPurple],
-                        ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
+                        ).createShader(const Rect.fromLTWH(0, 0, 200, 70)),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${reminders.length} Active Reminders',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: deepPurple.withOpacity(0.6),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ],
@@ -690,7 +674,7 @@ class _RemindersPageState extends State<RemindersPage>
         onRefresh: _loadReminders,
         color: vibrantPurple,
         child: ListView.builder(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 100),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
           itemCount: reminders.length,
           itemBuilder: (context, index) {
             final reminder = reminders[index];
@@ -709,7 +693,18 @@ class _RemindersPageState extends State<RemindersPage>
           'Reminder: ${reminder.title}. Date: ${reminder.date.day} ${_getMonthName(reminder.date.month)}, ${reminder.date.year}. Time: ${reminder.time}. ${reminder.note.isNotEmpty ? "Note: ${reminder.note}." : ""} Double tap to see options',
       button: true,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 14),
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: palePurple.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -719,74 +714,52 @@ class _RemindersPageState extends State<RemindersPage>
               _showReminderOptions(reminder, index);
             },
             borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: isToday
-                    ? Border.all(color: vibrantPurple, width: 2)
-                    : null,
-                boxShadow: [
-                  BoxShadow(
-                    color: isToday
-                        ? vibrantPurple.withOpacity(0.4)
-                        : palePurple.withOpacity(0.35),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                  BoxShadow(
-                    color: Colors.white.withOpacity(0.8),
-                    blurRadius: 12,
-                    offset: const Offset(-2, -2),
-                  ),
-                ],
-              ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
                       gradient: LinearGradient(
-                        colors: isToday
-                            ? [vibrantPurple, primaryPurple]
-                            : [deepPurple, vibrantPurple],
+                        colors: [vibrantPurple, primaryPurple],
                       ),
-                      borderRadius: BorderRadius.circular(15),
                       boxShadow: [
                         BoxShadow(
-                          color: vibrantPurple.withOpacity(0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
+                          color: Color.fromARGB(76, 142, 58, 149),
+                          blurRadius: 8,
+                          offset: Offset(0, 4),
                         ),
                       ],
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '${reminder.date.day}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
+                    padding: const EdgeInsets.all(3),
+                    child: CircleAvatar(
+                      radius: 25,
+                      backgroundColor: Colors.white,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '${reminder.date.day}',
+                            style: TextStyle(
+                              color: deepPurple,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        ),
-                        Text(
-                          _getMonthName(reminder.date.month).toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
+                          Text(
+                            _getMonthName(reminder.date.month).toUpperCase(),
+                            style: TextStyle(
+                              color: deepPurple.withOpacity(0.6),
+                              fontSize: 8,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-
-                  const SizedBox(width: 14),
-
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -796,8 +769,8 @@ class _RemindersPageState extends State<RemindersPage>
                             Expanded(
                               child: Text(
                                 reminder.title,
-                                style: TextStyle(
-                                  fontSize: 15,
+                                style: const TextStyle(
+                                  fontSize: 17,
                                   fontWeight: FontWeight.w700,
                                   color: deepPurple,
                                 ),
@@ -810,7 +783,7 @@ class _RemindersPageState extends State<RemindersPage>
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
+                                  gradient: const LinearGradient(
                                     colors: [vibrantPurple, primaryPurple],
                                   ),
                                   borderRadius: BorderRadius.circular(8),
@@ -832,13 +805,13 @@ class _RemindersPageState extends State<RemindersPage>
                             Icon(
                               Icons.access_time,
                               size: 14,
-                              color: deepPurple.withOpacity(0.5),
+                              color: vibrantPurple.withOpacity(0.6),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               reminder.time,
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
                                 color: deepPurple.withOpacity(0.5),
                                 fontWeight: FontWeight.w500,
                               ),
@@ -847,13 +820,13 @@ class _RemindersPageState extends State<RemindersPage>
                             Icon(
                               Icons.repeat,
                               size: 14,
-                              color: deepPurple.withOpacity(0.5),
+                              color: vibrantPurple.withOpacity(0.6),
                             ),
                             const SizedBox(width: 4),
                             Text(
                               reminder.frequency,
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 13,
                                 color: deepPurple.withOpacity(0.5),
                                 fontWeight: FontWeight.w500,
                               ),
@@ -875,22 +848,27 @@ class _RemindersPageState extends State<RemindersPage>
                       ],
                     ),
                   ),
-
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          vibrantPurple.withOpacity(0.1),
-                          primaryPurple.withOpacity(0.1),
-                        ],
+                  GestureDetector(
+                    onTap: () {
+                      _hapticFeedback();
+                      _showReminderOptions(reminder, index);
+                    },
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: vibrantPurple.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: vibrantPurple.withOpacity(0.3),
+                          width: 1.5,
+                        ),
                       ),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.more_vert,
-                      size: 20,
-                      color: vibrantPurple,
+                      child: const Icon(
+                        Icons.more_vert,
+                        color: vibrantPurple,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],
@@ -1009,54 +987,53 @@ class _RemindersPageState extends State<RemindersPage>
 
   Widget _buildEmptyState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  deepPurple.withOpacity(0.1),
-                  vibrantPurple.withOpacity(0.1),
-                ],
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    vibrantPurple.withOpacity(0.2),
+                    primaryPurple.withOpacity(0.2),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(20),
               ),
-              borderRadius: BorderRadius.circular(60),
+              child: const Icon(
+                Icons.notifications_off_outlined,
+                size: 50,
+                color: vibrantPurple,
+              ),
             ),
-            child: Icon(
-              Icons.notifications_off_outlined,
-              size: 60,
-              color: deepPurple.withOpacity(0.3),
+            const SizedBox(height: 24),
+            const Text(
+              'No reminders added yet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: deepPurple,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'No reminders yet',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w700,
-              color: deepPurple,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            child: Text(
-              'Tap the microphone button and say "Add new reminder"',
+            const SizedBox(height: 8),
+            Text(
+              'Tap the button below to add your first reminder',
               style: TextStyle(
                 fontSize: 14,
                 color: deepPurple.withOpacity(0.5),
               ),
               textAlign: TextAlign.center,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // 🎤 Voice Overlay UI
   Widget _buildVoiceOverlay() {
     return Container(
       color: Colors.black.withOpacity(0.85),
@@ -1078,7 +1055,6 @@ class _RemindersPageState extends State<RemindersPage>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Animated microphone
               AnimatedBuilder(
                 animation: _pulseController,
                 builder: (context, child) {
@@ -1088,7 +1064,7 @@ class _RemindersPageState extends State<RemindersPage>
                       width: 100,
                       height: 100,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
+                        gradient: const LinearGradient(
                           colors: [vibrantPurple, primaryPurple],
                         ),
                         shape: BoxShape.circle,
@@ -1109,21 +1085,17 @@ class _RemindersPageState extends State<RemindersPage>
                   );
                 },
               ),
-
               const SizedBox(height: 30),
-
               Text(
                 _isListening ? 'Listening...' : _getVoiceStepText(),
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                   color: deepPurple,
                 ),
                 textAlign: TextAlign.center,
               ),
-
               const SizedBox(height: 16),
-
               Text(
                 _getVoiceStepHint(),
                 style: TextStyle(
@@ -1133,10 +1105,7 @@ class _RemindersPageState extends State<RemindersPage>
                 ),
                 textAlign: TextAlign.center,
               ),
-
               const SizedBox(height: 30),
-
-              // Cancel button
               Semantics(
                 label: 'Cancel voice input',
                 button: true,
@@ -1156,12 +1125,12 @@ class _RemindersPageState extends State<RemindersPage>
                       horizontal: 40,
                       vertical: 16,
                     ),
-                    side: BorderSide(color: vibrantPurple, width: 2),
+                    side: const BorderSide(color: vibrantPurple, width: 2),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: Text(
+                  child: const Text(
                     'Cancel',
                     style: TextStyle(
                       fontSize: 16,
@@ -1213,29 +1182,54 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   Widget _buildVoiceAddButton() {
-    return Semantics(
-      label: 'Add new reminder with voice. Press and hold to speak',
-      button: true,
-      hint: 'Double tap to add a new reminder using voice commands',
-      child: GestureDetector(
-        onTap: () {
-          _startVoiceReminder();
-        },
-        child: Container(
-          width: 70,
-          height: 70,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
-            borderRadius: BorderRadius.circular(35),
-            boxShadow: [
-              BoxShadow(
-                color: vibrantPurple.withOpacity(0.5),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 35),
+      child: Semantics(
+        label: 'Add new reminder with voice',
+        button: true,
+        hint: 'Double tap to add a new reminder using voice commands',
+        child: GestureDetector(
+          onTap: _startVoiceReminder,
+          child: Container(
+            width: double.infinity,
+            height: 58,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [deepPurple, vibrantPurple],
               ),
-            ],
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: vibrantPurple.withOpacity(0.4),
+                  blurRadius: 15,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.mic, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Add Reminder',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: const Icon(Icons.mic, color: Colors.white, size: 36),
         ),
       ),
     );
@@ -1251,101 +1245,116 @@ class _RemindersPageState extends State<RemindersPage>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(30),
           ),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
           child: Container(
-            padding: const EdgeInsets.all(24),
+            width: double.infinity,
+            constraints: const BoxConstraints(maxWidth: 500),
+            padding: const EdgeInsets.all(30),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(40),
-                  ),
-                  child: const Icon(
-                    Icons.delete_outline,
-                    size: 40,
-                    color: Colors.red,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Delete Reminder?',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: deepPurple,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Are you sure you want to delete "${reminder.title}"?',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: deepPurple.withOpacity(0.6),
-                  ),
-                  textAlign: TextAlign.center,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 13),
+                    const Text(
+                      'Delete Reminder',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: deepPurple,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
+                RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    text: 'Are you sure you want to delete ',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: deepPurple,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: '"${reminder.title}"',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: deepPurple,
+                          fontSize: 17,
+                        ),
+                      ),
+                      const TextSpan(text: '?'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 60),
                 Row(
                   children: [
                     Expanded(
-                      child: Semantics(
-                        label: 'Cancel deletion',
-                        button: true,
-                        child: OutlinedButton(
-                          onPressed: () {
-                            _hapticFeedback();
-                            _speak('Cancelled');
-                            Navigator.pop(context);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: ElevatedButton(
+                        onPressed: () {
+                          _hapticFeedback();
+                          _speak('Cancelled');
+                          Navigator.pop(context);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          backgroundColor: deepPurple.withOpacity(0.15),
+                          foregroundColor: deepPurple,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                             side: BorderSide(
-                              color: Colors.grey.shade300,
-                              width: 2,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              color: vibrantPurple.withOpacity(0.35),
+                              width: 1.3,
                             ),
                           ),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.grey.shade600,
-                            ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 16),
                     Expanded(
-                      child: Semantics(
-                        label: 'Confirm delete reminder',
-                        button: true,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            _hapticFeedback();
-                            Navigator.pop(context);
-                            await _deleteReminderFromFirestore(reminder.id);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            backgroundColor: Colors.red,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          _hapticFeedback();
+                          Navigator.pop(context);
+                          await _deleteReminderFromFirestore(reminder.id);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          backgroundColor: Colors.red,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Text(
-                            'Delete',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
+                        ),
+                        child: const Text(
+                          'Delete',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -1514,45 +1523,36 @@ class _RemindersPageState extends State<RemindersPage>
     bool isActive = false,
     required VoidCallback onTap,
   }) {
-    return Semantics(
-      label: '$label button',
-      button: true,
-      selected: isActive,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: isActive
-                ? Colors.white.withOpacity(0.25)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            border: isActive
-                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
-                : null,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white.withOpacity(0.25) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: isActive
+              ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
+              : null,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
+              size: 22,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              style: TextStyle(
                 color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                size: 22,
+                fontSize: 13,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
               ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  color: isActive
-                      ? Colors.white
-                      : Colors.white.withOpacity(0.9),
-                  fontSize: 11,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
