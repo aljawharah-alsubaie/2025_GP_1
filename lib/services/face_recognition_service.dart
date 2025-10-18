@@ -35,13 +35,15 @@ class FaceRecognitionService {
       print('🚀 Loading face recognition model...');
       
       final modelPaths = [
-        'assets/models/w600k_r50.tflite',
-        'assets/models/1k3d68_float16.tflite',
-        'assets/models/2d106det_float16.tflite',
-        'assets/models/det_10g_simplified_float16.tflite',
-        'assets/models/1k3d68_float32.tflite',
-        'assets/models/2d106det_float32.tflite',
-        'assets/models/det_10g_simplified_float32.tflite',
+  // ✅ ابدأ بالموديلات الأبسط أولاً
+  'assets/models/1k3d68_float16.tflite',
+  'assets/models/det_10g_simplified_float16.tflite',
+  'assets/models/2d106det_float16.tflite',
+  // 'assets/models/w600k_r50.tflite', // علّق على هذا مؤقتاً
+  'assets/models/1k3d68_float32.tflite',
+  'assets/models/2d106det_float32.tflite',
+  'assets/models/det_10g_simplified_float32.tflite',
+
       ];
       
       for (String path in modelPaths) {
@@ -54,12 +56,23 @@ class FaceRecognitionService {
           print('📊 Input shape: ${inputDetails.shape}, type: ${inputDetails.type}');
           print('📊 Output shape: ${outputDetails.shape}, type: ${outputDetails.type}');
           
+          // تحديث EMBEDDING_SIZE تلقائياً من الموديل
           if (outputDetails.shape.length == 4) {
             _updateEmbeddingSize(outputDetails.shape[3]);
           } else if (outputDetails.shape.length == 2) {
-            _updateEmbeddingSize(outputDetails.shape[1]);
+             _updateEmbeddingSize(outputDetails.shape[1]);
           } else if (outputDetails.shape.length == 1) {
-            _updateEmbeddingSize(outputDetails.shape[0]);
+  _updateEmbeddingSize(outputDetails.shape[0]);
+          }
+
+          // ✅ أضف هذا التحقق من Input Shape
+          final expectedInputShape = inputDetails.shape;
+          if (expectedInputShape[1] != INPUT_SIZE || 
+             expectedInputShape[2] != INPUT_SIZE) {
+             print('⚠️ Model expects different input size: ${expectedInputShape[1]}x${expectedInputShape[2]}');
+             print('⚠️ Current INPUT_SIZE is $INPUT_SIZE, model needs ${expectedInputShape[1]}');
+           // استمر مع الموديل التالي
+           continue;
           }
           
           _isInitialized = true;

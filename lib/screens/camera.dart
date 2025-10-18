@@ -10,8 +10,9 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import '../services/face_recognition_service.dart';
+import '../services/insightface_pipeline.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class CameraScreen extends StatefulWidget {
   final String mode; // 'text', 'color', or 'face'
@@ -104,22 +105,43 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _initFaceRecognition() async {
-    final initialized = await FaceRecognitionService.initialize();
+    print('🚀 Initializing InsightFace Pipeline...');
+    final initialized = await InsightFacePipeline.initialize();
     if (!initialized) {
-      print('Failed to initialize face recognition');
+      print('❌ Failed to initialize InsightFace Pipeline');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to initialize face recognition'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } else {
+      print('✅ InsightFace Pipeline initialized successfully');
+      // Load embeddings from Firestore
+      await _loadFaceEmbeddings();
     }
-    // Load embeddings from Firestore
-    await _loadFaceEmbeddings();
   }
 
   Future<void> _loadFaceEmbeddings() async {
     try {
+      print('📦 Loading face embeddings from Firestore...');
+      
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        print('❌ No user logged in');
+        return;
+      }
+
       final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
           .collection('face_embeddings')
           .get();
 
       if (snapshot.docs.isEmpty) {
-        print('No face embeddings found');
+        print('⚠️ No face embeddings found in Firestore');
         return;
       }
 
@@ -135,10 +157,20 @@ class _CameraScreenState extends State<CameraScreen> {
         }
       }
 
-      FaceRecognitionService.loadMultipleEmbeddings(allEmbeddings);
-      print('✅ Loaded ${allEmbeddings.length} persons for recognition');
+      InsightFacePipeline.loadMultipleEmbeddings(allEmbeddings);
+      print('✅ Loaded embeddings for ${allEmbeddings.length} persons');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Loaded ${allEmbeddings.length} person(s)'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
-      print('Error loading face embeddings: $e');
+      print('❌ Error loading face embeddings: $e');
     }
   }
 
@@ -321,6 +353,7 @@ class _CameraScreenState extends State<CameraScreen> {
         } else {
           textToSpeak = "No text detected in the image";
         }
+        
       } else if (_processingMode == 'color') {
         String detectedColor = await _detectColorFromImage(imagePath);
         setState(() {
@@ -329,12 +362,15 @@ class _CameraScreenState extends State<CameraScreen> {
           _faceResult = null;
         });
         textToSpeak = detectedColor;
+        
       } else if (_processingMode == 'face') {
-        // Face Recognition
-      final result = await FaceRecognitionService.recognizeFace(
-        File(imagePath), // استخدم imagePath اللي موجود
-        threshold: 0.35,
-);
+        // Face Recognition using InsightFace Pipeline
+        print('🔍 Starting face recognition with full pipeline...');
+        
+        final result = await InsightFacePipeline.recognizeFace(
+          File(imagePath),
+          threshold: 0.35,
+        );
 
         setState(() {
           _faceResult = result;
@@ -345,14 +381,17 @@ class _CameraScreenState extends State<CameraScreen> {
         if (result != null) {
           if (result.isMatch) {
             textToSpeak = "Face recognized. This is ${result.personId}";
+            print('✅ Match found: ${result.personId}');
           } else {
             textToSpeak = "Face detected but not recognized. Unknown person";
+            print('⚠️ No match found');
           }
           
           // Show result dialog
           _showFaceResultDialog(result, imagePath);
         } else {
           textToSpeak = "No face detected in the image";
+          print('❌ No face detected');
         }
       }
 
@@ -389,15 +428,20 @@ class _CameraScreenState extends State<CameraScreen> {
               SnackBar(
                 content: Text(successMessage),
                 backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
               ),
             );
           }
         }
       }
     } catch (e) {
+      print('❌ Processing error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {

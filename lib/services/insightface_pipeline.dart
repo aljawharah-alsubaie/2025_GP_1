@@ -1,0 +1,537 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:math' as math;
+import 'package:tflite_flutter/tflite_flutter.dart';
+import 'package:image/image.dart' as img;
+import 'dart:ui';
+
+class InsightFacePipeline {
+  // الموديلات الثلاثة
+  static Interpreter? _detectionModel;    // det_10g
+  static Interpreter? _landmarkModel;     // 1k3d68
+  static Interpreter? _recognitionModel;  // w600k_r50
+  
+  static bool _isInitialized = false;
+  
+  // إعدادات
+  static const int DETECTION_INPUT_SIZE = 640;
+  static const int LANDMARK_INPUT_SIZE = 192;
+  static const int RECOGNITION_INPUT_SIZE = 112;
+  static int EMBEDDING_SIZE = 512;
+  
+  static Map<String, List<List<double>>> _storedMultipleEmbeddings = {};
+  static const double DEFAULT_THRESHOLD = 0.35;
+  
+  /// تهيئة الموديلات الثلاثة
+  static Future<bool> initialize() async {
+    if (_isInitialized) return true;
+    
+    try {
+      print('🚀 Loading InsightFace Pipeline (3 models)...');
+      
+      // 1️⃣ تحميل موديل Face Detection
+      print('📦 Loading detection model...');
+      try {
+        _detectionModel = await Interpreter.fromAsset(
+          'assets/models/det_10g_simplified_float16.tflite'
+        );
+        print('✅ Detection model loaded');
+      } catch (e) {
+        print('❌ Detection model failed: $e');
+        return false;
+      }
+      
+      // 2️⃣ تحميل موديل Landmarks
+      print('📦 Loading landmark model...');
+      try {
+        _landmarkModel = await Interpreter.fromAsset(
+          'assets/models/2d106det_float16.tflite'
+        );
+        print('✅ Landmark model loaded');
+      } catch (e) {
+        print('❌ Landmark model failed: $e');
+        return false;
+      }
+      
+      // 3️⃣ تحميل موديل Recognition
+      print('📦 Loading recognition model...');
+      try {
+        _recognitionModel = await Interpreter.fromAsset(
+          'assets/models/w600k_r50.tflite'
+        );
+        
+        final outputShape = _recognitionModel!.getOutputTensor(0).shape;
+        print('📊 Recognition output shape: $outputShape');
+        
+        if (outputShape.length == 2) {
+          EMBEDDING_SIZE = outputShape[1];
+        } else if (outputShape.length == 4) {
+          EMBEDDING_SIZE = outputShape[3];
+        }
+        
+        print('✅ Recognition model loaded (embedding: $EMBEDDING_SIZE)');
+      } catch (e) {
+        print('❌ Recognition model failed: $e');
+        return false;
+      }
+      
+      _isInitialized = true;
+      print('✅ InsightFace Pipeline initialized successfully!');
+      return true;
+      
+    } catch (e) {
+      print('❌ Pipeline initialization error: $e');
+      return false;
+    }
+  }
+  
+  /// 🆕 كشف وجه واحد (متوافق مع face_management)
+  static Future<Rect?> detectFace(File imageFile) async {
+    final faces = await detectFaces(imageFile);
+    if (faces == null || faces.isEmpty) return null;
+    return faces[0]; // أول وجه فقط
+  }
+  
+  /// 1️⃣ المرحلة الأولى: Face Detection
+  static Future<List<Rect>?> detectFaces(File imageFile) async {
+    try {
+      print('🔍 Stage 1: Face Detection');
+      
+      final imageBytes = await imageFile.readAsBytes();
+      final originalImage = img.decodeImage(imageBytes);
+      if (originalImage == null) return null;
+      
+      // تغيير الحجم لـ 640x640
+      final resized = img.copyResize(
+        originalImage,
+        width: DETECTION_INPUT_SIZE,
+        height: DETECTION_INPUT_SIZE,
+        interpolation: img.Interpolation.cubic,
+      );
+      
+      // تحويل إلى tensor
+      final input = _imageToFloat32List(resized, DETECTION_INPUT_SIZE);
+      final inputTensor = input.reshape([1, DETECTION_INPUT_SIZE, DETECTION_INPUT_SIZE, 3]);
+      
+      // تشغيل الموديل
+      final outputShape = _detectionModel!.getOutputTensor(0).shape;
+      final output = List.generate(
+        outputShape[0],
+        (i) => List.generate(
+          outputShape[1],
+          (j) => List.filled(outputShape[2], 0.0),
+        ),
+      );
+      
+      _detectionModel!.run(inputTensor, output);
+      
+      // استخراج bounding boxes
+      List<Rect> faces = _parseFaceDetections(output, originalImage.width, originalImage.height);
+      
+      print('✅ Detected ${faces.length} faces');
+      return faces;
+      
+    } catch (e) {
+      print('❌ Face detection error: $e');
+      return null;
+    }
+  }
+  
+  /// 🆕 قص الوجه من الصورة (متوافق مع face_management)
+  static Future<img.Image?> cropFace(File imageFile, Rect faceRect) async {
+    try {
+      final imageBytes = await imageFile.readAsBytes();
+      final originalImage = img.decodeImage(imageBytes);
+      if (originalImage == null) return null;
+      
+      // التأكد من أن الإحداثيات داخل حدود الصورة
+      final x = math.max(0, faceRect.left.toInt());
+      final y = math.max(0, faceRect.top.toInt());
+      final width = math.min(
+        faceRect.width.toInt(),
+        originalImage.width - x,
+      );
+      final height = math.min(
+        faceRect.height.toInt(),
+        originalImage.height - y,
+      );
+      
+      // قص الوجه
+      final croppedFace = img.copyCrop(
+        originalImage,
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+      );
+      
+      print('✅ Face cropped: ${width}x${height}');
+      return croppedFace;
+      
+    } catch (e) {
+      print('❌ Crop face error: $e');
+      return null;
+    }
+  }
+  
+  /// 2️⃣ المرحلة الثانية: Landmark Detection
+  static Future<List<Offset>?> detectLandmarks(img.Image faceImage) async {
+    try {
+      print('📍 Stage 2: Landmark Detection');
+      
+      // تغيير الحجم لـ 192x192
+      final resized = img.copyResize(
+        faceImage,
+        width: LANDMARK_INPUT_SIZE,
+        height: LANDMARK_INPUT_SIZE,
+        interpolation: img.Interpolation.cubic,
+      );
+      
+      final input = _imageToFloat32List(resized, LANDMARK_INPUT_SIZE);
+      final inputTensor = input.reshape([1, LANDMARK_INPUT_SIZE, LANDMARK_INPUT_SIZE, 3]);
+      
+      // تشغيل الموديل
+      final outputShape = _landmarkModel!.getOutputTensor(0).shape;
+      
+      List<double> output;
+      if (outputShape.length == 2) {
+        final outputTensor = List.generate(1, (i) => List.filled(outputShape[1], 0.0));
+        _landmarkModel!.run(inputTensor, outputTensor);
+        output = outputTensor[0];
+      } else {
+        final outputTensor = List.filled(outputShape.reduce((a, b) => a * b), 0.0);
+        _landmarkModel!.run(inputTensor, outputTensor);
+        output = outputTensor;
+      }
+      
+      // تحويل إلى landmarks (106 نقطة × 2 إحداثيات)
+      List<Offset> landmarks = [];
+      for (int i = 0; i < output.length; i += 2) {
+        landmarks.add(Offset(output[i], output[i + 1]));
+      }
+      
+      print('✅ Detected ${landmarks.length} landmarks');
+      return landmarks;
+      
+    } catch (e) {
+      print('❌ Landmark detection error: $e');
+      return null;
+    }
+  }
+  
+  /// 3️⃣ المرحلة الثالثة: Face Recognition (Embedding)
+  static Future<List<double>?> generateEmbedding(img.Image alignedFace) async {
+    try {
+      print('🎯 Stage 3: Face Recognition');
+      
+      // تغيير الحجم لـ 112x112
+      final resized = img.copyResize(
+        alignedFace,
+        width: RECOGNITION_INPUT_SIZE,
+        height: RECOGNITION_INPUT_SIZE,
+        interpolation: img.Interpolation.cubic,
+      );
+      
+      final input = _imageToFloat32List(resized, RECOGNITION_INPUT_SIZE);
+      final inputTensor = input.reshape([1, RECOGNITION_INPUT_SIZE, RECOGNITION_INPUT_SIZE, 3]);
+      
+      final outputShape = _recognitionModel!.getOutputTensor(0).shape;
+      print('📊 Recognition output: $outputShape');
+      
+      List<double> rawEmbedding;
+      
+      if (outputShape.length == 4) {
+        final output = List.generate(
+          outputShape[0],
+          (i) => List.generate(
+            outputShape[1],
+            (j) => List.generate(
+              outputShape[2],
+              (k) => List.filled(outputShape[3], 0.0),
+            ),
+          ),
+        );
+        _recognitionModel!.run(inputTensor, output);
+        rawEmbedding = List<double>.from(output[0][0][0]);
+      } else if (outputShape.length == 2) {
+        final output = List.generate(1, (i) => List.filled(outputShape[1], 0.0));
+        _recognitionModel!.run(inputTensor, output);
+        rawEmbedding = List<double>.from(output[0]);
+      } else {
+        print('❌ Unsupported output shape');
+        return null;
+      }
+      
+      // L2 Normalization
+      final normalized = _normalizeEmbedding(rawEmbedding);
+      
+      print('✅ Embedding generated: ${normalized.length}D');
+      return normalized;
+      
+    } catch (e) {
+      print('❌ Recognition error: $e');
+      return null;
+    }
+  }
+  
+  /// 🔄 Pipeline كاملة: Detection → Landmarks → Recognition
+  static Future<List<double>?> processImageFull(File imageFile) async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+    
+    try {
+      print('=== 🚀 InsightFace Full Pipeline ===');
+      
+      // 1️⃣ Face Detection
+      final faces = await detectFaces(imageFile);
+      if (faces == null || faces.isEmpty) {
+        print('❌ No faces detected');
+        return null;
+      }
+      
+      // استخدم أول وجه فقط
+      final faceRect = faces[0];
+      
+      // قص الوجه
+      final imageBytes = await imageFile.readAsBytes();
+      final originalImage = img.decodeImage(imageBytes);
+      if (originalImage == null) return null;
+      
+      final croppedFace = img.copyCrop(
+        originalImage,
+        x: faceRect.left.toInt(),
+        y: faceRect.top.toInt(),
+        width: faceRect.width.toInt(),
+        height: faceRect.height.toInt(),
+      );
+      
+      // 2️⃣ Landmark Detection
+      final landmarks = await detectLandmarks(croppedFace);
+      if (landmarks == null) {
+        print('⚠️ Landmarks not detected, proceeding without alignment');
+      }
+      
+      // 3️⃣ Face Alignment (اختياري - إذا تبي دقة أعلى)
+      final alignedFace = landmarks != null 
+        ? _alignFace(croppedFace, landmarks)
+        : croppedFace;
+      
+      // 4️⃣ Face Recognition
+      final embedding = await generateEmbedding(alignedFace);
+      
+      if (embedding != null) {
+        print('✅ Full pipeline completed successfully!');
+      }
+      
+      return embedding;
+      
+    } catch (e) {
+      print('❌ Pipeline error: $e');
+      return null;
+    }
+  }
+  
+  /// محاذاة الوجه باستخدام Landmarks
+  static img.Image _alignFace(img.Image face, List<Offset> landmarks) {
+    // هنا يمكن تطبيق Affine Transformation
+    // لكن للبساطة، نرجع الوجه كما هو
+    // يمكن تحسين هذا لاحقاً
+    return face;
+  }
+  
+  /// تحويل صورة إلى Float32List
+  static Float32List _imageToFloat32List(img.Image image, int size) {
+    final input = Float32List(size * size * 3);
+    int pixelIndex = 0;
+    
+    for (int y = 0; y < size; y++) {
+      for (int x = 0; x < size; x++) {
+        final pixel = image.getPixel(x, y);
+        input[pixelIndex] = (pixel.r / 127.5) - 1.0;
+        input[pixelIndex + 1] = (pixel.g / 127.5) - 1.0;
+        input[pixelIndex + 2] = (pixel.b / 127.5) - 1.0;
+        pixelIndex += 3;
+      }
+    }
+    
+    return input;
+  }
+  
+  /// استخراج bounding boxes من نتائج Detection
+  static List<Rect> _parseFaceDetections(List<List<List<double>>> output, int imgWidth, int imgHeight) {
+    List<Rect> faces = [];
+    
+    // هذا يعتمد على شكل output الموديل
+    // قد تحتاج تعديل حسب موديلك
+    for (var detection in output[0]) {
+      if (detection[4] > 0.5) { // confidence threshold
+        final x = detection[0] * imgWidth;
+        final y = detection[1] * imgHeight;
+        final width = detection[2] * imgWidth - x;
+        final height = detection[3] * imgHeight - y;
+        
+        faces.add(Rect.fromLTWH(x, y, width, height));
+      }
+    }
+    
+    return faces;
+  }
+  
+  /// L2 Normalization
+  static List<double> _normalizeEmbedding(List<double> embedding) {
+    double norm = 0.0;
+    for (double value in embedding) {
+      norm += value * value;
+    }
+    norm = math.sqrt(norm);
+    
+    if (norm == 0.0 || norm.isNaN || norm.isInfinite) {
+      return embedding;
+    }
+    
+    return embedding.map((value) => value / norm).toList();
+  }
+  
+  /// حساب التشابه
+  static double calculateSimilarity(List<double> emb1, List<double> emb2) {
+    if (emb1.length != emb2.length) return 0.0;
+    
+    double dotProduct = 0.0;
+    for (int i = 0; i < emb1.length; i++) {
+      dotProduct += emb1[i] * emb2[i];
+    }
+    
+    return math.max(0.0, math.min(1.0, dotProduct));
+  }
+  
+  /// 🆕 تخزين embedding (متوافق مع face_management)
+  static Future<bool> storeFaceEmbedding(String personId, File imageFile) async {
+    final embedding = await processImageFull(imageFile);
+    
+    if (embedding != null && embedding.isNotEmpty) {
+      if (_storedMultipleEmbeddings.containsKey(personId)) {
+        _storedMultipleEmbeddings[personId]!.add(embedding);
+      } else {
+        _storedMultipleEmbeddings[personId] = [embedding];
+      }
+      print('✅ Stored embedding for $personId (${_storedMultipleEmbeddings[personId]!.length} total)');
+      return true;
+    }
+    
+    print('❌ Failed to store embedding for $personId');
+    return false;
+  }
+  
+  /// التعرف على وجه
+  static Future<RecognitionResult?> recognizeFace(
+    File imageFile, {
+    double threshold = DEFAULT_THRESHOLD,
+  }) async {
+    final queryEmbedding = await processImageFull(imageFile);
+    
+    if (queryEmbedding == null) {
+      return null;
+    }
+    
+    if (_storedMultipleEmbeddings.isEmpty) {
+      return RecognitionResult(
+        personId: 'unknown',
+        similarity: 0.0,
+        isMatch: false,
+      );
+    }
+    
+    String? bestMatchId;
+    double highestSimilarity = -1.0;
+    
+    for (var entry in _storedMultipleEmbeddings.entries) {
+      for (var embedding in entry.value) {
+        final similarity = calculateSimilarity(queryEmbedding, embedding);
+        if (similarity > highestSimilarity) {
+          highestSimilarity = similarity;
+          bestMatchId = entry.key;
+        }
+      }
+    }
+    
+    final isMatch = highestSimilarity >= threshold;
+    
+    return RecognitionResult(
+      personId: bestMatchId ?? 'unknown',
+      similarity: highestSimilarity,
+      isMatch: isMatch,
+      threshold: threshold,
+    );
+  }
+  
+  /// تحميل embeddings
+  static void loadMultipleEmbeddings(Map<String, List<List<double>>> embeddings) {
+    _storedMultipleEmbeddings = Map.from(embeddings);
+    print('✅ Loaded ${embeddings.length} persons');
+  }
+  
+  /// الحصول على embeddings
+  static Map<String, dynamic> getStoredEmbeddings() {
+    Map<String, dynamic> result = {};
+    _storedMultipleEmbeddings.forEach((personId, embeddings) {
+      result[personId] = embeddings;
+    });
+    return result;
+  }
+  
+  /// حذف embeddings
+  static void removeFaceEmbedding(String personId) {
+    _storedMultipleEmbeddings.remove(personId);
+    print('🗑️ Removed embeddings for $personId');
+  }
+  
+  /// مسح كل البيانات
+  static void clearStoredEmbeddings() {
+    _storedMultipleEmbeddings.clear();
+  }
+  
+  /// تنظيف
+  static void dispose() {
+    _detectionModel?.close();
+    _landmarkModel?.close();
+    _recognitionModel?.close();
+    _detectionModel = null;
+    _landmarkModel = null;
+    _recognitionModel = null;
+    _isInitialized = false;
+    _storedMultipleEmbeddings.clear();
+  }
+  
+  static Map<String, dynamic> getStatistics() {
+    int totalEmbeddings = 0;
+    _storedMultipleEmbeddings.forEach((_, embeddings) {
+      totalEmbeddings += embeddings.length;
+    });
+    
+    return {
+      'total_persons': _storedMultipleEmbeddings.length,
+      'total_embeddings': totalEmbeddings,
+      'embedding_size': EMBEDDING_SIZE,
+    };
+  }
+}
+
+class RecognitionResult {
+  final String personId;
+  final double similarity;
+  final bool isMatch;
+  final double threshold;
+  
+  RecognitionResult({
+    required this.personId,
+    required this.similarity,
+    required this.isMatch,
+    this.threshold = 0.35,
+  });
+  
+  @override
+  String toString() {
+    return 'RecognitionResult(personId: $personId, similarity: ${(similarity * 100).toStringAsFixed(1)}%, isMatch: $isMatch)';
+  }
+}
