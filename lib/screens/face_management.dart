@@ -273,75 +273,100 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       List<String> photoUrls = [];
       int successCount = 0;
       int failedCount = 0;
+      List<String> failReasons = [];
+
+      print('📸 Processing ${_selectedImages.length} images for $personName');
 
       // معالجة كل الصور
       for (int i = 0; i < _selectedImages.length; i++) {
         try {
+          print('🔄 Processing image ${i + 1}/${_selectedImages.length}');
+          
           // 1. كشف الوجه
           final faceRect = await InsightFacePipeline.detectFace(
             _selectedImages[i],
           );
 
-          if (faceRect != null) {
-            // 2. قص الوجه
-            final croppedFace = await InsightFacePipeline.cropFace(
-              _selectedImages[i],
-              faceRect,
-            );
+          if (faceRect == null) {
+            failedCount++;
+            failReasons.add('Image ${i + 1}: No face detected');
+            print('❌ Image $i: No face detected');
+            continue;
+          }
 
-            if (croppedFace != null) {
-              // 3. حفظ الصورة المقصوصة مؤقتاً
-              final tempDir = await Directory.systemTemp.createTemp();
-              final tempFile = File('${tempDir.path}/face_$i.jpg');
-              final jpg = img.encodeJpg(croppedFace);
-              await tempFile.writeAsBytes(jpg);
+          print('✅ Image $i: Face detected at ${faceRect.width.toInt()}x${faceRect.height.toInt()}');
 
-              // 4. استخراج وحفظ الـ embedding - التعديل الأساسي هنا
-              final success = await InsightFacePipeline.storeFaceEmbedding(
-                personName,
-                tempFile,
-              );
+          // 2. قص الوجه
+          final croppedFace = await InsightFacePipeline.cropFace(
+            _selectedImages[i],
+            faceRect,
+          );
 
-              if (success) {
-                successCount++;
+          if (croppedFace == null) {
+            failedCount++;
+            failReasons.add('Image ${i + 1}: Failed to crop face');
+            print('❌ Image $i: Failed to crop face');
+            continue;
+          }
 
-                // 5. رفع الصورة المقصوصة إلى Firebase Storage
-                final storageRef = FirebaseStorage.instance
-                    .ref()
-                    .child('users')
-                    .child(user.uid)
-                    .child('faces')
-                    .child(personName)
-                    .child('${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
+          // 3. حفظ الصورة المقصوصة مؤقتاً
+          final tempDir = await Directory.systemTemp.createTemp();
+          final tempFile = File('${tempDir.path}/face_$i.jpg');
+          final jpg = img.encodeJpg(croppedFace);
+          await tempFile.writeAsBytes(jpg);
 
-                final uploadTask = await storageRef.putFile(tempFile);
-                final photoUrl = await uploadTask.ref.getDownloadURL();
-                photoUrls.add(photoUrl);
-              } else {
-                failedCount++;
-                print('❌ Failed to extract embedding for image $i');
-              }
+          print('💾 Image $i: Saved cropped face to temp file');
 
-              // تنظيف الملفات المؤقتة
-              try {
-                await tempFile.delete();
-                await tempDir.delete();
-              } catch (e) {
-                print('Cleanup error: $e');
-              }
-            } else {
-              failedCount++;
-              print('❌ Failed to crop face for image $i');
+          // 4. استخراج وحفظ الـ embedding
+          final success = await InsightFacePipeline.storeFaceEmbedding(
+            personName,
+            tempFile,
+          );
+
+          if (success) {
+            successCount++;
+            print('✅ Image $i: Embedding stored successfully');
+
+            // 5. رفع الصورة المقصوصة إلى Firebase Storage
+            try {
+              final storageRef = FirebaseStorage.instance
+                  .ref()
+                  .child('users')
+                  .child(user.uid)
+                  .child('faces')
+                  .child(personName)
+                  .child('${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
+
+              final uploadTask = await storageRef.putFile(tempFile);
+              final photoUrl = await uploadTask.ref.getDownloadURL();
+              photoUrls.add(photoUrl);
+              print('☁️ Image $i: Uploaded to Firebase Storage');
+            } catch (e) {
+              print('⚠️ Image $i: Failed to upload to storage: $e');
+              // لكن الـ embedding محفوظ، فنعتبرها نجاح
             }
           } else {
             failedCount++;
-            print('❌ No face detected in image $i');
+            failReasons.add('Image ${i + 1}: Failed to extract face features');
+            print('❌ Image $i: Failed to extract embedding');
           }
-        } catch (e) {
+
+          // تنظيف الملفات المؤقتة
+          try {
+            await tempFile.delete();
+            await tempDir.delete();
+          } catch (e) {
+            print('⚠️ Cleanup error: $e');
+          }
+        } catch (e, stackTrace) {
           print('❌ Error processing image $i: $e');
+          print('Stack trace: $stackTrace');
           failedCount++;
+          failReasons.add('Image ${i + 1}: Processing error');
         }
       }
+
+      print('📊 Results: Success=$successCount, Failed=$failedCount');
 
       // حفظ البيانات في Firestore إذا نجحت صورة واحدة على الأقل
       if (successCount > 0) {
@@ -371,15 +396,23 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           _showSuccessDialog(personName, successCount, failedCount);
         }
       } else {
+        // كل الصور فشلت
         if (mounted) {
-          _showSnackBar(
-            'Failed to process any images with faces. Please try again with clearer photos.',
-            Colors.red,
-          );
+          String errorMsg = 'Failed to process any images with faces.\n\n';
+          if (failReasons.isNotEmpty) {
+            errorMsg += 'Issues found:\n${failReasons.take(3).join('\n')}';
+            if (failReasons.length > 3) {
+              errorMsg += '\n... and ${failReasons.length - 3} more';
+            }
+          }
+          errorMsg += '\n\nTips:\n• Use well-lit photos\n• Face should be clearly visible\n• Avoid blurry images';
+          
+          _showDetailedErrorDialog(errorMsg);
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Error in _addPerson: $e');
+      print('Stack trace: $stackTrace');
       if (mounted) {
         _showSnackBar('Error adding person: $e', Colors.red);
       }
@@ -391,6 +424,108 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         });
       }
     }
+  }
+
+  void _showDetailedErrorDialog(String message) {
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        contentPadding: EdgeInsets.zero,
+        content: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.orange,
+                        size: 40,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Processing Failed',
+                      style: TextStyle(
+                        color: deepPurple,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 22,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      message,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: deepPurple.withOpacity(0.8),
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          _hapticFeedback();
+                          Navigator.pop(context);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: deepPurple,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Try Again',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showSuccessDialog(String personName, int success, int failed) {

@@ -426,9 +426,6 @@ class InsightFacePipeline {
       print('🔍 Parsing detections...');
       print('📊 Output shape: $outputShape');
       
-      // SCRFD/RetinaFace format: [batch, num_boxes, values]
-      // values format: [x1, y1, x2, y2, score, landmarks...]
-      
       List<List<double>> detections = [];
       
       if (outputShape.length == 3) {
@@ -460,38 +457,74 @@ class InsightFacePipeline {
       }
       
       // طباعة شكل أول detection للتحليل
-      if (detections.isNotEmpty) {
+      if (detections.isNotEmpty && detections[0].isNotEmpty) {
         print('📋 First detection length: ${detections[0].length}');
-        print('📋 First detection sample: ${detections[0].take(10).toList()}');
+        print('📋 First detection values: ${detections[0].toString()}');
       }
       
-      const double confidenceThreshold = 0.5;
+      const double confidenceThreshold = 0.4;
       int validDetections = 0;
       
       for (int i = 0; i < detections.length; i++) {
         final detection = detections[i];
         
         // تحقق من طول الـ detection
-        if (detection.length < 5) {
+        if (detection.length < 3) {
           print('⚠️ Detection $i has invalid length: ${detection.length}');
           continue;
         }
         
-        // الصيغة المتوقعة: [x1, y1, x2, y2, score, ...]
-        final score = detection[4];
+        // محاولة تحديد شكل الـ output
+        // الأشكال المحتملة:
+        // 1. [score, x1, y1, x2, y2, ...]
+        // 2. [x1, y1, x2, y2, score, ...]
+        // 3. [x1, y1, w, h, score, ...]
+        
+        double score;
+        double x1, y1, x2, y2;
+        
+        // جرب كل الاحتمالات
+        if (detection.length >= 5) {
+          // احتمال 1: score في البداية
+          if (detection[0] >= 0 && detection[0] <= 1) {
+            score = detection[0];
+            x1 = detection[1];
+            y1 = detection[2];
+            x2 = detection[3];
+            y2 = detection[4];
+          }
+          // احتمال 2: score في النهاية (index 4)
+          else if (detection[4] >= 0 && detection[4] <= 1) {
+            x1 = detection[0];
+            y1 = detection[1];
+            x2 = detection[2];
+            y2 = detection[3];
+            score = detection[4];
+          }
+          // احتمال 3: تجربة x,y,w,h,score
+          else {
+            x1 = detection[0];
+            y1 = detection[1];
+            x2 = x1 + detection[2]; // width
+            y2 = y1 + detection[3]; // height
+            score = detection.length > 4 ? detection[4] : 0.9;
+          }
+        } else if (detection.length == 3) {
+          // شكل مختصر - افترض score عالي
+          score = 0.9;
+          x1 = detection[0];
+          y1 = detection[1];
+          x2 = detection[0] + detection[2];
+          y2 = detection[1] + detection[2];
+        } else {
+          continue;
+        }
         
         if (score < confidenceThreshold) {
           continue;
         }
         
-        // إحداثيات normalized (0-1)
-        double x1 = detection[0];
-        double y1 = detection[1];
-        double x2 = detection[2];
-        double y2 = detection[3];
-        
-        // تحويل إلى pixel coordinates
-        // تحقق إذا كانت القيم بالفعل normalized
+        // تحويل إلى pixel coordinates إذا كانت normalized
         if (x1 <= 1.0 && y1 <= 1.0 && x2 <= 1.0 && y2 <= 1.0) {
           x1 *= imgWidth;
           y1 *= imgHeight;
@@ -504,25 +537,31 @@ class InsightFacePipeline {
         final height = (y2 - y1).abs();
         
         // تحقق من صحة الأبعاد
-        if (width <= 0 || height <= 0 || width > imgWidth || height > imgHeight) {
-          print('⚠️ Invalid box dimensions: ${width}x${height}');
+        if (width <= 0 || height <= 0) {
           continue;
         }
         
         // التأكد من أن الإحداثيات داخل حدود الصورة
-        final left = math.max(0.0, math.min(x1, imgWidth.toDouble()));
-        final top = math.max(0.0, math.min(y1, imgHeight.toDouble()));
-        final right = math.max(0.0, math.min(x2, imgWidth.toDouble()));
-        final bottom = math.max(0.0, math.min(y2, imgHeight.toDouble()));
+        final left = math.max(0.0, math.min(x1, x2));
+        final top = math.max(0.0, math.min(y1, y2));
+        final right = math.max(x1, x2);
+        final bottom = math.max(y1, y2);
         
-        final validWidth = right - left;
-        final validHeight = bottom - top;
+        // تحديد الإحداثيات ضمن حدود الصورة
+        final clippedLeft = math.max(0.0, math.min(left, imgWidth.toDouble()));
+        final clippedTop = math.max(0.0, math.min(top, imgHeight.toDouble()));
+        final clippedRight = math.max(0.0, math.min(right, imgWidth.toDouble()));
+        final clippedBottom = math.max(0.0, math.min(bottom, imgHeight.toDouble()));
         
-        if (validWidth > 10 && validHeight > 10) {
-          faces.add(Rect.fromLTRB(left, top, right, bottom));
+        final validWidth = clippedRight - clippedLeft;
+        final validHeight = clippedBottom - clippedTop;
+        
+        // تحقق من الحد الأدنى للحجم
+        if (validWidth > 20 && validHeight > 20) {
+          faces.add(Rect.fromLTRB(clippedLeft, clippedTop, clippedRight, clippedBottom));
           validDetections++;
           print('✅ Face $validDetections: score=${score.toStringAsFixed(2)}, '
-                'bbox=(${left.toInt()}, ${top.toInt()}, ${validWidth.toInt()}, ${validHeight.toInt()})');
+                'bbox=(${clippedLeft.toInt()}, ${clippedTop.toInt()}, ${validWidth.toInt()}x${validHeight.toInt()})');
         }
       }
       
