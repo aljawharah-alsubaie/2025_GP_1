@@ -623,6 +623,7 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
                   Text(
                     'Automatic or Manual',
                     style: TextStyle(
+                      
                       fontSize: 26,
                       fontWeight: FontWeight.w900,
                       foreground: Paint()
