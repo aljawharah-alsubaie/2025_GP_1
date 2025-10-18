@@ -80,7 +80,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
               child: SlideTransition(
                 position: _slideAnimation,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24.0),
+                  padding: const EdgeInsets.all(22.0),
                   child: Column(
                     children: [
                       const SizedBox(height: 0),
@@ -92,8 +92,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           children: [
                             // Logo
                             Container(
-                              width: 300,
-                              height: 300,
+                              width: 325,
+                              height: 325,
                               child: Image.asset(
                                 'assets/images/logo.png',
                                 color: Colors.white,
@@ -112,7 +112,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             Text(
                               "Welcome to your new journey",
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
                                 color: Colors.white.withOpacity(0.8),
                               ),
                               textAlign: TextAlign.center,
@@ -121,7 +122,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         ),
                       ),
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 25),
 
                       // Create Account button
                       _buildButton(
@@ -138,7 +139,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         },
                       ),
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 25),
                       Row(
                         children: [
                           Expanded(
@@ -149,7 +150,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           ),
                         ],
                       ),
-                      const SizedBox(height: 35),
+                      const SizedBox(height: 30),
                       // Login button
                       _buildButton(
                         title: 'Login',
@@ -183,7 +184,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }) {
     return Container(
       width: double.infinity,
-      height: 56,
+      height: 62,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
@@ -212,11 +213,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.white, size: 20),
+            Icon(icon, color: Colors.white, size: 22),
             const SizedBox(width: 12),
             Text(
               title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
             ),
           ],
         ),

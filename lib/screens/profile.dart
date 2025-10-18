@@ -290,12 +290,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   InputDecoration _buildInputDecoration(String label) {
     return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(
-        color: deepPurple,
-        fontWeight: FontWeight.w500,
-        fontSize: 16,
-      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: lightPurple, width: 2),

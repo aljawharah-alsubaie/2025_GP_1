@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/google_signin_handler.dart';
-import 'get_started.dart';
+import 'home_page.dart';
 import 'signup_screen.dart';
 import 'set_password_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -20,12 +19,10 @@ class _LoginScreenState extends State<LoginScreen>
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final LocalAuthentication _localAuth = LocalAuthentication();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
-  bool _biometricAvailable = false;
 
   late AnimationController _animationController;
   late AnimationController _buttonAnimationController;
@@ -38,7 +35,6 @@ class _LoginScreenState extends State<LoginScreen>
   void initState() {
     super.initState();
     _setupAnimations();
-    _checkBiometricAvailability();
     _checkRememberedUser();
     _animationController.forward();
   }
@@ -82,20 +78,6 @@ class _LoginScreenState extends State<LoginScreen>
         curve: Curves.easeInOut,
       ),
     );
-  }
-
-  Future<void> _checkBiometricAvailability() async {
-    try {
-      final isAvailable = await _localAuth.canCheckBiometrics;
-      final isDeviceSupported = await _localAuth.isDeviceSupported();
-      setState(() {
-        _biometricAvailable = isAvailable && isDeviceSupported;
-      });
-    } catch (e) {
-      setState(() {
-        _biometricAvailable = false;
-      });
-    }
   }
 
   Future<void> _checkRememberedUser() async {
@@ -173,8 +155,7 @@ class _LoginScreenState extends State<LoginScreen>
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                GetStartedScreen(fullName: fullName),
+            pageBuilder: (context, animation, secondaryAnimation) => HomePage(),
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
                   return FadeTransition(opacity: animation, child: child);
@@ -214,74 +195,6 @@ class _LoginScreenState extends State<LoginScreen>
       if (mounted) {
         setState(() => _isLoading = false);
       }
-    }
-  }
-
-  Future<void> _loginWithBiometric() async {
-    if (!_biometricAvailable) {
-      _showSnackBar("Biometric authentication not available", Colors.orange);
-      return;
-    }
-
-    try {
-      final List<BiometricType> availableBiometrics = await _localAuth
-          .getAvailableBiometrics();
-
-      if (availableBiometrics.isEmpty) {
-        _showSnackBar("No biometric methods enrolled", Colors.orange);
-        return;
-      }
-
-      final bool authenticated = await _localAuth.authenticate(
-        localizedReason: 'Authenticate to access your account',
-        options: const AuthenticationOptions(
-          biometricOnly: true,
-          stickyAuth: true,
-        ),
-      );
-
-      if (authenticated) {
-        final user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          DocumentSnapshot userDoc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .get();
-
-          String fullName = 'User';
-          if (userDoc.exists) {
-            Map<String, dynamic> userData =
-                userDoc.data() as Map<String, dynamic>;
-            fullName = userData['full_name'] ?? user.displayName ?? 'User';
-          }
-
-          _showSnackBar("Biometric authentication successful!", Colors.green);
-
-          if (!mounted) return;
-
-          await Future.delayed(const Duration(milliseconds: 500));
-
-          Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) =>
-                  GetStartedScreen(fullName: fullName),
-              transitionsBuilder:
-                  (context, animation, secondaryAnimation, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-              transitionDuration: const Duration(milliseconds: 500),
-            ),
-          );
-        } else {
-          _showSnackBar(
-            "Please login with email first to enable biometric authentication",
-            Colors.orange,
-          );
-        }
-      }
-    } catch (e) {
-      _showSnackBar("Biometric authentication failed", Colors.red);
     }
   }
 
@@ -491,8 +404,17 @@ class _LoginScreenState extends State<LoginScreen>
                                     onChanged: (value) => setState(
                                       () => _rememberMe = value ?? false,
                                     ),
-                                    activeColor: const Color(0xFF6B1D73),
-                                    checkColor: Colors.white,
+                                    activeColor: const Color.fromARGB(
+                                      255,
+                                      255,
+                                      255,
+                                      255,
+                                    ),
+                                    checkColor: Color(0xFF6B1D73),
+                                    side: const BorderSide(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
                                   ),
                                 ),
                                 GestureDetector(
@@ -503,7 +425,8 @@ class _LoginScreenState extends State<LoginScreen>
                                     "Remember me",
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 16,
                                     ),
                                   ),
                                 ),
@@ -546,8 +469,8 @@ class _LoginScreenState extends State<LoginScreen>
                                   "Forgot Password?",
                                   style: TextStyle(
                                     color: Color.fromARGB(255, 231, 172, 238),
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 17,
                                   ),
                                 ),
                               ),
@@ -569,7 +492,7 @@ class _LoginScreenState extends State<LoginScreen>
                             enabled: !_isLoading,
                             child: SizedBox(
                               width: double.infinity,
-                              height: 56,
+                              height: 59,
                               child: ElevatedButton(
                                 onPressed: _isLoading ? null : _login,
                                 style: ElevatedButton.styleFrom(
@@ -585,8 +508,8 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                                 child: _isLoading
                                     ? const SizedBox(
-                                        height: 24,
-                                        width: 24,
+                                        height: 27,
+                                        width: 27,
                                         child: CircularProgressIndicator(
                                           color: Colors.white,
                                           strokeWidth: 2,
@@ -595,7 +518,7 @@ class _LoginScreenState extends State<LoginScreen>
                                     : const Text(
                                         "Log In",
                                         style: TextStyle(
-                                          fontSize: 18,
+                                          fontSize: 21,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
@@ -639,22 +562,10 @@ class _LoginScreenState extends State<LoginScreen>
                         const SizedBox(height: 30),
 
                         // Social login buttons - Full width style
-                        Column(
-                          children: [
-                            _buildFullWidthSocialButton(
-                              icon: Icons.g_mobiledata,
-                              onTap: _loginWithGoogle,
-                              label: "Continue with Google",
-                            ),
-                            if (_biometricAvailable) ...[
-                              const SizedBox(height: 16),
-                              _buildFullWidthSocialButton(
-                                icon: Icons.fingerprint,
-                                onTap: _loginWithBiometric,
-                                label: "Continue with Biometric",
-                              ),
-                            ],
-                          ],
+                        _buildFullWidthSocialButton(
+                          icon: Icons.g_mobiledata,
+                          onTap: _loginWithGoogle,
+                          label: "Continue with Google",
                         ),
 
                         const SizedBox(height: 40),
@@ -714,6 +625,7 @@ class _LoginScreenState extends State<LoginScreen>
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.9),
                                       fontSize: 16,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const Text(
@@ -759,8 +671,8 @@ class _LoginScreenState extends State<LoginScreen>
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -768,19 +680,19 @@ class _LoginScreenState extends State<LoginScreen>
           controller: controller,
           keyboardType: keyboardType,
           validator: validator,
-          style: const TextStyle(color: Colors.black, fontSize: 16),
+          style: const TextStyle(color: Colors.black, fontSize: 18),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.shade600),
+            hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 18),
             prefixIcon: ExcludeSemantics(
               child: Container(
                 margin: const EdgeInsets.all(12),
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: const Color(0xFF6B1D73).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: const Color(0xFF6B1D73), size: 20),
+                child: Icon(icon, color: const Color(0xFF6B1D73), size: 24),
               ),
             ),
             border: OutlineInputBorder(
@@ -793,7 +705,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             fillColor: Colors.white.withOpacity(0.95),
             filled: true,
-            contentPadding: const EdgeInsets.all(20),
+            contentPadding: const EdgeInsets.all(24),
           ),
         ),
       ),
@@ -817,8 +729,8 @@ class _LoginScreenState extends State<LoginScreen>
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -826,14 +738,14 @@ class _LoginScreenState extends State<LoginScreen>
           controller: controller,
           obscureText: obscure,
           validator: validator,
-          style: const TextStyle(color: Colors.black, fontSize: 16),
+          style: const TextStyle(color: Colors.black, fontSize: 18),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.shade600),
+            hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 18),
             prefixIcon: ExcludeSemantics(
               child: Container(
                 margin: const EdgeInsets.all(12),
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: const Color(0xFF6B1D73).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -841,7 +753,7 @@ class _LoginScreenState extends State<LoginScreen>
                 child: const Icon(
                   Icons.lock_outline,
                   color: Color(0xFF6B1D73),
-                  size: 20,
+                  size: 24,
                 ),
               ),
             ),
@@ -854,6 +766,7 @@ class _LoginScreenState extends State<LoginScreen>
                 icon: Icon(
                   obscure ? Icons.visibility_off : Icons.visibility,
                   color: const Color(0xFF6B1D73),
+                  size: 24,
                 ),
               ),
             ),
@@ -867,7 +780,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             fillColor: Colors.white.withOpacity(0.95),
             filled: true,
-            contentPadding: const EdgeInsets.all(20),
+            contentPadding: const EdgeInsets.all(24),
           ),
         ),
       ),
@@ -885,7 +798,7 @@ class _LoginScreenState extends State<LoginScreen>
       hint: 'Double tap to $label',
       child: SizedBox(
         width: double.infinity,
-        height: 56,
+        height: 59,
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.1),
@@ -909,12 +822,12 @@ class _LoginScreenState extends State<LoginScreen>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ExcludeSemantics(child: Icon(icon, size: 28)),
+                ExcludeSemantics(child: Icon(icon, size: 30)),
                 const SizedBox(width: 12),
                 Text(
                   label,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

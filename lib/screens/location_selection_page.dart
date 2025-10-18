@@ -7,7 +7,6 @@ import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:telephony/telephony.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'contact_info_page.dart';
@@ -21,56 +20,37 @@ class LocationSelectionPage extends StatefulWidget {
 
 class _LocationSelectionPageState extends State<LocationSelectionPage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
-  
-  // Telephony & TTS
   final Telephony _telephony = Telephony.instance;
   final FlutterTts _tts = FlutterTts();
-  
-  // Controllers
   final TextEditingController _cityController = TextEditingController();
   final TextEditingController _streetController = TextEditingController();
 
-  // Location variables
-  GoogleMapController? _mapController;
   LatLng? _currentLatLng;
   final Set<Marker> _markers = <Marker>{};
 
-  // State variables
   bool _isLocationLoaded = false;
   bool _isLoadingLocation = false;
-  String _locationStatus = 'Tap to get location';
-  bool _hasLocationPermission = false;
   double _currentAccuracy = 0.0;
   bool _isSendingLocation = false;
 
-  // User data
-  String _userName = 'User';
-  bool _isLoadingUserData = true;
   List<Map<String, dynamic>> _contacts = [];
-  StreamSubscription<DocumentSnapshot>? _userDataSubscription;
 
-  // Firebase instances
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Map controller
-  final Completer<GoogleMapController> _controller = Completer<GoogleMapController>();
+  final Completer<GoogleMapController> _controller =
+      Completer<GoogleMapController>();
 
-  // Animation controllers
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _pulseController;
 
-  // 🎨 نظام ألوان موحد
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
-  static const Color softPurple = Color(0xFFB665BA);
-  static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
-  // Initial camera position - Riyadh
   static const CameraPosition _initialCameraPosition = CameraPosition(
     target: LatLng(24.7136, 46.6753),
     zoom: 14,
@@ -118,7 +98,6 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
   void dispose() {
     _tts.stop();
     WidgetsBinding.instance.removeObserver(this);
-    _userDataSubscription?.cancel();
     _cityController.dispose();
     _streetController.dispose();
     _fadeController.dispose();
@@ -145,80 +124,10 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
 
   Future<void> _initializeApp() async {
     try {
-      await _loadUserData();
       await _loadUserContacts();
       await _checkInitialPermissions();
     } catch (e) {
       debugPrint('App initialization error: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingUserData = false;
-          _locationStatus = 'Initialization failed';
-        });
-      }
-    }
-  }
-
-  Future<void> _loadUserData() async {
-    if (!mounted) return;
-    try {
-      final User? user = _auth.currentUser;
-      if (user == null) {
-        if (mounted) {
-          setState(() {
-            _userName = 'Guest';
-            _isLoadingUserData = false;
-          });
-        }
-        return;
-      }
-
-      _userDataSubscription = _firestore
-          .collection('users')
-          .doc(user.uid)
-          .snapshots()
-          .listen(
-        (DocumentSnapshot userDoc) {
-          if (mounted) {
-            if (userDoc.exists) {
-              final Map<String, dynamic>? userData = userDoc.data() as Map<String, dynamic>?;
-              setState(() {
-                _userName = userData?['full_name'] as String? ??
-                    userData?['displayName'] as String? ??
-                    userData?['name'] as String? ??
-                    user.displayName ??
-                    user.email?.split('@')[0] ??
-                    'User';
-                _isLoadingUserData = false;
-              });
-            } else {
-              _setUserNameFromAuth(user);
-            }
-          }
-        },
-        onError: (error) {
-          debugPrint('Firestore user data listener error: $error');
-          if (mounted) {
-            final User? currentUser = _auth.currentUser;
-            if (currentUser != null) {
-              _setUserNameFromAuth(currentUser);
-            }
-          }
-        },
-      );
-    } catch (e) {
-      debugPrint('Load user data error: $e');
-    }
-  }
-
-  void _setUserNameFromAuth(User user) {
-    if (mounted) {
-      setState(() {
-        _userName = user.displayName ??
-            user.email?.split('@')[0] ??
-            'User';
-        _isLoadingUserData = false;
-      });
     }
   }
 
@@ -252,9 +161,7 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
 
   Future<bool> _sendLocationSMS() async {
     if (_currentLatLng == null || _contacts.isEmpty) {
-      _speak(_contacts.isEmpty
-          ? 'No contacts found'
-          : 'No location available');
+      _speak(_contacts.isEmpty ? 'No contacts found' : 'No location available');
       _showSnackBar(
         _contacts.isEmpty
             ? 'No contacts found. Add contacts first.'
@@ -267,7 +174,10 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
     bool? permissionsGranted = await _telephony.requestPhoneAndSmsPermissions;
     if (permissionsGranted != true) {
       _speak('SMS permissions required');
-      _showSnackBar('SMS permissions required to send emergency messages', isError: true);
+      _showSnackBar(
+        'SMS permissions required to send emergency messages',
+        isError: true,
+      );
       return false;
     }
 
@@ -276,9 +186,16 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
     });
 
     try {
-      final String locationText = '🚨 EMERGENCY: My current location: ${_cityController.text}, ${_streetController.text}';
-      final String mapsUrl = 'https://maps.google.com/?q=${_currentLatLng!.latitude},${_currentLatLng!.longitude}';
-      final String messageBody = '$locationText\n\n📍 View on map: $mapsUrl\n\nSent from Emergency Location Tracker - $_userName';
+      final User? user = _auth.currentUser;
+      final String userName =
+          user?.displayName ?? user?.email?.split('@')[0] ?? 'User';
+
+      final String locationText =
+          'EMERGENCY: My current location: ${_cityController.text}, ${_streetController.text}';
+      final String mapsUrl =
+          'https://maps.google.com/?q=${_currentLatLng!.latitude},${_currentLatLng!.longitude}';
+      final String messageBody =
+          '$locationText\n\n View on map: $mapsUrl\n\nSent from Emergency Location Tracker - $userName';
 
       int successCount = 0;
       int failCount = 0;
@@ -287,19 +204,23 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
         try {
           final String phoneNumber = contact['phone'] ?? '';
           if (phoneNumber.isNotEmpty) {
-            String cleanPhoneNumber = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
-            
+            String cleanPhoneNumber = phoneNumber.replaceAll(
+              RegExp(r'[^\d+]'),
+              '',
+            );
+
             if (cleanPhoneNumber.startsWith('05')) {
               cleanPhoneNumber = '+966${cleanPhoneNumber.substring(1)}';
-            } else if (cleanPhoneNumber.startsWith('5') && cleanPhoneNumber.length == 9) {
+            } else if (cleanPhoneNumber.startsWith('5') &&
+                cleanPhoneNumber.length == 9) {
               cleanPhoneNumber = '+966$cleanPhoneNumber';
             }
-            
+
             await _telephony.sendSms(
               to: cleanPhoneNumber,
               message: messageBody,
             );
-            
+
             successCount++;
             await Future.delayed(const Duration(milliseconds: 1000));
           } else {
@@ -311,225 +232,41 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
         }
       }
 
-      setState(() {
-        _isSendingLocation = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSendingLocation = false;
+        });
+      }
 
       if (successCount > 0) {
         _speak('Emergency location sent successfully');
         _showSnackBar(
-          '✅ Emergency location sent to $successCount contact(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
+          'Emergency location sent to $successCount contact(s)${failCount > 0 ? ' ($failCount failed)' : ''}',
           isError: false,
         );
         return true;
       } else {
         _speak('Failed to send location');
-        _showSnackBar('❌ Failed to send location to contacts', isError: true);
+        _showSnackBar('Failed to send location to contacts', isError: true);
         return false;
       }
     } catch (e) {
-      setState(() {
-        _isSendingLocation = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSendingLocation = false;
+        });
+      }
       _speak('Error sending location');
       _showSnackBar('Error sending location: ${e.toString()}', isError: true);
       return false;
     }
   }
 
-  Future<void> _confirmAndSendLocation() async {
-    if (_contacts.isEmpty) {
-      _speak('No contacts found');
-      _showSnackBar('No contacts found. Add contacts first.', isError: true);
-      return;
-    }
-
-    _hapticFeedback();
-    final bool? shouldSend = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: const Icon(
-                  Icons.emergency_share,
-                  size: 40,
-                  color: Colors.red,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Send Emergency SMS?',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: deepPurple,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'This will send an emergency SMS with your location to all your contacts.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: deepPurple.withOpacity(0.6),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: ultraLightPurple,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: palePurple),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.location_on, size: 16, color: vibrantPurple),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            '${_cityController.text}, ${_streetController.text}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: deepPurple,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.contacts, size: 16, color: vibrantPurple),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${_contacts.length} Contact(s)',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: deepPurple,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        _hapticFeedback();
-                        _speak('Cancelled');
-                        Navigator.of(context).pop(false);
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: BorderSide(color: Colors.grey.shade300, width: 2),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.red, Color.fromARGB(255, 200, 30, 30)],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.red.withOpacity(0.4),
-                            blurRadius: 15,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _hapticFeedback();
-                          Navigator.of(context).pop(true);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Text(
-                          'Send SMS',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (shouldSend == true) {
-      final bool smsSuccess = await _sendLocationSMS();
-      if (mounted) {
-        Navigator.of(context).pop(smsSuccess);
-      }
-    }
-  }
-
   Future<void> _checkInitialPermissions() async {
     if (!mounted) return;
     try {
-      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      final LocationPermission permission = await Geolocator.checkPermission();
-
-      if (mounted) {
-        setState(() {
-          _hasLocationPermission = serviceEnabled &&
-              (permission == LocationPermission.always ||
-                  permission == LocationPermission.whileInUse);
-          _locationStatus = _hasLocationPermission
-              ? 'Tap "Get Location" to find your location'
-              : 'Location permission needed';
-        });
-      }
+      await Geolocator.isLocationServiceEnabled();
+      await Geolocator.checkPermission();
     } catch (e) {
       debugPrint('Permission check error: $e');
     }
@@ -544,15 +281,10 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
     try {
       setState(() {
         _isLoadingLocation = true;
-        _locationStatus = 'Checking location services...';
       });
 
       final bool hasPermissions = await _checkAndRequestPermissions();
       if (!hasPermissions) return;
-
-      setState(() {
-        _locationStatus = 'Getting your current location...';
-      });
 
       final Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
@@ -564,18 +296,21 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
       } else if (mounted) {
         setState(() {
           _isLoadingLocation = false;
-          _locationStatus = 'Location accuracy too low, please try again';
         });
         _speak('Location accuracy too low');
+        _showSnackBar(
+          'Location accuracy too low, please try again',
+          isError: true,
+        );
       }
     } catch (e) {
       debugPrint('Error getting current location: $e');
       if (mounted) {
         setState(() {
           _isLoadingLocation = false;
-          _locationStatus = 'Failed to get location';
         });
         _speak('Failed to get location');
+        _showSnackBar('Failed to get location', isError: true);
       }
     }
   }
@@ -602,8 +337,8 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
       if (mounted) {
         setState(() {
           _isLoadingLocation = false;
-          _locationStatus = 'Location services are disabled';
         });
+        _showSnackBar('Location services are disabled', isError: true);
       }
       return false;
     }
@@ -615,8 +350,8 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
         if (mounted) {
           setState(() {
             _isLoadingLocation = false;
-            _locationStatus = 'Location permission denied';
           });
+          _showSnackBar('Location permission denied', isError: true);
         }
         return false;
       }
@@ -626,8 +361,8 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
       if (mounted) {
         setState(() {
           _isLoadingLocation = false;
-          _locationStatus = 'Location permission permanently denied';
         });
+        _showSnackBar('Location permission permanently denied', isError: true);
       }
       return false;
     }
@@ -645,7 +380,6 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
         _isLocationLoaded = true;
         _isLoadingLocation = false;
         _currentAccuracy = position.accuracy;
-        _locationStatus = 'Location found successfully';
         _markers.clear();
         _markers.add(
           Marker(
@@ -655,7 +389,9 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
               title: 'Current Location',
               snippet: 'Accuracy: ${position.accuracy.toStringAsFixed(0)}m',
             ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueViolet,
+            ),
           ),
         );
       });
@@ -669,8 +405,8 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
       if (mounted) {
         setState(() {
           _isLoadingLocation = false;
-          _locationStatus = 'Error processing location';
         });
+        _showSnackBar('Error processing location', isError: true);
       }
     }
   }
@@ -700,11 +436,13 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
 
       if (mounted && placemarks.isNotEmpty) {
         final Placemark place = placemarks.first;
-        final String city = place.locality ??
+        final String city =
+            place.locality ??
             place.subAdministrativeArea ??
             place.administrativeArea ??
             'Riyadh';
-        final String street = place.street ??
+        final String street =
+            place.street ??
             place.thoroughfare ??
             place.subThoroughfare ??
             place.name ??
@@ -734,14 +472,21 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
       final Map<String, dynamic> locationData = <String, dynamic>{
         'userId': user.uid,
         'userEmail': user.email,
-        'userName': _userName,
         'latitude': latLng.latitude,
         'longitude': latLng.longitude,
         'accuracy': _currentAccuracy,
-        'city': _cityController.text.isNotEmpty ? _cityController.text : 'Riyadh',
-        'street': _streetController.text.isNotEmpty ? _streetController.text : 'Current Location',
+        'city': _cityController.text.isNotEmpty
+            ? _cityController.text
+            : 'Riyadh',
+        'street': _streetController.text.isNotEmpty
+            ? _streetController.text
+            : 'Current Location',
         'timestamp': FieldValue.serverTimestamp(),
-        'devicePlatform': Platform.isAndroid ? 'Android' : Platform.isIOS ? 'iOS' : 'Unknown',
+        'devicePlatform': Platform.isAndroid
+            ? 'Android'
+            : Platform.isIOS
+            ? 'iOS'
+            : 'Unknown',
         'locationType': 'emergency',
       };
 
@@ -793,9 +538,7 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
             child: Column(
               children: [
                 _buildModernHeader(),
-                Expanded(
-                  child: _buildContent(),
-                ),
+                Expanded(child: _buildContent()),
               ],
             ),
           ),
@@ -810,11 +553,7 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            ultraLightPurple,
-            palePurple.withOpacity(0.3),
-            Colors.white,
-          ],
+          colors: [ultraLightPurple, palePurple.withOpacity(0.3), Colors.white],
           stops: const [0.0, 0.5, 1.0],
         ),
       ),
@@ -825,7 +564,7 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 45, 30, 45),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -841,74 +580,67 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
         child: Row(
           children: [
             Semantics(
-              label: 'Back',
+              label: 'Go back to previous page',
               button: true,
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
-                  _speak('Back');
+                  _speak('Going back');
                   Navigator.pop(context, false);
                 },
                 child: Container(
-                  width: 48,
-                  height: 48,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
+                    gradient: LinearGradient(
+                      colors: [vibrantPurple, primaryPurple],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: vibrantPurple.withOpacity(0.15),
+                        color: vibrantPurple.withOpacity(0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.arrow_back,
-                    color: deepPurple,
-                    size: 24,
+                  child: const Center(
+                    child: Icon(
+                      Icons.arrow_back_ios_new,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
                 ),
               ),
             ),
-            
             const SizedBox(width: 12),
-            
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const SizedBox(height: 2),
                   Text(
-                    'Emergency Location',
+                    'Automatic or Manual',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      foreground: Paint()
+                        ..shader = LinearGradient(
+                          colors: [deepPurple, vibrantPurple],
+                        ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Detect automatically or enter manually',
                     style: TextStyle(
                       fontSize: 12,
-                      color: deepPurple.withOpacity(0.5),
+                      color: deepPurple.withOpacity(0.6),
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  _isLoadingUserData
-                      ? Container(
-                          width: 100,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: palePurple.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        )
-                      : Text(
-                          _userName,
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            foreground: Paint()
-                              ..shader = LinearGradient(
-                                colors: [deepPurple, vibrantPurple],
-                              ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
                 ],
               ),
             ),
@@ -920,58 +652,36 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
 
   Widget _buildContent() {
     return SlideTransition(
-      position: Tween<Offset>(
-        begin: const Offset(0, 0.15),
-        end: Offset.zero,
-      ).animate(CurvedAnimation(
-        parent: _slideController,
-        curve: Curves.easeOutCubic,
-      )),
+      position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
+          .animate(
+            CurvedAnimation(
+              parent: _slideController,
+              curve: Curves.easeOutCubic,
+            ),
+          ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
         child: Column(
           children: [
-            // Map Card
             _buildMapCard(),
-            
             const SizedBox(height: 16),
-            
-            // Get Location Button
             _buildGetLocationButton(),
-            
             const SizedBox(height: 16),
-            
-            // Location Status Card
-            _buildLocationStatusCard(),
-            
-            const SizedBox(height: 16),
-            
-            // City Field
             _buildTextField(
               controller: _cityController,
               label: 'City',
               icon: Icons.location_city,
             ),
-            
             const SizedBox(height: 12),
-            
-            // Street Field
             _buildTextField(
               controller: _streetController,
               label: 'Street',
               icon: Icons.signpost,
             ),
-            
             const SizedBox(height: 20),
-            
-            // Contacts Info Card
             _buildContactsInfoCard(),
-            
             const SizedBox(height: 16),
-            
-            // Send Emergency Button
             _buildSendEmergencyButton(),
-            
             const SizedBox(height: 20),
           ],
         ),
@@ -1010,7 +720,6 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
               onMapCreated: (GoogleMapController controller) {
                 if (!_controller.isCompleted) {
                   _controller.complete(controller);
-                  _mapController = controller;
                 }
               },
               buildingsEnabled: true,
@@ -1080,7 +789,7 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
         onTap: _isLoadingLocation ? null : _getCurrentLocation,
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16),
+          padding: const EdgeInsets.symmetric(vertical: 20),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: _isLoadingLocation
@@ -1111,14 +820,12 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
                   ),
                 )
               else
-                const Icon(
-                  Icons.my_location,
-                  color: Colors.white,
-                  size: 22,
-                ),
+                const Icon(Icons.my_location, color: Colors.white, size: 22),
               const SizedBox(width: 12),
               Text(
-                _isLoadingLocation ? 'Getting Location...' : 'Get Current Location',
+                _isLoadingLocation
+                    ? 'Getting Location...'
+                    : 'Get Current Location',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
@@ -1128,72 +835,6 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildLocationStatusCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _isLocationLoaded ? vibrantPurple : palePurple,
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (_isLocationLoaded ? vibrantPurple : palePurple).withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: _isLocationLoaded
-                    ? [vibrantPurple.withOpacity(0.2), primaryPurple.withOpacity(0.2)]
-                    : [palePurple.withOpacity(0.2), lightPurple.withOpacity(0.2)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              _isLocationLoaded ? Icons.location_on : Icons.location_off,
-              color: _isLocationLoaded ? vibrantPurple : Colors.grey,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _isLocationLoaded ? 'Location Found' : _locationStatus,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: deepPurple,
-                  ),
-                ),
-                if (_isLocationLoaded && _currentAccuracy > 0)
-                  Text(
-                    'Accuracy: ${_currentAccuracy.toStringAsFixed(0)}m',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: deepPurple.withOpacity(0.5),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1242,19 +883,21 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
 
   Widget _buildContactsInfoCard() {
     final bool hasContacts = _contacts.isNotEmpty;
-    
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: hasContacts
-              ? [vibrantPurple.withOpacity(0.1), primaryPurple.withOpacity(0.1)]
-              : [Colors.orange.shade50, Colors.orange.shade100.withOpacity(0.3)],
+              ? [vibrantPurple.withOpacity(0.1), primaryPurple.withOpacity(0.3)]
+              : [Colors.red.shade50, Colors.red.shade100.withOpacity(0.5)],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: hasContacts ? vibrantPurple : Colors.orange,
+          color: hasContacts
+              ? vibrantPurple
+              : const Color.fromARGB(255, 255, 17, 0),
           width: 2,
         ),
       ),
@@ -1263,7 +906,9 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: hasContacts ? vibrantPurple : Colors.orange,
+              color: hasContacts
+                  ? vibrantPurple
+                  : const Color.fromARGB(255, 255, 18, 1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -1279,9 +924,9 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
                   ? 'Ready to send to ${_contacts.length} contact(s)'
                   : 'Add contacts to send emergency SMS',
               style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: hasContacts ? vibrantPurple : Colors.orange.shade800,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+                color: hasContacts ? vibrantPurple : Colors.red,
               ),
             ),
           ),
@@ -1291,9 +936,10 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
   }
 
   Widget _buildSendEmergencyButton() {
-    final bool canSend = _isLocationLoaded && !_isLoadingLocation && !_isSendingLocation;
+    final bool canSend =
+        _isLocationLoaded && !_isLoadingLocation && !_isSendingLocation;
     final bool hasContacts = _contacts.isNotEmpty;
-    
+
     return Semantics(
       label: hasContacts
           ? (canSend ? 'Send emergency SMS' : 'Get location first')
@@ -1302,10 +948,11 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
       child: GestureDetector(
         onTap: canSend
             ? () async {
+                // لا يوجد تأكيد قبل الإرسال
                 if (!hasContacts) {
                   _hapticFeedback();
                   _speak('Add contacts first');
-                  final result = await Navigator.push(
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const ContactInfoPage()),
                   );
@@ -1316,7 +963,15 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
                 if (_currentLatLng != null) {
                   await _saveLocationToFirebase(_currentLatLng!);
                 }
-                await _confirmAndSendLocation();
+
+                _hapticFeedback();
+                final bool smsSuccess = await _sendLocationSMS();
+
+                // تأكيد الإرسال + الرجوع للصفحة السابقة إذا نجح
+                if (smsSuccess && mounted) {
+                  await Future.delayed(const Duration(milliseconds: 300));
+                  Navigator.pop(context, true);
+                }
               }
             : null,
         child: Container(
@@ -1326,15 +981,16 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
             gradient: LinearGradient(
               colors: canSend
                   ? (hasContacts
-                      ? [Colors.red.shade600, Colors.red.shade800]
-                      : [vibrantPurple, primaryPurple])
+                        ? [Colors.red.shade600, Colors.red.shade800]
+                        : [vibrantPurple, primaryPurple])
                   : [Colors.grey.shade300, Colors.grey.shade400],
             ),
             borderRadius: BorderRadius.circular(20),
             boxShadow: canSend
                 ? [
                     BoxShadow(
-                      color: (hasContacts ? Colors.red : vibrantPurple).withOpacity(0.4),
+                      color: (hasContacts ? Colors.red : vibrantPurple)
+                          .withOpacity(0.4),
                       blurRadius: 20,
                       offset: const Offset(0, 10),
                     ),
@@ -1371,8 +1027,10 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
                       _isLoadingLocation
                           ? Icons.hourglass_empty
                           : canSend
-                              ? (hasContacts ? Icons.emergency_share : Icons.person_add)
-                              : Icons.location_searching,
+                          ? (hasContacts
+                                ? Icons.emergency_share
+                                : Icons.person_add)
+                          : Icons.location_searching,
                       color: Colors.white,
                       size: 24,
                     ),
@@ -1381,8 +1039,10 @@ class _LocationSelectionPageState extends State<LocationSelectionPage>
                       _isLoadingLocation
                           ? 'Loading...'
                           : canSend
-                              ? (hasContacts ? 'Send Emergency SMS' : 'Add Emergency Contacts')
-                              : 'Get Location First',
+                          ? (hasContacts
+                                ? 'Send Emergency SMS'
+                                : 'Add Emergency Contacts')
+                          : 'Get Location First',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
