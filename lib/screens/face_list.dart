@@ -26,7 +26,6 @@ class _FaceListPageState extends State<FaceListPage>
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
-  static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
@@ -111,7 +110,7 @@ class _FaceListPageState extends State<FaceListPage>
     return FadeTransition(
       opacity: _fadeController ?? AlwaysStoppedAnimation(1.0),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(25, 50, 25, 65),
+        padding: const EdgeInsets.fromLTRB(25, 60, 25, 55),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -184,10 +183,10 @@ class _FaceListPageState extends State<FaceListPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Manage face identification',
+                    'Manage and identify persons',
                     style: TextStyle(
-                      fontSize: 13,
-                      color: deepPurple.withOpacity(0.5),
+                      fontSize: 14,
+                      color: deepPurple.withOpacity(0.6),
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
                     ),
@@ -221,12 +220,12 @@ class _FaceListPageState extends State<FaceListPage>
           // Add Person Card
           _buildOptionCard(
             title: 'Face Management',
-            subtitle: 'Manage and organize all face recognition entries',
+            subtitle: 'Manage all stored face entries',
             icon: Icons.person_add,
             gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
             onTap: () {
               _hapticFeedback();
-              _speak('Add Person');
+              _speak('Face Management');
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -236,11 +235,11 @@ class _FaceListPageState extends State<FaceListPage>
             },
           ),
 
-          const SizedBox(height: 10), // ✅ مسافة إضافية بين الخيارين
+          const SizedBox(height: 15), // ✅ مسافة إضافية بين الخيارين
           // Identify Person Card
           _buildOptionCard(
             title: 'Identify Person',
-            subtitle: 'Use camera to recognize people',
+            subtitle: 'Recognize a person via camera',
             icon: Icons.camera_alt,
             gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
             onTap: () {
@@ -330,13 +329,13 @@ class _FaceListPageState extends State<FaceListPage>
                             color: deepPurple,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 5),
                         Text(
                           subtitle,
                           style: TextStyle(
                             fontSize: 13,
                             color: deepPurple.withOpacity(0.5),
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],

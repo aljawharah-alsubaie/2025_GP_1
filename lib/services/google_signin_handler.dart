@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/material.dart';
-import '../screens/get_started.dart';
+import '../screens/home_page.dart';
 
 class GoogleSignInHandler {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -16,16 +16,17 @@ class GoogleSignInHandler {
 
       // ✅ الطريقة الجديدة - signIn() أصبحت تُرجع Future<GoogleSignInAccount?>
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
+
       if (googleUser == null) {
-        print("❌ User cancelled Google Sign-In");
+        print("User cancelled Google Sign-In");
         return;
       }
 
-      print("✅ Google user signed in: ${googleUser.email}");
+      print("Google user signed in: ${googleUser.email}");
 
       // ✅ الحصول على Authentication بالطريقة الصحيحة
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
       // ✅ استخدام الـ tokens مباشرة كـ String?
       final String? accessToken = googleAuth.accessToken;
@@ -44,14 +45,15 @@ class GoogleSignInHandler {
         idToken: idToken,
       );
 
-      print("✅ Created Firebase credential");
+      print("Created Firebase credential");
 
       // Sign in to Firebase
-      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
       final user = userCredential.user;
 
       if (user != null) {
-        print("✅ Firebase user signed in: ${user.uid}");
+        print("Firebase user signed in: ${user.uid}");
 
         // Check if user document exists
         final userDoc = await FirebaseFirestore.instance
@@ -66,25 +68,23 @@ class GoogleSignInHandler {
               .collection('users')
               .doc(user.uid)
               .set({
-            'full_name': fullName,
-            'email': user.email,
-            'photo_url': user.photoURL,
-            'provider': 'google',
-            'created_at': Timestamp.now(),
-            'last_login': Timestamp.now(),
-            'email_verified': true,
-            'profile_completed': false,
-          });
-          print("✅ Created new user document");
+                'full_name': fullName,
+                'email': user.email,
+                'photo_url': user.photoURL,
+                'provider': 'google',
+                'created_at': Timestamp.now(),
+                'last_login': Timestamp.now(),
+                'email_verified': true,
+                'profile_completed': false,
+              });
+          print("Created new user document");
         } else {
           fullName = userDoc.data()?['full_name'] ?? fullName;
           await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
-              .update({
-            'last_login': Timestamp.now(),
-          });
-          print("✅ Updated existing user document");
+              .update({'last_login': Timestamp.now()});
+          print("Updated existing user document");
         }
 
         if (context.mounted) {
@@ -99,7 +99,9 @@ class GoogleSignInHandler {
               ),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               margin: const EdgeInsets.all(16),
               duration: const Duration(seconds: 3),
             ),
@@ -109,11 +111,12 @@ class GoogleSignInHandler {
           Navigator.pushReplacement(
             context,
             PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => 
-                  GetStartedScreen(fullName: fullName),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  HomePage(),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
               transitionDuration: const Duration(milliseconds: 500),
             ),
           );
@@ -122,10 +125,11 @@ class GoogleSignInHandler {
     } on FirebaseAuthException catch (e) {
       print("❌ Firebase Auth Error: ${e.code} - ${e.message}");
       String errorMessage = "Authentication failed";
-      
+
       switch (e.code) {
         case 'account-exists-with-different-credential':
-          errorMessage = "An account already exists with a different sign-in method";
+          errorMessage =
+              "An account already exists with a different sign-in method";
           break;
         case 'invalid-credential':
           errorMessage = "Invalid credentials provided";
@@ -139,20 +143,20 @@ class GoogleSignInHandler {
         default:
           errorMessage = e.message ?? "Authentication failed";
       }
-      
+
       if (context.mounted) {
         _showErrorSnackBar(context, errorMessage);
       }
     } catch (e) {
       print("❌ Error signing in with Google: $e");
-      
+
       String errorMessage = "Google sign-in failed";
       if (e.toString().contains('PlatformException')) {
         errorMessage = "Configuration error. Please check app setup.";
       } else if (e.toString().contains('network')) {
         errorMessage = "Network error. Please check your connection.";
       }
-      
+
       if (context.mounted) {
         _showErrorSnackBar(context, errorMessage);
       }
@@ -221,17 +225,18 @@ Future<void> checkEmailProviderAndLogin(
           ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );
     }
 
     // TODO: Navigate to home page
-
   } on FirebaseAuthException catch (e) {
     String error = "Login failed";
-    
+
     switch (e.code) {
       case 'user-not-found':
         error = "No user found with this email.";
@@ -247,7 +252,8 @@ Future<void> checkEmailProviderAndLogin(
         break;
       case 'invalid-credential':
         // هذا يعني الحساب مسجل عبر Google
-        error = "This email is registered with Google. Please use the Google Sign-In button.";
+        error =
+            "This email is registered with Google. Please use the Google Sign-In button.";
         break;
       default:
         error = e.message ?? "Login failed";
@@ -265,7 +271,9 @@ Future<void> checkEmailProviderAndLogin(
           ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -283,7 +291,9 @@ Future<void> checkEmailProviderAndLogin(
           ),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.all(16),
         ),
       );

@@ -22,7 +22,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FlutterTts _tts = FlutterTts();
-  
+
   String _userName = 'User';
   bool _isLoadingUserData = true;
   StreamSubscription<DocumentSnapshot>? _userDataSubscription;
@@ -34,30 +34,28 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
-  static const Color softPurple = Color(0xFFB665BA);
-  static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
   @override
   void initState() {
     super.initState();
-    
+
     // ✅ تهيئة الـ controllers أولاً
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-    
+
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    
+
     // ثم نبدأ الـ animations
     _fadeController.forward();
     _slideController.forward();
-    
+
     // بعدين نبدأ باقي الإعدادات
     _initTts();
     _loadUserData();
@@ -105,34 +103,36 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
           .doc(user.uid)
           .snapshots()
           .listen(
-        (DocumentSnapshot userDoc) {
-          if (mounted) {
-            if (userDoc.exists) {
-              final Map<String, dynamic>? userData = userDoc.data() as Map<String, dynamic>?;
-              setState(() {
-                _userName = userData?['full_name'] as String? ??
-                    userData?['displayName'] as String? ??
-                    userData?['name'] as String? ??
-                    user.displayName ??
-                    user.email?.split('@')[0] ??
-                    'User';
-                _isLoadingUserData = false;
-              });
-            } else {
-              _setUserNameFromAuth(user);
-            }
-          }
-        },
-        onError: (error) {
-          debugPrint('Firestore user data listener error: $error');
-          if (mounted) {
-            final User? currentUser = _auth.currentUser;
-            if (currentUser != null) {
-              _setUserNameFromAuth(currentUser);
-            }
-          }
-        },
-      );
+            (DocumentSnapshot userDoc) {
+              if (mounted) {
+                if (userDoc.exists) {
+                  final Map<String, dynamic>? userData =
+                      userDoc.data() as Map<String, dynamic>?;
+                  setState(() {
+                    _userName =
+                        userData?['full_name'] as String? ??
+                        userData?['displayName'] as String? ??
+                        userData?['name'] as String? ??
+                        user.displayName ??
+                        user.email?.split('@')[0] ??
+                        'User';
+                    _isLoadingUserData = false;
+                  });
+                } else {
+                  _setUserNameFromAuth(user);
+                }
+              }
+            },
+            onError: (error) {
+              debugPrint('Firestore user data listener error: $error');
+              if (mounted) {
+                final User? currentUser = _auth.currentUser;
+                if (currentUser != null) {
+                  _setUserNameFromAuth(currentUser);
+                }
+              }
+            },
+          );
     } catch (e) {
       debugPrint('Load user data error: $e');
     }
@@ -141,9 +141,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   void _setUserNameFromAuth(User user) {
     if (mounted) {
       setState(() {
-        _userName = user.displayName ??
-            user.email?.split('@')[0] ??
-            'User';
+        _userName = user.displayName ?? user.email?.split('@')[0] ?? 'User';
         _isLoadingUserData = false;
       });
     }
@@ -186,9 +184,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
             child: Column(
               children: [
                 _buildModernHeader(),
-                Expanded(
-                  child: _buildContent(),
-                ),
+                Expanded(child: _buildContent()),
               ],
             ),
           ),
@@ -204,11 +200,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            ultraLightPurple,
-            palePurple.withOpacity(0.3),
-            Colors.white,
-          ],
+          colors: [ultraLightPurple, palePurple.withOpacity(0.3), Colors.white],
           stops: const [0.0, 0.5, 1.0],
         ),
       ),
@@ -219,7 +211,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        padding: const EdgeInsets.fromLTRB(30, 50, 20, 40),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -227,8 +219,8 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
             colors: [
               Colors.white.withOpacity(0.9),
               Colors.white.withOpacity(0.7),
-              const Color.fromARGB(198, 255, 255, 255),
-              const Color.fromARGB(195, 240, 224, 245),
+              const Color.fromARGB(165, 255, 255, 255),
+              const Color.fromARGB(82, 240, 224, 245),
             ],
           ),
         ),
@@ -241,17 +233,17 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                   Text(
                     'Hey!',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: deepPurple.withOpacity(0.5),
-                      fontWeight: FontWeight.w600,
+                      fontSize: 21,
+                      color: deepPurple.withOpacity(0.7),
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 1.5,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   _isLoadingUserData
                       ? Container(
-                          width: 100,
-                          height: 24,
+                          width: 120,
+                          height: 32,
                           decoration: BoxDecoration(
                             color: palePurple.withOpacity(0.3),
                             borderRadius: BorderRadius.circular(4),
@@ -260,7 +252,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                       : Text(
                           _userName,
                           style: TextStyle(
-                            fontSize: 24,
+                            fontSize: 32,
                             fontWeight: FontWeight.w900,
                             foreground: Paint()
                               ..shader = LinearGradient(
@@ -283,58 +275,55 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
       padding: const EdgeInsets.all(13),
       child: Column(
         children: [
-          const SizedBox(height: 1),
-          
-          // Info Box
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: palePurple.withOpacity(0.35),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-                BoxShadow(
-                  color: Colors.white.withOpacity(0.8),
-                  blurRadius: 12,
-                  offset: const Offset(-2, -2),
-                ),
-              ],
-            ),
+          const SizedBox(height: 40),
+
+          // Info Text - بدون بوكس، مباشر على الخلفية
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
               children: [
-                const SizedBox(height: 10),
                 Text(
                   'Help is just a click away!',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: deepPurple,
+                    fontSize: 25,
+                    fontWeight: FontWeight.w900,
+                    color: deepPurple.withOpacity(0.9),
+                    letterSpacing: 0.5,
+                    shadows: [
+                      Shadow(
+                        color: Colors.white.withOpacity(0.8),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 12),
                 Text(
-                  'Press SOS button to send your location to emergency contacts',
+                  'Click SOS button to call the help',
                   style: TextStyle(
-                    fontSize: 13,
-                    color: deepPurple.withOpacity(0.6),
-                    height: 1.4,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: deepPurple.withOpacity(0.75),
+                    height: 1.5,
+                    shadows: [
+                      Shadow(
+                        color: Colors.white.withOpacity(0.6),
+                        blurRadius: 4,
+                      ),
+                    ],
                   ),
                   textAlign: TextAlign.center,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 60),
           const Spacer(),
-          
+
           // SOS Button
           SosButton(onLocationSent: _showSuccessDialog),
-          
+
           const Spacer(),
         ],
       ),
@@ -376,6 +365,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 _buildNavButton(
                   icon: Icons.home_rounded,
                   label: 'Home',
+                  isActive: true,
                   onTap: () => _onNavTap(context, 0),
                 ),
                 _buildNavButton(
@@ -384,10 +374,18 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                   onTap: () => _onNavTap(context, 1),
                 ),
                 _buildNavButton(
-                  icon: Icons.emergency,
-                  label: 'SOS',
-                  isActive: true,
-                  onTap: () => _onNavTap(context, 2),
+                  icon: Icons.contact_phone,
+                  label: 'Emergency',
+                  onTap: () {
+                    _hapticFeedback();
+                    _speak('Emergency Contact');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ContactInfoPage(),
+                      ),
+                    );
+                  },
                 ),
                 _buildNavButton(
                   icon: Icons.settings_rounded,
@@ -418,15 +416,12 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
           duration: const Duration(milliseconds: 300),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: isActive 
+            color: isActive
                 ? Colors.white.withOpacity(0.25)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
             border: isActive
-                ? Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 1.5,
-                  )
+                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
                 : null,
           ),
           child: Column(
@@ -434,19 +429,19 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
             children: [
               Icon(
                 icon,
-                color: isActive 
+                color: isActive
                     ? Colors.white
-                    : Colors.white.withOpacity(0.9),
+                    : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
                 size: 22,
               ),
               const SizedBox(height: 3),
               Text(
                 label,
                 style: TextStyle(
-                  color: isActive 
+                  color: isActive
                       ? Colors.white
                       : Colors.white.withOpacity(0.9),
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),
@@ -460,7 +455,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   void _showSuccessDialog(BuildContext context) {
     _hapticFeedback();
     _speak('Help is on the way');
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -555,9 +550,10 @@ class _SosButtonState extends State<SosButton>
       vsync: this,
     )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.4).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _pulseAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.4,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   Future<void> _initTts() async {
@@ -604,7 +600,7 @@ class _SosButtonState extends State<SosButton>
     _hapticFeedback();
     await Future.delayed(const Duration(milliseconds: 100));
     _hapticFeedback();
-    
+
     _speak('Emergency SOS activated');
 
     setState(() {
@@ -658,7 +654,10 @@ class _SosButtonState extends State<SosButton>
               children: [
                 if (!_isProcessing) ...[
                   _buildPulse(scale: _pulseAnimation.value * 1.2, opacity: 0.1),
-                  _buildPulse(scale: _pulseAnimation.value * 1.0, opacity: 0.15),
+                  _buildPulse(
+                    scale: _pulseAnimation.value * 1.0,
+                    opacity: 0.15,
+                  ),
                   _buildPulse(scale: _pulseAnimation.value * 0.8, opacity: 0.2),
                 ],
                 GestureDetector(
@@ -671,7 +670,8 @@ class _SosButtonState extends State<SosButton>
                       color: _isProcessing ? Colors.grey : Colors.red,
                       boxShadow: [
                         BoxShadow(
-                          color: (_isProcessing ? Colors.grey : Colors.red).withOpacity(0.5),
+                          color: (_isProcessing ? Colors.grey : Colors.red)
+                              .withOpacity(0.5),
                           blurRadius: 30,
                           spreadRadius: 5,
                         ),

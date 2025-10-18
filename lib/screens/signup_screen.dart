@@ -144,16 +144,16 @@ class _SignupScreenState extends State<SignupScreen>
             'displayName': fullName,
           });
           emailSent = true;
-          print('✅ Custom email sent via Cloud Function');
+          print('Custom email sent via Cloud Function');
         } catch (cloudFunctionError) {
-          print('⚠️ Cloud Function error: $cloudFunctionError');
+          print('Cloud Function error: $cloudFunctionError');
 
           try {
             await user.sendEmailVerification();
             emailSent = true;
-            print('📧 Sent default Firebase email as fallback');
+            print('Sent default Firebase email as fallback');
           } catch (verificationError) {
-            print('❌ Failed to send verification email: $verificationError');
+            print('Failed to send verification email: $verificationError');
             emailSent = false;
           }
         }
@@ -184,7 +184,7 @@ class _SignupScreenState extends State<SignupScreen>
         _startCheckingVerification();
 
         _showAccessibleFeedback(
-          "Account created! Check your email 💜",
+          "Account created! Check your email",
           Colors.green,
         );
 
@@ -229,7 +229,7 @@ class _SignupScreenState extends State<SignupScreen>
           "Unexpected error occurred. Please try again.",
           Colors.red,
         );
-        print('❌ Registration error: $e');
+        print('Registration error: $e');
       } finally {
         if (mounted) {
           setState(() => _isLoading = false);
@@ -477,7 +477,7 @@ class _SignupScreenState extends State<SignupScreen>
               header: true,
               label: 'Create Account page',
               child: Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(30),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -676,8 +676,9 @@ class _SignupScreenState extends State<SignupScreen>
                         HapticFeedback.selectionClick();
                         setState(() => _agreeToTerms = value ?? false);
                       },
-                      activeColor: const Color(0xFF6B1D73),
-                      checkColor: Colors.white,
+                      activeColor: const Color.fromARGB(255, 255, 255, 255),
+                      checkColor: Color(0xFF6B1D73),
+                      side: const BorderSide(color: Colors.white, width: 2),
                     ),
                     Expanded(
                       child: GestureDetector(
@@ -687,7 +688,11 @@ class _SignupScreenState extends State<SignupScreen>
                         },
                         child: const Text(
                           "I agree to the Terms and Conditions",
-                          style: TextStyle(color: Colors.white, fontSize: 16),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
                     ),
@@ -697,135 +702,138 @@ class _SignupScreenState extends State<SignupScreen>
             ),
             const SizedBox(height: 32),
 
-// Create Account Button - Match Login button size (56 height)
-Semantics(
-  label: 'Create account button',
-  hint: 'Double tap to create your account',
-  button: true,
-  child: SizedBox(
-    width: double.infinity,
-    height: 56,  // ✅ Changed from 64 to 56
-    child: ElevatedButton(
-      onPressed: _isLoading
-          ? null
-          : () {
-              HapticFeedback.mediumImpact();
-              _registerUser();
-            },
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF6B1D73),
-        foregroundColor: Colors.white,
-        elevation: 12,
-        shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-      ),
-      child: _isLoading
-          ? const SizedBox(
-              height: 24,  // ✅ Changed from 28 to 24
-              width: 24,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,  // ✅ Changed from 3 to 2
-              ),
-            )
-          : const Text(
-              "Create Account",
-              style: TextStyle(
-                fontSize: 18,  // ✅ Changed from 20 to 18
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-    ),
-  ),
-),
-
-const SizedBox(height: 32),
-
-Row(
-  children: [
-    Expanded(
-      child: Container(
-        height: 1,
-        color: Colors.white.withOpacity(0.3),
-      ),
-    ),
-    Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Text(
-        "OR",
-        style: TextStyle(
-          color: Colors.white.withOpacity(0.7),
-          fontWeight: FontWeight.w500,
-          fontSize: 16,
-        ),
-      ),
-    ),
-    Expanded(
-      child: Container(
-        height: 1,
-        color: Colors.white.withOpacity(0.3),
-      ),
-    ),
-  ],
-),
-
-const SizedBox(height: 32),
-
-// Google Sign Up Button - Match Login Google button style
-Semantics(
-  label: 'Sign up with Google button',
-  button: true,
-  hint: 'Double tap to sign up using your Google account',
-  child: SizedBox(
-    width: double.infinity,
-    height: 56,  // ✅ Changed from 64 to 56
-    child: Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1.5,
-        ),
-      ),
-      child: ElevatedButton(
-        onPressed: _isLoading
-            ? null
-            : () {
-                HapticFeedback.selectionClick();
-                _signUpWithGoogle();
-              },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          shadowColor: Colors.transparent,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            ExcludeSemantics(
-              child: Icon(Icons.g_mobiledata, size: 28),  // ✅ Changed from 32 to 28
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              "Continue with Google",
-              style: TextStyle(
-                fontSize: 16,  // ✅ Changed from 18 to 16
-                fontWeight: FontWeight.w600,
+            // Create Account Button - Match Login button size (56 height)
+            Semantics(
+              label: 'Create account button',
+              hint: 'Double tap to create your account',
+              button: true,
+              child: SizedBox(
+                width: double.infinity,
+                height: 59, // ✅ Changed from 64 to 56
+                child: ElevatedButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          HapticFeedback.mediumImpact();
+                          _registerUser();
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6B1D73),
+                    foregroundColor: Colors.white,
+                    elevation: 12,
+                    shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 27, // ✅ Changed from 28 to 24
+                          width: 27,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2, // ✅ Changed from 3 to 2
+                          ),
+                        )
+                      : const Text(
+                          "Create Account",
+                          style: TextStyle(
+                            fontSize: 21, // ✅ Changed from 20 to 18
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                ),
               ),
             ),
-          ],
-        ),
-      ),
-    ),
-  ),
-),
+
+            const SizedBox(height: 32),
+
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 1,
+                    color: Colors.white.withOpacity(0.3),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    "OR",
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    height: 1,
+                    color: Colors.white.withOpacity(0.3),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 32),
+
+            // Google Sign Up Button - Match Login Google button style
+            Semantics(
+              label: 'Sign up with Google button',
+              button: true,
+              hint: 'Double tap to sign up using your Google account',
+              child: SizedBox(
+                width: double.infinity,
+                height: 59, // ✅ Changed from 64 to 56
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: ElevatedButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () {
+                            HapticFeedback.selectionClick();
+                            _signUpWithGoogle();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      shadowColor: Colors.transparent,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            Icons.g_mobiledata,
+                            size: 30,
+                          ), // ✅ Changed from 32 to 28
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          "Continue with Google",
+                          style: TextStyle(
+                            fontSize: 18, // ✅ Changed from 18 to 16
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 30),
             // Already have account - Button style like the image
             Semantics(
@@ -838,6 +846,7 @@ Semantics(
                   Navigator.pop(context);
                 },
                 child: Container(
+                  height: 59, // أضف هذا السطر
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 16,
@@ -858,6 +867,7 @@ Semantics(
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.9),
                           fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const Text(
@@ -962,10 +972,10 @@ Semantics(
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.orange.withOpacity(0.2),
+                            color: Colors.red.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: Colors.orange.withOpacity(0.5),
+                              color: Colors.red.withOpacity(0.5),
                               width: 2,
                             ),
                           ),
@@ -977,28 +987,29 @@ Semantics(
                                   ExcludeSemantics(
                                     child: Icon(
                                       Icons.warning_amber_rounded,
-                                      color: Colors.orange,
-                                      size: 24,
+                                      color: Color.fromARGB(255, 255, 60, 46),
+                                      size: 26,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   const Text(
                                     "IMPORTANT!",
                                     style: TextStyle(
-                                      fontSize: 18,
-                                      color: Colors.orange,
-                                      fontWeight: FontWeight.bold,
+                                      fontSize: 19,
+                                      color: Color.fromARGB(255, 255, 60, 46),
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                "📧 Check your SPAM/JUNK folder!\n\ncheck spam folder and mark as 'Not Spam'.",
+                                "Check your SPAM/JUNK folder!\n\ncheck spam folder and mark as 'Not Spam'.",
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.white.withOpacity(0.95),
                                   height: 1.5,
+                                  fontWeight: FontWeight.w600,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -1016,9 +1027,21 @@ Semantics(
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.2),
+                color: const Color.fromARGB(
+                  255,
+                  184,
+                  215,
+                  240,
+                ).withOpacity(0.2),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                border: Border.all(
+                  color: const Color.fromARGB(
+                    255,
+                    126,
+                    192,
+                    247,
+                  ).withOpacity(0.3),
+                ),
               ),
               child: Column(
                 children: [
@@ -1028,7 +1051,7 @@ Semantics(
                         child: Icon(
                           Icons.info_outline,
                           color: Colors.white,
-                          size: 24,
+                          size: 26,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1036,7 +1059,7 @@ Semantics(
                         "Next Steps",
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 18,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1044,11 +1067,12 @@ Semantics(
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "1. Open your email app\n2. Check INBOX and SPAM folder\n3. Find our verification email\n4. Click the verification link\n5. Come back here automatically\n\n✅ We're checking automatically!",
+                    "1. Open your email app\n2. Check INBOX and SPAM folder\n3. Find our verification email\n4. Click the verification link\n5. Come back here automatically\n\n We're checking automatically!",
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.9),
-                      fontSize: 15,
+                      fontSize: 17,
                       height: 1.6,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -1079,8 +1103,8 @@ Semantics(
                         ? "Resend Verification Email"
                         : "Resend in $_resendCooldown seconds",
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -1110,7 +1134,8 @@ Semantics(
                   "Back to Login",
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
                     decoration: TextDecoration.underline,
                   ),
                 ),

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'login_screen.dart';
 
@@ -10,12 +9,13 @@ class ForgotPasswordScreen extends StatefulWidget {
   State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
 }
 
-class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with TickerProviderStateMixin {
+class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
+    with TickerProviderStateMixin {
   final TextEditingController _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
   bool _emailSent = false;
-  
+
   late AnimationController _animationController;
   late AnimationController _successAnimationController;
   late AnimationController _buttonAnimationController;
@@ -37,56 +37,52 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
-    
+
     _successAnimationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
+
     _buttonAnimationController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.0, 0.8, curve: Curves.easeInOut),
-    ));
-    
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.5),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.2, 1.0, curve: Curves.easeOutBack),
-    ));
-    
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: const Interval(0.4, 1.0, curve: Curves.elasticOut),
-    ));
 
-    _successScaleAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _successAnimationController,
-      curve: Curves.elasticOut,
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.8, curve: Curves.easeInOut),
+      ),
+    );
 
-    _buttonScaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.95,
-    ).animate(CurvedAnimation(
-      parent: _buttonAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.2, 1.0, curve: Curves.easeOutBack),
+          ),
+        );
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.4, 1.0, curve: Curves.elasticOut),
+      ),
+    );
+
+    _successScaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _successAnimationController,
+        curve: Curves.elasticOut,
+      ),
+    );
+
+    _buttonScaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
+      CurvedAnimation(
+        parent: _buttonAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
   }
 
   @override
@@ -112,19 +108,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
       final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
         'sendCustomPasswordReset',
       );
-      
+
       final result = await callable.call({
         'email': _emailController.text.trim(),
       });
-      
+
       if (result.data['success'] == true) {
         setState(() {
           _emailSent = true;
           _loading = false;
         });
-        
+
         _successAnimationController.forward();
-        
+
         _showSnackBar(
           "Password reset link sent to ${_emailController.text.trim()}",
           Colors.green,
@@ -137,23 +133,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
             Navigator.pushReplacement(
               context,
               PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
+                pageBuilder: (context, animation, secondaryAnimation) =>
+                    const LoginScreen(),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
                 transitionDuration: const Duration(milliseconds: 500),
               ),
             );
           }
         });
       }
-
     } on FirebaseFunctionsException catch (e) {
       setState(() => _loading = false);
-      
+
       String errorMessage = "Something went wrong";
       IconData errorIcon = Icons.error;
-      
+
       switch (e.code) {
         case 'not-found':
           errorMessage = "No account found with this email address";
@@ -166,7 +163,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
         default:
           errorMessage = e.message ?? "An error occurred";
       }
-      
+
       _showSnackBar(errorMessage, Colors.red, errorIcon);
     } catch (e) {
       setState(() => _loading = false);
@@ -221,7 +218,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
               ),
             ),
           ),
-          
+
           // Main content
           SafeArea(
             child: FadeTransition(
@@ -233,7 +230,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                   child: Column(
                     children: [
                       const SizedBox(height: 60),
-                      
+
                       // Header section with animation
                       ScaleTransition(
                         scale: _scaleAnimation,
@@ -259,18 +256,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF6B1D73).withOpacity(0.2),
+                                  color: const Color(
+                                    0xFF6B1D73,
+                                  ).withOpacity(0.2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
-                                  _emailSent ? Icons.mark_email_read : Icons.lock_reset,
+                                  _emailSent
+                                      ? Icons.mark_email_read
+                                      : Icons.lock_reset,
                                   size: 48,
                                   color: Colors.white,
                                 ),
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                _emailSent ? "Check Your Email" : "Forgot Password?",
+                                _emailSent
+                                    ? "Check Your Email"
+                                    : "Forgot Password?",
                                 style: const TextStyle(
                                   fontSize: 28,
                                   fontWeight: FontWeight.bold,
@@ -278,14 +281,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 12),
                               Text(
-                                _emailSent 
+                                _emailSent
                                     ? "We've sent a password reset link to your email"
                                     : "Don't worry! Enter your email and we'll send you a reset link",
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.white.withOpacity(0.9),
+                                  fontWeight: FontWeight.w500,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
@@ -293,7 +297,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 40),
 
                       // Success animation or form
@@ -354,7 +358,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                                           "Check your spam folder if you don't see the email",
                                           style: TextStyle(
                                             fontSize: 12,
-                                            color: Colors.white.withOpacity(0.7),
+                                            color: Colors.white.withOpacity(
+                                              0.7,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -389,7 +395,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                                   if (value == null || value.trim().isEmpty) {
                                     return "Email is required";
                                   }
-                                  final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                                  final emailRegex = RegExp(
+                                    r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                                  );
                                   if (!emailRegex.hasMatch(value.trim())) {
                                     return "Please enter a valid email address";
                                   }
@@ -404,14 +412,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                                 scale: _buttonScaleAnimation,
                                 child: SizedBox(
                                   width: double.infinity,
-                                  height: 56,
+                                  height: 59,
                                   child: ElevatedButton(
                                     onPressed: _loading ? null : _resetPassword,
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF6B1D73),
                                       foregroundColor: Colors.white,
                                       elevation: 12,
-                                      shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
+                                      shadowColor: const Color(
+                                        0xFF6B1D73,
+                                      ).withOpacity(0.4),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(16),
                                       ),
@@ -426,7 +436,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                                             ),
                                           )
                                         : const Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               Icon(Icons.send, size: 20),
                                               SizedBox(width: 8),
@@ -500,17 +511,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.8),
                                   fontSize: 16,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                               GestureDetector(
                                 onTap: () => Navigator.pop(context),
                                 child: const Text(
-                                  "Sign In",
+                                  // ✅ أضف child:
+                                  "Log In",
                                   style: TextStyle(
-                                    color: Color(0xFF6B1D73),
+                                    color: Color.fromARGB(255, 248, 183, 255),
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    decoration: TextDecoration.underline,
                                   ),
                                 ),
                               ),
@@ -543,8 +555,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+            blurRadius: 10, // ✅ غيّر من 15 إلى 10
+            offset: const Offset(0, 4), // ✅ غيّر من 5 إلى 4
           ),
         ],
       ),
@@ -552,13 +564,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
         controller: controller,
         keyboardType: keyboardType,
         validator: validator,
-        style: const TextStyle(color: Colors.black, fontSize: 16),
+        style: const TextStyle(
+          color: Colors.black,
+          fontSize: 18,
+        ), // ✅ غيّر من 16 إلى 18
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.shade600),
+          hintStyle: TextStyle(
+            color: Colors.grey.shade600,
+            fontSize: 18,
+          ), // ✅ أضف fontSize: 18
           prefixIcon: Container(
             margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(10), // ✅ غيّر من 8 إلى 10
             decoration: BoxDecoration(
               color: const Color(0xFF6B1D73).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
@@ -566,8 +584,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
             child: Icon(
               icon,
               color: const Color(0xFF6B1D73),
-              size: 20,
-            ),
+              size: 24,
+            ), // ✅ غيّر من 20 إلى 24
           ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
@@ -575,14 +593,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> with Ticker
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(
-              color: Color(0xFF6B1D73),
-              width: 2,
-            ),
+            borderSide: const BorderSide(color: Color(0xFF6B1D73), width: 2),
           ),
           fillColor: Colors.white.withOpacity(0.95),
           filled: true,
-          contentPadding: const EdgeInsets.all(20),
+          contentPadding: const EdgeInsets.all(24), // ✅ غيّر من 20 إلى 24
         ),
       ),
     );

@@ -9,7 +9,6 @@ import './camera.dart';
 import './settings.dart';
 import './reminders.dart';
 import './sos_screen.dart';
-import './location_permission_screen.dart';
 import './contact_info_page.dart';
 import './currency_camera.dart';
 
@@ -262,7 +261,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     style: TextStyle(
                       fontSize: 13,
                       color: deepPurple.withOpacity(0.5),
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
                       letterSpacing: 1.5,
                     ),
                   ),
@@ -368,42 +367,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             onTap: () async {
               _hapticFeedback();
               _speak('Emergency SOS');
-              final user = _auth.currentUser;
-              if (user != null) {
-                final doc = await _firestore
-                    .collection('users')
-                    .doc(user.uid)
-                    .get();
-                final data = doc.data();
-                final permissionGranted =
-                    data?['location_permission_granted'] ?? false;
-                if (!permissionGranted) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => LocationPermissionScreen(
-                        onPermissionGranted: () async {
-                          await _firestore
-                              .collection('users')
-                              .doc(user.uid)
-                              .update({'location_permission_granted': true});
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SosScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const SosScreen()),
-                  );
-                }
-              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SosScreen()),
+              );
             },
           ),
 
