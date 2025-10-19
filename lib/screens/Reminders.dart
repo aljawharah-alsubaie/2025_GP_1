@@ -6,8 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import './settings.dart';
 import './home_page.dart';
-import './sos_screen.dart';
-import './location_permission_screen.dart';
+import './contact_info_page.dart';
 
 class RemindersPage extends StatefulWidget {
   const RemindersPage({super.key});
@@ -32,28 +31,17 @@ class _RemindersPageState extends State<RemindersPage>
   String _voiceTitle = '';
   String _voiceDate = '';
   String _voiceTime = '';
-  String _voiceNote = '';
   String _voiceFrequency = 'One time';
   bool _isVoiceMode = false;
-
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _dateController = TextEditingController();
-  final TextEditingController _timeController = TextEditingController();
-  final TextEditingController _noteController = TextEditingController();
-
-  String _selectedFrequency = 'One time';
-  String? _editingReminderId;
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _pulseController;
 
-  // 🎨 نظام ألوان موحد - متطابق مع ContactInfoPage
+  // 🎨 نظام ألوان موحد
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
-  static const Color softPurple = Color(0xFFB665BA);
-  static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
@@ -138,7 +126,6 @@ class _RemindersPageState extends State<RemindersPage>
               title: data['title'] ?? '',
               time: data['time'] ?? '',
               date: (data['date'] as Timestamp).toDate(),
-              note: data['note'] ?? '',
               frequency: data['frequency'] ?? 'One time',
             );
           }).toList();
@@ -180,7 +167,6 @@ class _RemindersPageState extends State<RemindersPage>
       _voiceTitle = '';
       _voiceDate = '';
       _voiceTime = '';
-      _voiceNote = '';
       _voiceFrequency = 'One time';
     });
 
@@ -245,7 +231,7 @@ class _RemindersPageState extends State<RemindersPage>
           _voiceDate = '${dateTime.day}/${dateTime.month}/${dateTime.year}';
           _voiceTime = _formatTime(dateTime);
           await _speak(
-            'Perfect. Reminder set for ${_formatDateForSpeech(dateTime)} at ${_voiceTime}. Would you like to add a note? Say yes or no',
+            'Perfect. Reminder set for ${_formatDateForSpeech(dateTime)} at ${_voiceTime}. Would you like this reminder to repeat? Say one time, daily, or weekly',
           );
           setState(() => _voiceStep = 2);
           await Future.delayed(const Duration(milliseconds: 4000));
@@ -263,33 +249,7 @@ class _RemindersPageState extends State<RemindersPage>
         }
         break;
 
-      case 2: // Ask for note
-        if (input.toLowerCase().contains('yes')) {
-          await _speak('What would you like to add as a note?');
-          setState(() => _voiceStep = 3);
-          await Future.delayed(const Duration(milliseconds: 2500));
-          _listenForVoiceInput();
-        } else {
-          await _speak(
-            'Would you like this reminder to repeat? Say one time, daily, or weekly',
-          );
-          setState(() => _voiceStep = 4);
-          await Future.delayed(const Duration(milliseconds: 3500));
-          _listenForVoiceInput();
-        }
-        break;
-
-      case 3: // Note input
-        _voiceNote = input;
-        await _speak(
-          'Note added. Would you like this reminder to repeat? Say one time, daily, or weekly',
-        );
-        setState(() => _voiceStep = 4);
-        await Future.delayed(const Duration(milliseconds: 3500));
-        _listenForVoiceInput();
-        break;
-
-      case 4: // Frequency
+      case 2: // Frequency
         if (input.toLowerCase().contains('daily')) {
           _voiceFrequency = 'Daily';
         } else if (input.toLowerCase().contains('weekly')) {
@@ -388,7 +348,7 @@ class _RemindersPageState extends State<RemindersPage>
       time = TimeOfDay(hour: hour, minute: 0);
     }
 
-    if (date != null && time != null) {
+    if (time != null) {
       return DateTime(date.year, date.month, date.day, time.hour, time.minute);
     }
 
@@ -447,7 +407,6 @@ class _RemindersPageState extends State<RemindersPage>
         'title': _voiceTitle,
         'time': _voiceTime,
         'date': Timestamp.fromDate(date),
-        'note': _voiceNote,
         'frequency': _voiceFrequency,
         'created_at': FieldValue.serverTimestamp(),
       };
@@ -465,7 +424,6 @@ class _RemindersPageState extends State<RemindersPage>
             title: _voiceTitle,
             time: _voiceTime,
             date: date,
-            note: _voiceNote,
             frequency: _voiceFrequency,
           ),
         );
@@ -541,9 +499,17 @@ class _RemindersPageState extends State<RemindersPage>
           if (_isVoiceMode || _isListening) _buildVoiceOverlay(),
         ],
       ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [_buildVoiceAddButton(), _buildFloatingBottomNav()],
+      bottomNavigationBar: Stack(
+        children: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [_buildVoiceAddButton(), _buildFloatingBottomNav()],
+          ),
+          if (_isVoiceMode || _isListening)
+            Positioned.fill(
+              child: Container(color: Colors.black.withOpacity(0.85)),
+            ),
+        ],
       ),
     );
   }
@@ -636,9 +602,9 @@ class _RemindersPageState extends State<RemindersPage>
                   Text(
                     '${reminders.length} Active Reminders',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       color: deepPurple.withOpacity(0.6),
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -690,7 +656,7 @@ class _RemindersPageState extends State<RemindersPage>
 
     return Semantics(
       label:
-          'Reminder: ${reminder.title}. Date: ${reminder.date.day} ${_getMonthName(reminder.date.month)}, ${reminder.date.year}. Time: ${reminder.time}. ${reminder.note.isNotEmpty ? "Note: ${reminder.note}." : ""} Double tap to see options',
+          'Reminder: ${reminder.title}. Date: ${reminder.date.day} ${_getMonthName(reminder.date.month)}, ${reminder.date.year}. Time: ${reminder.time}. Double tap to delete',
       button: true,
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
@@ -711,7 +677,6 @@ class _RemindersPageState extends State<RemindersPage>
             onTap: () {
               _hapticFeedback();
               _speak('${reminder.title}. ${reminder.time}');
-              _showReminderOptions(reminder, index);
             },
             borderRadius: BorderRadius.circular(20),
             child: Padding(
@@ -833,40 +798,28 @@ class _RemindersPageState extends State<RemindersPage>
                             ),
                           ],
                         ),
-                        if (reminder.note.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            reminder.note,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: deepPurple.withOpacity(0.4),
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
                       ],
                     ),
                   ),
                   GestureDetector(
                     onTap: () {
                       _hapticFeedback();
-                      _showReminderOptions(reminder, index);
+                      _deleteReminder(index);
                     },
                     child: Container(
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: vibrantPurple.withOpacity(0.1),
+                        color: Colors.red.withOpacity(0.1),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: vibrantPurple.withOpacity(0.3),
+                          color: Colors.red.withOpacity(0.3),
                           width: 1.5,
                         ),
                       ),
                       child: const Icon(
-                        Icons.more_vert,
-                        color: vibrantPurple,
+                        Icons.delete_outline,
+                        color: Colors.red,
                         size: 20,
                       ),
                     ),
@@ -874,111 +827,6 @@ class _RemindersPageState extends State<RemindersPage>
                 ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showReminderOptions(ReminderItem reminder, int index) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(30),
-              topRight: Radius.circular(30),
-            ),
-          ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: [
-                      _buildOptionButton(
-                        icon: Icons.delete,
-                        label: 'Delete Reminder',
-                        color: Colors.red,
-                        onTap: () {
-                          Navigator.pop(context);
-                          _deleteReminder(index);
-                        },
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildOptionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    Color? color,
-  }) {
-    final buttonColor = color ?? vibrantPurple;
-
-    return Semantics(
-      label: '$label button',
-      button: true,
-      child: GestureDetector(
-        onTap: () {
-          _hapticFeedback();
-          _speak(label);
-          onTap();
-        },
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: buttonColor.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: buttonColor.withOpacity(0.3), width: 1),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: buttonColor,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: buttonColor,
-                  ),
-                ),
-              ),
-              Icon(Icons.arrow_forward_ios, size: 16, color: buttonColor),
-            ],
           ),
         ),
       ),
@@ -1154,10 +1002,6 @@ class _RemindersPageState extends State<RemindersPage>
       case 1:
         return 'When to remind you?';
       case 2:
-        return 'Add a note?';
-      case 3:
-        return 'What\'s the note?';
-      case 4:
         return 'How often to repeat?';
       default:
         return 'Processing...';
@@ -1171,10 +1015,6 @@ class _RemindersPageState extends State<RemindersPage>
       case 1:
         return 'Say the date and time\nExample: "Tomorrow at 5 PM" or "Next Monday at 3 PM"';
       case 2:
-        return 'Say "Yes" to add a note, or "No" to skip';
-      case 3:
-        return 'Speak your note';
-      case 4:
         return 'Say "One time", "Daily", or "Weekly"';
       default:
         return '';
@@ -1183,7 +1023,7 @@ class _RemindersPageState extends State<RemindersPage>
 
   Widget _buildVoiceAddButton() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 35),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 25),
       child: Semantics(
         label: 'Add new reminder with voice',
         button: true,
@@ -1219,7 +1059,7 @@ class _RemindersPageState extends State<RemindersPage>
                 ),
                 const SizedBox(width: 12),
                 const Text(
-                  'Add Reminder',
+                  'Add Voice Reminder',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
@@ -1448,51 +1288,17 @@ class _RemindersPageState extends State<RemindersPage>
                   },
                 ),
                 _buildNavButton(
-                  icon: Icons.emergency,
+                  icon: Icons.contact_phone,
                   label: 'Emergency',
-                  onTap: () async {
+                  onTap: () {
                     _hapticFeedback();
-                    _speak('Emergency');
-                    final user = _auth.currentUser;
-                    if (user != null) {
-                      final doc = await _firestore
-                          .collection('users')
-                          .doc(user.uid)
-                          .get();
-                      final data = doc.data();
-                      final permissionGranted =
-                          data?['location_permission_granted'] ?? false;
-                      if (!permissionGranted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => LocationPermissionScreen(
-                              onPermissionGranted: () async {
-                                await _firestore
-                                    .collection('users')
-                                    .doc(user.uid)
-                                    .update({
-                                      'location_permission_granted': true,
-                                    });
-                                Navigator.pushReplacement(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const SosScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        );
-                      } else {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SosScreen(),
-                          ),
-                        );
-                      }
-                    }
+                    _speak('Emergency Contact');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ContactInfoPage(),
+                      ),
+                    );
                   },
                 ),
                 _buildNavButton(
@@ -1523,36 +1329,45 @@ class _RemindersPageState extends State<RemindersPage>
     bool isActive = false,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.white.withOpacity(0.25) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: isActive
-              ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-              size: 22,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
+    return Semantics(
+      label: '$label button',
+      button: true,
+      selected: isActive,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.white.withOpacity(0.25)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: isActive
+                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
                 color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                fontSize: 13,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                size: 22,
               ),
-            ),
-          ],
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.9),
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1564,7 +1379,6 @@ class ReminderItem {
   final String title;
   final String time;
   final DateTime date;
-  final String note;
   final String frequency;
 
   ReminderItem({
@@ -1572,7 +1386,6 @@ class ReminderItem {
     required this.title,
     required this.time,
     required this.date,
-    this.note = '',
     this.frequency = 'One time',
   });
 }
