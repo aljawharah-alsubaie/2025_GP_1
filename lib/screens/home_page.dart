@@ -540,18 +540,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // ⚠️ تنبيه البروفايل
   Widget _buildProfileAlert() {
     return Container(
-      color: Colors.black.withOpacity(0.7),
+      color: Colors.black.withOpacity(0.85),
       child: Center(
         child: Semantics(
           label: 'Profile incomplete. Complete your profile to unlock features',
+          hint: 'Double tap to hear details',
+          liveRegion: true,
           child: Container(
-            margin: const EdgeInsets.all(24),
+            margin: const EdgeInsets.all(31),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: vibrantPurple, width: 2),
               boxShadow: [
                 BoxShadow(
                   color: vibrantPurple.withOpacity(0.3),
@@ -574,24 +576,30 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       topRight: Radius.circular(30),
                     ),
                   ),
-                  child: const Column(
-                    children: [
-                      Icon(
-                        Icons.person_add_alt_1,
-                        color: Colors.white,
-                        size: 64,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        'Complete Your Profile',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
+                  child: Semantics(
+                    header: true,
+                    child: Column(
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            Icons.person_add_alt_1,
+                            color: Colors.white,
+                            size: 70, // أكبر قليلاً
+                          ),
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        Text(
+                          'Complete Your Profile',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -602,20 +610,80 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       Text(
                         'Add your personal details to unlock all features',
                         style: TextStyle(
-                          fontSize: 16,
-                          color: deepPurple.withOpacity(0.6),
+                          fontSize: 18,
+                          color: deepPurple.withOpacity(0.7),
                           height: 1.5,
+                          fontWeight: FontWeight.w500,
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 32),
 
-                      Row(
+                      Column(
                         children: [
-                          Expanded(
-                            child: Semantics(
-                              label: 'Later button',
-                              button: true,
+                          // الزر الأساسي أولاً
+                          Semantics(
+                            label: 'Complete now button. Go to profile page',
+                            hint: 'Double tap to open profile',
+                            button: true,
+                            child: Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [vibrantPurple, primaryPurple],
+                                ),
+                                borderRadius: BorderRadius.circular(15),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: vibrantPurple.withOpacity(0.4),
+                                    blurRadius: 15,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  _hapticFeedback();
+                                  _speak('Opening profile');
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const ProfilePage(),
+                                    ),
+                                  ).then((_) {
+                                    _checkProfileCompleteness();
+                                    _loadUserName();
+                                  });
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 22,
+                                  ),
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Complete Now',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          // زر Later ثانياً
+                          Semantics(
+                            label: 'Later button. Dismiss this alert',
+                            hint: 'Double tap to dismiss',
+                            button: true,
+                            child: SizedBox(
+                              width: double.infinity,
                               child: OutlinedButton(
                                 onPressed: () {
                                   _hapticFeedback();
@@ -624,11 +692,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 },
                                 style: OutlinedButton.styleFrom(
                                   padding: const EdgeInsets.symmetric(
-                                    vertical: 18,
+                                    vertical: 22,
                                   ),
                                   side: BorderSide(
                                     color: lightPurple,
-                                    width: 2,
+                                    width: 2.5,
                                   ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(15),
@@ -637,66 +705,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 child: Text(
                                   'Later',
                                   style: TextStyle(
-                                    fontSize: 16,
+                                    fontSize: 18,
                                     fontWeight: FontWeight.w700,
                                     color: vibrantPurple,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 2,
-                            child: Semantics(
-                              label: 'Complete now button',
-                              button: true,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [vibrantPurple, primaryPurple],
-                                  ),
-                                  borderRadius: BorderRadius.circular(15),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: vibrantPurple.withOpacity(0.4),
-                                      blurRadius: 15,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    _hapticFeedback();
-                                    _speak('Opening profile');
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const ProfilePage(),
-                                      ),
-                                    ).then((_) {
-                                      _checkProfileCompleteness();
-                                      _loadUserName();
-                                    });
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 18,
-                                    ),
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(15),
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    'Complete Now',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.white,
-                                    ),
                                   ),
                                 ),
                               ),
