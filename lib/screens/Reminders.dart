@@ -82,11 +82,59 @@ class _RemindersPageState extends State<RemindersPage>
     bool available = await _speech.initialize(
       onError: (error) {
         print('Speech error: $error');
-        _speak(
-          'Speech recognition error. Please check your microphone permissions',
-        );
+        
+        // 🔍 التعامل مع أنواع الأخطاء المختلفة
+        String errorMsg = error.errorMsg.toLowerCase();
+        
+        if (errorMsg.contains('no_match') || errorMsg.contains('no match')) {
+          // ❌ لم يتم التعرف على أي كلام
+          print('No speech detected - cancelling voice mode');
+          if (mounted && _isVoiceMode) {
+            setState(() {
+              _isVoiceMode = false;
+              _isListening = false;
+              _voiceStep = 0;
+            });
+            _speak('Could not hear you clearly. Voice reminder cancelled');
+          }
+        } else if (errorMsg.contains('network')) {
+          if (mounted && _isVoiceMode) {
+            setState(() {
+              _isVoiceMode = false;
+              _isListening = false;
+              _voiceStep = 0;
+            });
+            _speak('Network error. Voice reminder cancelled');
+          }
+        } else if (errorMsg.contains('permission')) {
+          if (mounted && _isVoiceMode) {
+            setState(() {
+              _isVoiceMode = false;
+              _isListening = false;
+              _voiceStep = 0;
+            });
+            _speak('Microphone permission denied. Voice reminder cancelled');
+          }
+        } else {
+          // خطأ عام - نلغي الـ voice mode
+          if (mounted && _isVoiceMode) {
+            setState(() {
+              _isVoiceMode = false;
+              _isListening = false;
+              _voiceStep = 0;
+            });
+            _speak('Speech recognition error. Voice reminder cancelled');
+          }
+        }
       },
-      onStatus: (status) => print('Speech status: $status'),
+      onStatus: (status) {
+        print('Speech status: $status');
+        
+        // 📊 تتبع حالة الاستماع
+        if (status == 'done' || status == 'notListening') {
+          print('Listening session ended');
+        }
+      },
     );
 
     if (!available) {
@@ -174,17 +222,18 @@ class _RemindersPageState extends State<RemindersPage>
     await _speak(
       'Starting voice reminder. Please tell me the title of your reminder',
     );
-    await Future.delayed(const Duration(milliseconds: 2500));
-    await _speak(
-      'Starting voice reminder. Please tell me the title of your reminder',
-    );
-    await Future.delayed(const Duration(milliseconds: 3500));
+    await Future.delayed(const Duration(milliseconds: 3000));
     _listenForVoiceInput();
   }
 
   Future<void> _listenForVoiceInput() async {
     if (!_speech.isAvailable) {
       _speak('Speech recognition is not available');
+      setState(() {
+        _isVoiceMode = false;
+        _isListening = false;
+        _voiceStep = 0;
+      });
       return;
     }
 
@@ -196,10 +245,10 @@ class _RemindersPageState extends State<RemindersPage>
           _processVoiceInput(result.recognizedWords);
         }
       },
-      listenFor: const Duration(seconds: 15),
-      pauseFor: const Duration(seconds: 5),
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 10),
       localeId: 'en_US',
-      cancelOnError: true,
+      cancelOnError: false,
       partialResults: false,
     );
   }
@@ -208,9 +257,11 @@ class _RemindersPageState extends State<RemindersPage>
     setState(() => _isListening = false);
 
     if (input.isEmpty) {
-      await _speak('I did not hear anything. Please try again');
-      await Future.delayed(const Duration(milliseconds: 2500));
-      _listenForVoiceInput();
+      await _speak('Could not hear you clearly. Voice reminder cancelled');
+      setState(() {
+        _isVoiceMode = false;
+        _voiceStep = 0;
+      });
       return;
     }
 
@@ -241,10 +292,6 @@ class _RemindersPageState extends State<RemindersPage>
             'Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM',
           );
           await Future.delayed(const Duration(milliseconds: 3500));
-          await _speak(
-            'Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM',
-          );
-          await Future.delayed(const Duration(milliseconds: 4500));
           _listenForVoiceInput();
         }
         break;
@@ -262,10 +309,6 @@ class _RemindersPageState extends State<RemindersPage>
           'Understood. Frequency is ${_voiceFrequency}. Creating your reminder now',
         );
         await Future.delayed(const Duration(milliseconds: 2000));
-        await _speak(
-          'Understood. Frequency is ${_voiceFrequency}. Creating your reminder now',
-        );
-        await Future.delayed(const Duration(milliseconds: 2500));
         await _saveVoiceReminder();
         break;
     }
@@ -274,7 +317,6 @@ class _RemindersPageState extends State<RemindersPage>
   DateTime? _parseDateTimeFromVoice(String input) {
     final now = DateTime.now();
     final lowerInput = input.toLowerCase();
-
     DateTime? date;
     TimeOfDay? time;
 
@@ -631,11 +673,11 @@ class _RemindersPageState extends State<RemindersPage>
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
           .animate(
-            CurvedAnimation(
-              parent: _slideController,
-              curve: Curves.easeOutCubic,
-            ),
-          ),
+        CurvedAnimation(
+          parent: _slideController,
+          curve: Curves.easeOutCubic,
+        ),
+      ),
       child: RefreshIndicator(
         onRefresh: _loadReminders,
         color: vibrantPurple,
@@ -1077,7 +1119,6 @@ class _RemindersPageState extends State<RemindersPage>
 
   void _deleteReminder(int index) {
     final reminder = reminders[index];
-
     showDialog(
       context: context,
       builder: (BuildContext context) {
