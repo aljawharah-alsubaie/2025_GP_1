@@ -1,17 +1,15 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image/image.dart' as img;
 import 'package:flutter_tts/flutter_tts.dart';
 import '../services/insightface_pipeline.dart';
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
 import 'settings.dart';
+import 'add_person_page.dart';
+import 'edit_person_page.dart';
 
 class FaceManagementPage extends StatefulWidget {
   const FaceManagementPage({super.key});
@@ -22,22 +20,14 @@ class FaceManagementPage extends StatefulWidget {
 
 class _FaceManagementPageState extends State<FaceManagementPage>
     with TickerProviderStateMixin {
-  final TextEditingController _nameController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final FlutterTts _tts = FlutterTts();
   List<Map<String, dynamic>> _people = [];
   bool _isLoading = true;
-  bool _isUploading = false;
-  bool _isProcessing = false;
   String _searchQuery = '';
 
   AnimationController? _fadeController;
   AnimationController? _slideController;
-
-  // Multiple images support
-  List<File> _selectedImages = [];
-  final int _minImages = 3;
-  final int _maxImages = 10;
 
   // 🎨 Purple color scheme matching HomePage
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
@@ -67,7 +57,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
 
   @override
   void dispose() {
-    _nameController.dispose();
     _searchController.dispose();
     _tts.stop();
     _fadeController?.dispose();
@@ -137,31 +126,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     }
   }
 
-  Future<void> _saveEmbeddingsToFirestore(String personId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      final embeddings = InsightFacePipeline.getStoredEmbeddings();
-      if (embeddings.containsKey(personId)) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('face_embeddings')
-            .doc(personId)
-            .set({
-              'name': personId,
-              'embeddings': embeddings[personId],
-              'image_count': (embeddings[personId] as List).length,
-              'created_at': FieldValue.serverTimestamp(),
-              'updated_at': FieldValue.serverTimestamp(),
-            });
-      }
-    } catch (e) {
-      print('Error saving embeddings: $e');
-    }
-  }
-
   Future<void> _loadPeople() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -189,608 +153,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           context,
         ).showSnackBar(SnackBar(content: Text('Error loading people: $e')));
       }
-    }
-  }
-
-  Future<void> _pickImages() async {
-    if (_selectedImages.length >= _maxImages) {
-      _showSnackBar('Maximum $_maxImages photos allowed', Colors.orange);
-      return;
-    }
-
-    try {
-      final List<XFile> images = await ImagePicker().pickMultiImage(
-        imageQuality: 90,
-      );
-
-      if (images.isNotEmpty) {
-        int added = 0;
-        for (var image in images) {
-          if (_selectedImages.length < _maxImages) {
-            _selectedImages.add(File(image.path));
-            added++;
-          }
-        }
-        setState(() {});
-        _showSnackBar('Added $added photo(s)', Colors.green);
-      }
-    } catch (e) {
-      _showSnackBar('Failed to pick images: $e', Colors.red);
-    }
-  }
-
-  Future<void> _pickSingleImage() async {
-    if (_selectedImages.length >= _maxImages) {
-      _showSnackBar('Maximum $_maxImages photos allowed', Colors.orange);
-      return;
-    }
-
-    try {
-      final XFile? image = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        imageQuality: 90,
-      );
-
-      if (image != null) {
-        setState(() {
-          _selectedImages.add(File(image.path));
-        });
-      }
-    } catch (e) {
-      _showSnackBar('Failed to capture image: $e', Colors.red);
-    }
-  }
-
-  void _removeImage(int index) {
-    setState(() {
-      _selectedImages.removeAt(index);
-    });
-  }
-
-  Future<void> _addPerson() async {
-    if (_nameController.text.trim().isEmpty) {
-      _showSnackBar('Please enter a name', Colors.red);
-      return;
-    }
-
-    if (_selectedImages.length < _minImages) {
-      _showSnackBar('Please add at least $_minImages photos', Colors.red);
-      return;
-    }
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    if (_isProcessing) return;
-
-    setState(() {
-      _isUploading = true;
-      _isProcessing = true;
-    });
-
-    try {
-      final personName = _nameController.text.trim();
-      List<String> photoUrls = [];
-      int successCount = 0;
-      int failedCount = 0;
-      List<String> failReasons = [];
-
-      print('📸 Processing ${_selectedImages.length} images for $personName');
-
-      // معالجة كل الصور
-      for (int i = 0; i < _selectedImages.length; i++) {
-        try {
-          print('🔄 Processing image ${i + 1}/${_selectedImages.length}');
-
-          // 1. كشف الوجه
-          final faceRect = await InsightFacePipeline.detectFace(
-            _selectedImages[i],
-          );
-
-          if (faceRect == null) {
-            failedCount++;
-            failReasons.add('Image ${i + 1}: No face detected');
-            print('❌ Image $i: No face detected');
-            continue;
-          }
-
-          print(
-            '✅ Image $i: Face detected at ${faceRect.width.toInt()}x${faceRect.height.toInt()}',
-          );
-
-          // 2. قص الوجه
-          final croppedFace = await InsightFacePipeline.cropFace(
-            _selectedImages[i],
-            faceRect,
-          );
-
-          if (croppedFace == null) {
-            failedCount++;
-            failReasons.add('Image ${i + 1}: Failed to crop face');
-            print('❌ Image $i: Failed to crop face');
-            continue;
-          }
-
-          // 3. حفظ الصورة المقصوصة مؤقتاً
-          final tempDir = await Directory.systemTemp.createTemp();
-          final tempFile = File('${tempDir.path}/face_$i.jpg');
-          final jpg = img.encodeJpg(croppedFace);
-          await tempFile.writeAsBytes(jpg);
-
-          print('💾 Image $i: Saved cropped face to temp file');
-
-          // 4. استخراج وحفظ الـ embedding
-          final success = await InsightFacePipeline.storeFaceEmbedding(
-            personName,
-            tempFile,
-          );
-
-          if (success) {
-            successCount++;
-            print('✅ Image $i: Embedding stored successfully');
-
-            // 5. رفع الصورة المقصوصة إلى Firebase Storage
-            try {
-              final storageRef = FirebaseStorage.instance
-                  .ref()
-                  .child('users')
-                  .child(user.uid)
-                  .child('faces')
-                  .child(personName)
-                  .child('${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
-
-              final uploadTask = await storageRef.putFile(tempFile);
-              final photoUrl = await uploadTask.ref.getDownloadURL();
-              photoUrls.add(photoUrl);
-              print('☁️ Image $i: Uploaded to Firebase Storage');
-            } catch (e) {
-              print('⚠️ Image $i: Failed to upload to storage: $e');
-              // لكن الـ embedding محفوظ، فنعتبرها نجاح
-            }
-          } else {
-            failedCount++;
-            failReasons.add('Image ${i + 1}: Failed to extract face features');
-            print('❌ Image $i: Failed to extract embedding');
-          }
-
-          // تنظيف الملفات المؤقتة
-          try {
-            await tempFile.delete();
-            await tempDir.delete();
-          } catch (e) {
-            print('⚠️ Cleanup error: $e');
-          }
-        } catch (e, stackTrace) {
-          print('❌ Error processing image $i: $e');
-          print('Stack trace: $stackTrace');
-          failedCount++;
-          failReasons.add('Image ${i + 1}: Processing error');
-        }
-      }
-
-      print('📊 Results: Success=$successCount, Failed=$failedCount');
-
-      // حفظ البيانات في Firestore إذا نجحت صورة واحدة على الأقل
-      if (successCount > 0) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('people')
-            .add({
-              'name': personName,
-              'photoUrls': photoUrls,
-              'photoCount': photoUrls.length,
-              'embeddingCount': successCount,
-              'faceDetected': true,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-
-        // حفظ الـ embeddings
-        await _saveEmbeddingsToFirestore(personName);
-
-        // إعادة تحميل القائمة
-        await _loadPeople();
-
-        if (mounted) {
-          Navigator.pop(context);
-          await Future.delayed(const Duration(milliseconds: 100));
-          _resetForm();
-          _showSuccessDialog(personName, successCount, failedCount);
-        }
-      } else {
-        // كل الصور فشلت
-        if (mounted) {
-          String errorMsg = 'Failed to process any images with faces.\n\n';
-          if (failReasons.isNotEmpty) {
-            errorMsg += 'Issues found:\n${failReasons.take(3).join('\n')}';
-            if (failReasons.length > 3) {
-              errorMsg += '\n... and ${failReasons.length - 3} more';
-            }
-          }
-          errorMsg +=
-              '\n\nTips:\n• Use well-lit photos\n• Face should be clearly visible\n• Avoid blurry images';
-
-          _showDetailedErrorDialog(errorMsg);
-        }
-      }
-    } catch (e, stackTrace) {
-      print('❌ Error in _addPerson: $e');
-      print('Stack trace: $stackTrace');
-      if (mounted) {
-        _showSnackBar('Error adding person: $e', Colors.red);
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploading = false;
-          _isProcessing = false;
-        });
-      }
-    }
-  }
-
-  void _showDetailedErrorDialog(String message) {
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: EdgeInsets.zero,
-        content: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.orange,
-                        size: 40,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Processing Failed',
-                      style: TextStyle(
-                        color: deepPurple,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 22,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      message,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: deepPurple.withOpacity(0.8),
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _hapticFeedback();
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: deepPurple,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Try Again',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showSuccessDialog(String personName, int success, int failed) {
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => WillPopScope(
-        onWillPop: () async => false,
-        child: AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          contentPadding: EdgeInsets.zero,
-          content: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade100,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.check_circle,
-                          color: Colors.green,
-                          size: 50,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Success!',
-                        style: TextStyle(
-                          color: deepPurple,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 26,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      Text(
-                        personName,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: deepPurple,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Successful: $success photos',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.green.shade800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (failed > 0) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.warning,
-                                    color: Colors.orange,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Failed: $failed photos',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.orange.shade800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Face recognition trained successfully!',
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.green.shade700,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () {
-                                _hapticFeedback();
-                                Navigator.pop(context);
-                                _showAddDialog();
-                              },
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                side: const BorderSide(
-                                  color: vibrantPurple,
-                                  width: 2,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                              child: const Text(
-                                'Add Another',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: vibrantPurple,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () {
-                                _hapticFeedback();
-                                Navigator.pop(context);
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: deepPurple,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                elevation: 0,
-                              ),
-                              child: const Text(
-                                'Done',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _resetForm() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() {
-          _selectedImages.clear();
-          _nameController.clear();
-          _isUploading = false;
-          _isProcessing = false;
-        });
-      }
-    });
-  }
-
-  Future<void> _updatePersonName(
-    String personId,
-    String oldName,
-    String newName,
-  ) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('people')
-          .doc(personId)
-          .update({'name': newName});
-
-      final oldEmbeddings = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('face_embeddings')
-          .doc(oldName)
-          .get();
-
-      if (oldEmbeddings.exists) {
-        final data = oldEmbeddings.data();
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('face_embeddings')
-            .doc(newName)
-            .set(data!);
-
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('face_embeddings')
-            .doc(oldName)
-            .delete();
-      }
-
-      InsightFacePipeline.removeFaceEmbedding(oldName);
-      await _loadStoredEmbeddings();
-      await _loadPeople();
-
-      if (mounted) {
-        _showSnackBar('Updated to "$newName" successfully!', Colors.green);
-      }
-    } catch (e) {
-      _showSnackBar('Error updating name: $e', Colors.red);
     }
   }
 
@@ -825,396 +187,129 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     }
   }
 
-  void _showEditDialog(Map<String, dynamic> person) {
-    final nameController = TextEditingController(text: person['name']);
+  void _showDeleteConfirmation(String personId, String personName) {
+    _hapticFeedback();
 
+    _speak('Are you sure you want to delete $personName'); // 👈 أضف هذا السطر
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: EdgeInsets.zero,
-        content: Container(
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Container(
           width: double.infinity,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
+          constraints: const BoxConstraints(maxWidth: 500),
+          padding: const EdgeInsets.all(30),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [vibrantPurple, primaryPurple],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(15),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                      size: 28,
+                    ),
                   ),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
+                  const SizedBox(width: 13),
+                  Text(
+                    'Delete Person',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: deepPurple,
+                    ),
                   ),
-                ),
-                child: Row(
+                ],
+              ),
+              const SizedBox(height: 24),
+              RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  text: 'Are you sure you want to delete ',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: deepPurple,
+                  ),
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.edit,
-                        color: Colors.white,
-                        size: 24,
+                    TextSpan(
+                      text: '"$personName"',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: deepPurple,
+                        fontSize: 17,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        "Edit Person",
+                    const TextSpan(text: '?'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 60),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        _hapticFeedback();
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        backgroundColor: deepPurple.withOpacity(0.15),
+                        foregroundColor: deepPurple,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: deepPurple.withOpacity(0.35),
+                            width: 1.3,
+                          ),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Cancel',
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        _hapticFeedback();
+                        Navigator.pop(context);
+                        await _deletePerson(personId, personName);
+                        _speak('$personName deleted successfully');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        backgroundColor: Colors.red,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(
+                          fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: Colors.white,
                         ),
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        _hapticFeedback();
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [vibrantPurple, primaryPurple],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color.fromARGB(76, 142, 58, 149),
-                              blurRadius: 15,
-                              offset: Offset(0, 5),
-                            ),
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.white,
-                          backgroundImage:
-                              person['photoUrls'] != null &&
-                                  (person['photoUrls'] as List).isNotEmpty
-                              ? NetworkImage(person['photoUrls'][0])
-                              : null,
-                          child:
-                              person['photoUrls'] == null ||
-                                  (person['photoUrls'] as List).isEmpty
-                              ? Icon(
-                                  Icons.person,
-                                  color: deepPurple.withOpacity(0.5),
-                                  size: 50,
-                                )
-                              : null,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      "Name",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: deepPurple,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: nameController,
-                      decoration: InputDecoration(
-                        hintText: "Enter person's name",
-                        hintStyle: TextStyle(color: Colors.grey.shade400),
-                        fillColor: ultraLightPurple,
-                        filled: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide.none,
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.info_outline,
-                            color: Colors.blue,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              '${person['photoCount'] ?? 0} photos stored for this person',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.blue.shade800,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              _hapticFeedback();
-                              Navigator.pop(context);
-                            },
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              side: BorderSide(
-                                color: deepPurple.withOpacity(0.3),
-                                width: 2,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: deepPurple,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              final newName = nameController.text.trim();
-                              if (newName.isEmpty) {
-                                _showSnackBar(
-                                  'Please enter a name',
-                                  Colors.red,
-                                );
-                                return;
-                              }
-                              if (newName == person['name']) {
-                                Navigator.pop(context);
-                                return;
-                              }
-
-                              _hapticFeedback();
-                              Navigator.pop(context);
-                              await _updatePersonName(
-                                person['id'],
-                                person['name'],
-                                newName,
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: deepPurple,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: const Text(
-                              'Save',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showDeleteConfirmation(String personId, String personName) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: EdgeInsets.zero,
-        content: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
                   ),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade100,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
-                        size: 40,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Delete Person',
-                      style: TextStyle(
-                        color: deepPurple,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 22,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    Text(
-                      'Are you sure you want to delete',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: deepPurple.withOpacity(0.7),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '"$personName"?',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: deepPurple,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'This action cannot be undone',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.red.shade600,
-                        fontStyle: FontStyle.italic,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              _hapticFeedback();
-                              Navigator.pop(context);
-                            },
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              side: BorderSide(
-                                color: deepPurple.withOpacity(0.3),
-                                width: 2,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                            ),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: deepPurple,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              _hapticFeedback();
-                              Navigator.pop(context);
-                              await _deletePerson(personId, personName);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: const Text(
-                              'Delete',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                ],
               ),
             ],
           ),
@@ -1355,7 +450,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         'Manage saved faces',
                         style: TextStyle(
                           fontSize: 13,
-                          color: deepPurple.withOpacity(0.5),
+                          color: deepPurple.withOpacity(0.8),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
                         ),
@@ -1369,13 +464,22 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             Container(
               height: 50,
               decoration: BoxDecoration(
-                color: Colors.white,
+                gradient: LinearGradient(
+                  colors: [
+                    lightPurple.withOpacity(0.3),
+                    palePurple.withOpacity(0.4),
+                  ],
+                ),
                 borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: deepPurple.withOpacity(0.3),
+                  width: 1.5,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: palePurple.withOpacity(0.2),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                    color: vibrantPurple.withOpacity(0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
@@ -1393,11 +497,16 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         hintText: "Search people...",
                         border: InputBorder.none,
                         hintStyle: TextStyle(
-                          color: deepPurple.withOpacity(0.4),
-                          fontSize: 15,
+                          color: deepPurple.withOpacity(0.7),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                      style: const TextStyle(color: deepPurple, fontSize: 15),
+                      style: const TextStyle(
+                        color: deepPurple,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -1456,10 +565,16 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () {
+          onTap: () async {
             _hapticFeedback();
             _speak(person['name'] ?? 'Unknown');
-            _showEditDialog(person);
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EditPersonPage(person: person),
+              ),
+            );
+            _loadPeople();
           },
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -1513,32 +628,20 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.photo_library,
-                            size: 14,
-                            color: vibrantPurple.withOpacity(0.6),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${person['photoCount'] ?? 0} photos',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: deepPurple.withOpacity(0.5),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
                 GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     _hapticFeedback();
                     _speak('Edit ${person['name']}');
-                    _showEditDialog(person);
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EditPersonPage(person: person),
+                      ),
+                    );
+                    _loadPeople();
                   },
                   child: Container(
                     width: 42,
@@ -1681,10 +784,14 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
       child: GestureDetector(
-        onTap: () {
+        onTap: () async {
           _hapticFeedback();
-          _speak('Add Contact');
-          _showAddDialog();
+          _speak('Add New Person');
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddPersonPage()),
+          );
+          _loadPeople();
         },
         child: Container(
           width: double.infinity,
@@ -1713,7 +820,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               ),
               const SizedBox(width: 12),
               const Text(
-                'Add New Contact',
+                'Add New Person',
                 style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -1728,6 +835,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
+  // 📍 Bottom Navigation matching HomePage
   Widget _buildFloatingBottomNav() {
     return ClipRRect(
       borderRadius: const BorderRadius.only(
@@ -1776,10 +884,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 _buildNavButton(
                   icon: Icons.notifications_rounded,
                   label: 'Reminders',
+                  isActive: false,
                   onTap: () {
                     _hapticFeedback();
                     _speak('Reminders');
-                    Navigator.pushReplacement(
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const RemindersPage(),
@@ -1790,10 +899,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 _buildNavButton(
                   icon: Icons.contact_phone,
                   label: 'Emergency',
+                  isActive: false,
                   onTap: () {
                     _hapticFeedback();
                     _speak('Emergency Contact');
-                    Navigator.pushReplacement(
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const ContactInfoPage(),
@@ -1804,10 +914,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 _buildNavButton(
                   icon: Icons.settings_rounded,
                   label: 'Settings',
+                  isActive: false,
                   onTap: () {
                     _hapticFeedback();
                     _speak('Settings');
-                    Navigator.pushReplacement(
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const SettingsPage(),
@@ -1823,493 +934,51 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
+  // 🔘 Navigation button
   Widget _buildNavButton({
     required IconData icon,
     required String label,
     bool isActive = false,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.white.withOpacity(0.25) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: isActive
-              ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-              size: 22,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
+    return Semantics(
+      label: '$label button',
+      button: true,
+      selected: isActive,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.white.withOpacity(0.25)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: isActive
+                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
                 color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                fontSize: 13,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                size: 22,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddDialog() {
-    _resetForm();
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => WillPopScope(
-          onWillPop: () async => !_isUploading,
-          child: Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Container(
-              width: double.infinity,
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.9),
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
               ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: vibrantPurple.withOpacity(0.2),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [vibrantPurple, primaryPurple],
-                      ),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(24),
-                        topRight: Radius.circular(24),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.person_add,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            "Add New Person",
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: _isUploading
-                              ? null
-                              : () {
-                                  _resetForm();
-                                  Navigator.pop(context);
-                                },
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.close,
-                              color: _isUploading
-                                  ? Colors.white.withOpacity(0.5)
-                                  : Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Name",
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                              color: deepPurple,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _nameController,
-                            enabled: !_isUploading,
-                            decoration: InputDecoration(
-                              hintText: "Enter person's name",
-                              hintStyle: TextStyle(color: Colors.grey.shade400),
-                              fillColor: ultraLightPurple,
-                              filled: true,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: _selectedImages.length >= _minImages
-                                  ? Colors.green.shade50
-                                  : Colors.orange.shade50,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: _selectedImages.length >= _minImages
-                                    ? Colors.green
-                                    : Colors.orange,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _selectedImages.length >= _minImages
-                                      ? Icons.check_circle
-                                      : Icons.info_outline,
-                                  color: _selectedImages.length >= _minImages
-                                      ? Colors.green
-                                      : Colors.orange,
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    _selectedImages.length >= _minImages
-                                        ? 'Ready! ${_selectedImages.length} photos selected'
-                                        : 'Need ${_minImages - _selectedImages.length} more photos (min $_minImages)',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color:
-                                          _selectedImages.length >= _minImages
-                                          ? Colors.green.shade800
-                                          : Colors.orange.shade800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: _isUploading || _isProcessing
-                                      ? null
-                                      : () async {
-                                          await _pickSingleImage();
-                                          setDialogState(() {});
-                                        },
-                                  icon: const Icon(Icons.camera_alt, size: 20),
-                                  label: const Text('Camera'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: deepPurple,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    elevation: 0,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: _isUploading || _isProcessing
-                                      ? null
-                                      : () async {
-                                          await _pickImages();
-                                          setDialogState(() {});
-                                        },
-                                  icon: const Icon(
-                                    Icons.photo_library,
-                                    size: 20,
-                                  ),
-                                  label: const Text('Gallery'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: vibrantPurple,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 14,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    elevation: 0,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          if (_selectedImages.isNotEmpty) ...[
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Selected Photos (${_selectedImages.length})',
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: deepPurple,
-                                  ),
-                                ),
-                                TextButton.icon(
-                                  onPressed: _isUploading || _isProcessing
-                                      ? null
-                                      : () {
-                                          setDialogState(
-                                            () => _selectedImages.clear(),
-                                          );
-                                        },
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 16,
-                                  ),
-                                  label: const Text('Clear All'),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.red,
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
-                                    crossAxisSpacing: 10,
-                                    mainAxisSpacing: 10,
-                                  ),
-                              itemCount: _selectedImages.length,
-                              itemBuilder: (context, index) {
-                                return Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Image.file(
-                                        _selectedImages[index],
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    if (!_isUploading && !_isProcessing)
-                                      Positioned(
-                                        top: 4,
-                                        right: 4,
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            setDialogState(
-                                              () => _removeImage(index),
-                                            );
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: const BoxDecoration(
-                                              color: Colors.red,
-                                              shape: BoxShape.circle,
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black26,
-                                                  blurRadius: 4,
-                                                ),
-                                              ],
-                                            ),
-                                            child: const Icon(
-                                              Icons.close,
-                                              color: Colors.white,
-                                              size: 16,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    Positioned(
-                                      bottom: 4,
-                                      left: 4,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black54,
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          '${index + 1}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.blue.shade200),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.lightbulb_outline,
-                                  color: Colors.blue,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'For best results, use 5-7 photos from different angles and lighting',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.blue.shade800,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 52,
-                            child: ElevatedButton(
-                              onPressed:
-                                  _isUploading ||
-                                      _isProcessing ||
-                                      _nameController.text.trim().isEmpty ||
-                                      _selectedImages.length < _minImages
-                                  ? null
-                                  : () async {
-                                      setDialogState(() {
-                                        _isUploading = true;
-                                      });
-
-                                      await _addPerson();
-
-                                      if (mounted &&
-                                          Navigator.canPop(context)) {
-                                        setDialogState(() {
-                                          _isUploading = false;
-                                        });
-                                      }
-                                    },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: deepPurple,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                disabledBackgroundColor: Colors.grey.shade300,
-                                elevation: 0,
-                              ),
-                              child: _isUploading
-                                  ? Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                  Colors.white,
-                                                ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Text(
-                                          'Processing ${_selectedImages.length} photos...',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : const Text(
-                                      "Add Person & Train Model",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            ],
           ),
         ),
       ),

@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'profile.dart';
+import 'package:munir_app/screens/login_screen.dart';
 
 class AccountInfoPage extends StatefulWidget {
   const AccountInfoPage({super.key});
@@ -252,6 +253,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
     // خطوة 1: عرض تحذير الحذف
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return Dialog(
           shape: RoundedRectangleBorder(
@@ -399,17 +401,55 @@ class _AccountInfoPageState extends State<AccountInfoPage>
       return;
     }
 
+    // حفظ الـ context قبل الـ async operations
+    final navigatorContext = Navigator.of(context);
+
     // خطوة 3: إعادة المصادقة وحذف الحساب
     try {
       final user = _auth.currentUser;
-      if (user == null || user.email == null) {
-        _showErrorSnackBar('User not found');
+
+      if (user == null) {
+        _showErrorSnackBar('No user is currently signed in');
         return;
       }
 
+      // الحصول على البريد الإلكتروني
+      String? userEmail = user.email;
+
+      // إذا لم يكن هناك email، نحاول الحصول عليه من providerData
+      if (userEmail == null || userEmail.isEmpty) {
+        for (var userInfo in user.providerData) {
+          if (userInfo.email != null && userInfo.email!.isNotEmpty) {
+            userEmail = userInfo.email;
+            break;
+          }
+        }
+      }
+
+      if (userEmail == null || userEmail.isEmpty) {
+        _showErrorSnackBar('Email not found. Please log in again.');
+        return;
+      }
+
+      // عرض مؤشر التحميل
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          return WillPopScope(
+            onWillPop: () async => false,
+            child: const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+          );
+        },
+      );
+
       // إعادة المصادقة بكلمة المرور
       final credential = EmailAuthProvider.credential(
-        email: user.email!,
+        email: userEmail,
         password: password,
       );
 
@@ -421,13 +461,25 @@ class _AccountInfoPageState extends State<AccountInfoPage>
       // حذف الحساب من Firebase Authentication
       await user.delete();
 
+      // تسجيل الخروج
+      await _auth.signOut();
+
+      // إغلاق loading dialog
+      Navigator.of(context, rootNavigator: true).pop();
+
       _speak('Account deleted successfully');
 
-      // الانتقال لصفحة تسجيل الدخول
-      if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-      }
+      // الانتقال لصفحة تسجيل الدخول مباشرة
+      navigatorContext.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
+      // إغلاق مؤشر التحميل إذا كان مفتوح
+      try {
+        Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {}
+
       String errorMessage = 'Failed to delete account';
 
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
@@ -441,20 +493,55 @@ class _AccountInfoPageState extends State<AccountInfoPage>
       _showErrorSnackBar(errorMessage);
       _speak(errorMessage);
     } catch (e) {
-      print('Error deleting account: $e');
-      _showErrorSnackBar('An unexpected error occurred. Please try again.');
+      // إغلاق مؤشر التحميل إذا كان مفتوح
+      try {
+        Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {}
+
+      // هنا الحساب ممكن يكون انحذف لكن في مشكلة في navigation
+      // نتحقق إذا المستخدم لسه موجود
+      if (_auth.currentUser == null) {
+        // الحساب انحذف بنجاح، المشكلة بس في العرض
+        _speak('Account deleted successfully');
+
+        navigatorContext.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+        return;
+      }
+
+      _showErrorSnackBar('An unexpected error occurred');
       _speak('An unexpected error occurred');
     }
   }
 
   void _showErrorSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
         backgroundColor: const Color(0xFFE53935),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         duration: const Duration(seconds: 3),
+        elevation: 6,
       ),
     );
   }

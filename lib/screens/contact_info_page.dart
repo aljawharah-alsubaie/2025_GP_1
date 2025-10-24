@@ -773,7 +773,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                         '${_contacts.length} Contacts',
                         style: TextStyle(
                           fontSize: 14,
-                          color: deepPurple.withOpacity(0.6),
+                          color: deepPurple.withOpacity(0.8),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
                         ),

@@ -81,29 +81,98 @@ class _SignupScreenState extends State<SignupScreen>
     super.dispose();
   }
 
-  String _getPasswordStrength(String password) {
-    if (password.length < 6) return 'Weak';
-    if (password.length < 8) return 'Medium';
-    if (RegExp(
-      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]',
-    ).hasMatch(password)) {
-      return 'Strong';
+  // ✅ التحقق من قوة كلمة المرور - قوانين صارمة وإلزامية
+  String? _validatePassword(String password) {
+    if (password.length < 8) {
+      return 'Password must be at least 8 characters';
     }
-    return 'Medium';
+
+    if (!password.contains(RegExp(r'[A-Z]'))) {
+      return 'Password must contain uppercase letters (A-Z)';
+    }
+
+    if (!password.contains(RegExp(r'[a-z]'))) {
+      return 'Password must contain lowercase letters (a-z)';
+    }
+
+    if (!password.contains(RegExp(r'[0-9]'))) {
+      return 'Password must contain numbers (0-9)';
+    }
+
+    if (!password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
+      return 'Password must contain special characters (!@#\$%^&*)';
+    }
+
+    return null;
+  }
+
+  String _getPasswordStrength(String password) {
+    if (password.isEmpty) return 'Empty';
+
+    if (password.length < 8) return 'Too Short';
+
+    int strength = 0;
+
+    if (password.contains(RegExp(r'[A-Z]'))) strength++;
+    if (password.contains(RegExp(r'[a-z]'))) strength++;
+    if (password.contains(RegExp(r'[0-9]'))) strength++;
+    if (password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) strength++;
+
+    // يجب استيفاء جميع الشروط الأربعة
+    if (strength == 4 && password.length >= 8) {
+      return 'Strong ✓';
+    } else if (strength >= 3) {
+      return 'Medium';
+    } else if (strength >= 2) {
+      return 'Weak';
+    }
+
+    return 'Very Weak';
   }
 
   Color _getPasswordStrengthColor(String password) {
     final strength = _getPasswordStrength(password);
+
     switch (strength) {
-      case 'Weak':
-        return Colors.red;
+      case 'Strong ✓':
+        return Colors.green;
       case 'Medium':
         return Colors.orange;
-      case 'Strong':
-        return Colors.green;
+      case 'Weak':
+      case 'Very Weak':
+        return Colors.red;
+      case 'Too Short':
+        return Colors.red.shade700;
       default:
         return Colors.grey;
     }
+  }
+
+  // ✅ دالة مساعدة لعرض كل شرط مع علامة صح أو خطأ
+  Widget _buildPasswordRequirement(String text, bool isMet) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(
+            isMet ? Icons.check_circle : Icons.cancel,
+            size: 18,
+            color: isMet ? Colors.green : Colors.red.shade300,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                color: isMet ? Colors.green.shade700 : Colors.grey.shade600,
+                fontWeight: isMet ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _registerUser() async {
@@ -586,16 +655,26 @@ class _SignupScreenState extends State<SignupScreen>
                 onToggle: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty)
+                  if (value == null || value.trim().isEmpty) {
                     return "Password is required";
-                  if (value.trim().length < 6)
-                    return "Password must be at least 6 characters";
+                  }
+
+                  // ✅ تطبيق جميع الشروط الصارمة
+                  String? passwordError = _validatePassword(value.trim());
+                  if (passwordError != null) {
+                    return passwordError;
+                  }
+
                   return null;
                 },
               ),
             ),
+
+            // ✅ عرض قوة كلمة المرور وقائمة الشروط
             if (passwordController.text.isNotEmpty) ...[
               const SizedBox(height: 12),
+
+              // عرض قوة كلمة المرور
               Semantics(
                 label:
                     'Password strength: ${_getPasswordStrength(passwordController.text)}',
@@ -634,7 +713,69 @@ class _SignupScreenState extends State<SignupScreen>
                   ),
                 ),
               ),
+
+              const SizedBox(height: 12),
+
+              // قائمة الشروط المطلوبة
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF6B1D73).withOpacity(0.3),
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.checklist_rtl,
+                          color: const Color(0xFF6B1D73),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Password Requirements:',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6B1D73),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _buildPasswordRequirement(
+                      'At least 8 characters',
+                      passwordController.text.length >= 8,
+                    ),
+                    _buildPasswordRequirement(
+                      'Uppercase letter (A-Z)',
+                      passwordController.text.contains(RegExp(r'[A-Z]')),
+                    ),
+                    _buildPasswordRequirement(
+                      'Lowercase letter (a-z)',
+                      passwordController.text.contains(RegExp(r'[a-z]')),
+                    ),
+                    _buildPasswordRequirement(
+                      'Number (0-9)',
+                      passwordController.text.contains(RegExp(r'[0-9]')),
+                    ),
+                    _buildPasswordRequirement(
+                      'Special character (!@#\$%^&*)',
+                      passwordController.text.contains(
+                        RegExp(r'[!@#$%^&*(),.?":{}|<>]'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
+
             const SizedBox(height: 20),
             Semantics(
               label: 'Confirm password input field',
@@ -657,59 +798,15 @@ class _SignupScreenState extends State<SignupScreen>
               ),
             ),
             const SizedBox(height: 24),
-            Semantics(
-              label: 'Terms and conditions checkbox',
-              checked: _agreeToTerms,
-              hint: 'Double tap to toggle agreement',
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.2)),
-                ),
-                child: Row(
-                  children: [
-                    Checkbox(
-                      value: _agreeToTerms,
-                      onChanged: (value) {
-                        HapticFeedback.selectionClick();
-                        setState(() => _agreeToTerms = value ?? false);
-                      },
-                      activeColor: const Color.fromARGB(255, 255, 255, 255),
-                      checkColor: Color(0xFF6B1D73),
-                      side: const BorderSide(color: Colors.white, width: 2),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          setState(() => _agreeToTerms = !_agreeToTerms);
-                        },
-                        child: const Text(
-                          "I agree to the Terms and Conditions",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
 
-            // Create Account Button - Match Login button size (56 height)
+            // Create Account Button
             Semantics(
               label: 'Create account button',
               hint: 'Double tap to create your account',
               button: true,
               child: SizedBox(
                 width: double.infinity,
-                height: 59, // ✅ Changed from 64 to 56
+                height: 59,
                 child: ElevatedButton(
                   onPressed: _isLoading
                       ? null
@@ -728,17 +825,17 @@ class _SignupScreenState extends State<SignupScreen>
                   ),
                   child: _isLoading
                       ? const SizedBox(
-                          height: 27, // ✅ Changed from 28 to 24
+                          height: 27,
                           width: 27,
                           child: CircularProgressIndicator(
                             color: Colors.white,
-                            strokeWidth: 2, // ✅ Changed from 3 to 2
+                            strokeWidth: 2,
                           ),
                         )
                       : const Text(
                           "Create Account",
                           style: TextStyle(
-                            fontSize: 21, // ✅ Changed from 20 to 18
+                            fontSize: 21,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -778,14 +875,14 @@ class _SignupScreenState extends State<SignupScreen>
 
             const SizedBox(height: 32),
 
-            // Google Sign Up Button - Match Login Google button style
+            // Google Sign Up Button
             Semantics(
               label: 'Sign up with Google button',
               button: true,
               hint: 'Double tap to sign up using your Google account',
               child: SizedBox(
                 width: double.infinity,
-                height: 59, // ✅ Changed from 64 to 56
+                height: 59,
                 child: Container(
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.1),
@@ -815,16 +912,13 @@ class _SignupScreenState extends State<SignupScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         ExcludeSemantics(
-                          child: Icon(
-                            Icons.g_mobiledata,
-                            size: 30,
-                          ), // ✅ Changed from 32 to 28
+                          child: Icon(Icons.g_mobiledata, size: 30),
                         ),
                         const SizedBox(width: 12),
                         const Text(
                           "Continue with Google",
                           style: TextStyle(
-                            fontSize: 18, // ✅ Changed from 18 to 16
+                            fontSize: 18,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -835,7 +929,7 @@ class _SignupScreenState extends State<SignupScreen>
               ),
             ),
             const SizedBox(height: 30),
-            // Already have account - Button style like the image
+            // Already have account
             Semantics(
               label: 'Already have an account, Log in button',
               button: true,
@@ -846,7 +940,7 @@ class _SignupScreenState extends State<SignupScreen>
                   Navigator.pop(context);
                 },
                 child: Container(
-                  height: 59, // أضف هذا السطر
+                  height: 59,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
                     vertical: 16,
