@@ -21,15 +21,16 @@ class _CameraScreenState extends State<CameraScreen> {
   List<CameraDescription>? _cameras;
   final picker = ImagePicker();
   final AudioPlayer _player = AudioPlayer();
-  
+
   bool _busy = false;
   String _extractedText = "";
   String? _selectedImagePath;
-  double _ocrConfidence = 0;
 
   // IBM Watson TTS
-  static const String IBM_TTS_API_KEY = "Ibvg1Q2qca9ALJa1JCZVp09gFJMstnyeAXaOWKNrq6o-";
-  static const String IBM_TTS_URL = "https://api.au-syd.text-to-speech.watson.cloud.ibm.com/instances/892ef34b-36b6-4ba6-b29c-d4a55108f114";
+  static const String IBM_TTS_API_KEY =
+      "Ibvg1Q2qca9ALJa1JCZVp09gFJMstnyeAXaOWKNrq6o-";
+  static const String IBM_TTS_URL =
+      "https://api.au-syd.text-to-speech.watson.cloud.ibm.com/instances/892ef34b-36b6-4ba6-b29c-d4a55108f114";
 
   @override
   void initState() {
@@ -65,55 +66,53 @@ class _CameraScreenState extends State<CameraScreen> {
   // معالجة الصورة لتحسين OCR
   Future<File> _preprocessImage(File imageFile) async {
     print('🔧 Preprocessing image for better OCR...');
-    
+
     try {
       final bytes = await imageFile.readAsBytes();
       img.Image? image = img.decodeImage(bytes);
-      
+
       if (image != null) {
         // 1. تصغير الحجم إذا كانت كبيرة جداً (تسريع المعالجة)
         if (image.width > 2000) {
           image = img.copyResize(image, width: 2000);
         }
-        
+
         // 2. تحويل لأبيض وأسود
         image = img.grayscale(image);
-        
+
         // 3. زيادة التباين
         image = img.contrast(image, contrast: 150);
-        
+
         // 4. إزالة الضوضاء
         image = img.gaussianBlur(image, radius: 1);
-        
+
         // 5. Sharpen
-        image = img.adjustColor(image, 
-          brightness: 1.05,
-          contrast: 1.2,
-        );
-        
+        image = img.adjustColor(image, brightness: 1.05, contrast: 1.2);
+
         // حفظ مؤقت
         final tempDir = await getTemporaryDirectory();
-        final processedPath = '${tempDir.path}/processed_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final processedPath =
+            '${tempDir.path}/processed_${DateTime.now().millisecondsSinceEpoch}.jpg';
         final processedFile = File(processedPath);
         await processedFile.writeAsBytes(img.encodeJpg(image, quality: 95));
-        
+
         print('✅ Image preprocessed successfully');
         return processedFile;
       }
     } catch (e) {
       print('⚠️ Preprocessing failed, using original: $e');
     }
-    
+
     return imageFile;
   }
 
   Future<String> _extractTextFromImage(File imageFile) async {
     try {
       print('📸 Starting advanced OCR...');
-      
+
       // معالجة الصورة أولاً
       final processedImage = await _preprocessImage(imageFile);
-      
+
       // Tesseract OCR مع إعدادات محسّنة
       String text = await FlutterTesseractOcr.extractText(
         processedImage.path,
@@ -123,10 +122,10 @@ class _CameraScreenState extends State<CameraScreen> {
           "preserve_interword_spaces": "1",
         },
       );
-      
+
       // تنظيف النص
       text = text.trim();
-      
+
       // حذف الصورة المؤقتة
       if (processedImage.path != imageFile.path) {
         try {
@@ -135,10 +134,9 @@ class _CameraScreenState extends State<CameraScreen> {
           print('Could not delete temp file: $e');
         }
       }
-      
+
       print('✅ OCR completed! Text length: ${text.length} chars');
       return text;
-      
     } catch (e) {
       print('❌ OCR Error: $e');
       return "";
@@ -165,7 +163,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
       if (response.statusCode == 200) {
         final Directory tempDir = await getTemporaryDirectory();
-        final String audioPath = '${tempDir.path}/output_${DateTime.now().millisecondsSinceEpoch}.mp3';
+        final String audioPath =
+            '${tempDir.path}/output_${DateTime.now().millisecondsSinceEpoch}.mp3';
         final File audioFile = File(audioPath);
         await audioFile.writeAsBytes(response.bodyBytes);
         return audioPath;
@@ -177,7 +176,10 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  Future<void> _processImage(String imagePath, {bool fromGallery = false}) async {
+  Future<void> _processImage(
+    String imagePath, {
+    bool fromGallery = false,
+  }) async {
     setState(() => _busy = true);
 
     try {
@@ -187,7 +189,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
       // استخراج النص
       String extractedText = await _extractTextFromImage(File(imagePath));
-      
+
       setState(() {
         _extractedText = extractedText;
       });
@@ -213,11 +215,13 @@ class _CameraScreenState extends State<CameraScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  extractedText.isNotEmpty 
-                    ? 'Text extracted successfully! 📄' 
-                    : 'No text found in image'
+                  extractedText.isNotEmpty
+                      ? 'Text extracted successfully! 📄'
+                      : 'No text found in image',
                 ),
-                backgroundColor: extractedText.isNotEmpty ? Colors.green : Colors.orange,
+                backgroundColor: extractedText.isNotEmpty
+                    ? Colors.green
+                    : Colors.orange,
                 duration: const Duration(seconds: 2),
               ),
             );
@@ -228,10 +232,7 @@ class _CameraScreenState extends State<CameraScreen> {
       print('❌ Processing error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -286,7 +287,8 @@ class _CameraScreenState extends State<CameraScreen> {
                               fit: BoxFit.cover,
                               child: SizedBox(
                                 width: size.width,
-                                height: size.width * _controller!.value.aspectRatio,
+                                height:
+                                    size.width * _controller!.value.aspectRatio,
                                 child: CameraPreview(_controller!),
                               ),
                             ),
@@ -306,7 +308,11 @@ class _CameraScreenState extends State<CameraScreen> {
                         color: Colors.black.withOpacity(0.3),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                      child: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.white,
+                        size: 28,
+                      ),
                     ),
                   ),
                 ),
@@ -317,7 +323,10 @@ class _CameraScreenState extends State<CameraScreen> {
                   right: 16,
                   left: 80,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(20),
@@ -356,11 +365,18 @@ class _CameraScreenState extends State<CameraScreen> {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                            Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                             SizedBox(width: 4),
                             Text(
                               'New Photo',
-                              style: TextStyle(color: Colors.white, fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -375,9 +391,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     left: 16,
                     right: 16,
                     child: Container(
-                      constraints: BoxConstraints(
-                        maxHeight: size.height * 0.5,
-                      ),
+                      constraints: BoxConstraints(maxHeight: size.height * 0.5),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.85),
@@ -389,7 +403,11 @@ class _CameraScreenState extends State<CameraScreen> {
                           children: [
                             const Row(
                               children: [
-                                Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Colors.greenAccent,
+                                  size: 20,
+                                ),
                                 SizedBox(width: 8),
                                 Text(
                                   'Extracted Text:',
@@ -459,7 +477,11 @@ class _CameraScreenState extends State<CameraScreen> {
                               color: Colors.white.withOpacity(0.2),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.photo, size: 28, color: Colors.white),
+                            child: const Icon(
+                              Icons.photo,
+                              size: 28,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
 
@@ -502,7 +524,9 @@ class _CameraScreenState extends State<CameraScreen> {
 
                         // Switch Camera
                         GestureDetector(
-                          onTap: _busy || _selectedImagePath != null ? null : _switchCamera,
+                          onTap: _busy || _selectedImagePath != null
+                              ? null
+                              : _switchCamera,
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -514,7 +538,9 @@ class _CameraScreenState extends State<CameraScreen> {
                             child: Icon(
                               Icons.cameraswitch,
                               size: 28,
-                              color: _selectedImagePath != null ? Colors.white38 : Colors.white,
+                              color: _selectedImagePath != null
+                                  ? Colors.white38
+                                  : Colors.white,
                             ),
                           ),
                         ),
@@ -532,7 +558,10 @@ class _CameraScreenState extends State<CameraScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                            CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Colors.white,
+                            ),
                             SizedBox(height: 16),
                             Text(
                               'Processing image...',
@@ -545,7 +574,10 @@ class _CameraScreenState extends State<CameraScreen> {
                             SizedBox(height: 8),
                             Text(
                               'Enhancing & extracting text',
-                              style: TextStyle(color: Colors.white70, fontSize: 13),
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),

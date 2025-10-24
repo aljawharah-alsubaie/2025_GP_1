@@ -281,7 +281,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       for (int i = 0; i < _selectedImages.length; i++) {
         try {
           print('🔄 Processing image ${i + 1}/${_selectedImages.length}');
-          
+
           // 1. كشف الوجه
           final faceRect = await InsightFacePipeline.detectFace(
             _selectedImages[i],
@@ -294,7 +294,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             continue;
           }
 
-          print('✅ Image $i: Face detected at ${faceRect.width.toInt()}x${faceRect.height.toInt()}');
+          print(
+            '✅ Image $i: Face detected at ${faceRect.width.toInt()}x${faceRect.height.toInt()}',
+          );
 
           // 2. قص الوجه
           final croppedFace = await InsightFacePipeline.cropFace(
@@ -385,7 +387,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
 
         // حفظ الـ embeddings
         await _saveEmbeddingsToFirestore(personName);
-        
+
         // إعادة تحميل القائمة
         await _loadPeople();
 
@@ -405,8 +407,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               errorMsg += '\n... and ${failReasons.length - 3} more';
             }
           }
-          errorMsg += '\n\nTips:\n• Use well-lit photos\n• Face should be clearly visible\n• Avoid blurry images';
-          
+          errorMsg +=
+              '\n\nTips:\n• Use well-lit photos\n• Face should be clearly visible\n• Avoid blurry images';
+
           _showDetailedErrorDialog(errorMsg);
         }
       }
@@ -432,15 +435,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         contentPadding: EdgeInsets.zero,
         content: Container(
           width: double.infinity,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-          ),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

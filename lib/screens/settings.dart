@@ -389,7 +389,7 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           _buildSettingCard(
             title: 'Device & Alerts',
-            subtitle: 'Set up device connections and notifications',
+            subtitle: 'Set up connections and notifications',
             icon: Icons.notifications_active_outlined,
             gradient: const LinearGradient(
               colors: [vibrantPurple, primaryPurple],
@@ -407,7 +407,7 @@ class _SettingsPageState extends State<SettingsPage>
           ),
           _buildSettingCard(
             title: 'Security & Data',
-            subtitle: 'Manage your password and login preferences',
+            subtitle: 'Manage your password',
             icon: Icons.lock_outline,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
             onTap: () {
@@ -422,6 +422,7 @@ class _SettingsPageState extends State<SettingsPage>
             },
           ),
 
+          // 🔴 كرت الـ Logout بخلفية حمراء
           _buildSettingCard(
             title: 'Logout',
             subtitle: 'Sign out of your account',
@@ -429,6 +430,7 @@ class _SettingsPageState extends State<SettingsPage>
             gradient: const LinearGradient(
               colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
             ),
+            isDanger: true, // 🔴 المعامل الجديد
             onTap: () {
               _hapticFeedback();
               _speak('Logout');
@@ -446,6 +448,7 @@ class _SettingsPageState extends State<SettingsPage>
     required IconData icon,
     required Gradient gradient,
     required VoidCallback onTap,
+    bool isDanger = false, // 🔴 معامل جديد
   }) {
     return Semantics(
       label: '$title. $subtitle. Double tap to open',
@@ -460,16 +463,26 @@ class _SettingsPageState extends State<SettingsPage>
             child: Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: Colors.white,
+                // 🔥 كل الكرت أحمر للـ Logout
+                gradient: isDanger
+                    ? const LinearGradient(
+                        colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
+                      )
+                    : null,
+                color: isDanger ? null : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: palePurple.withOpacity(0.35),
+                    color: isDanger
+                        ? const Color(0xFFE53935).withOpacity(0.4)
+                        : palePurple.withOpacity(0.35),
                     blurRadius: 15,
                     offset: const Offset(0, 8),
                   ),
                   BoxShadow(
-                    color: Colors.white.withOpacity(0.8),
+                    color: isDanger
+                        ? const Color(0xFFFF5252).withOpacity(0.3)
+                        : Colors.white.withOpacity(0.8),
                     blurRadius: 12,
                     offset: const Offset(-2, -2),
                   ),
@@ -481,15 +494,19 @@ class _SettingsPageState extends State<SettingsPage>
                     width: 58,
                     height: 58,
                     decoration: BoxDecoration(
-                      gradient: gradient,
+                      // 🔥 الأيقونة بيضاء للـ Logout
+                      color: isDanger ? Colors.white.withOpacity(0.25) : null,
+                      gradient: isDanger ? null : gradient,
                       borderRadius: BorderRadius.circular(15),
-                      boxShadow: [
-                        BoxShadow(
-                          color: gradient.colors.first.withOpacity(0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
+                      boxShadow: isDanger
+                          ? []
+                          : [
+                              BoxShadow(
+                                color: gradient.colors.first.withOpacity(0.35),
+                                blurRadius: 12,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
                     ),
                     child: Icon(icon, color: Colors.white, size: 30),
                   ),
@@ -500,20 +517,26 @@ class _SettingsPageState extends State<SettingsPage>
                       children: [
                         Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 17.5,
                             fontWeight: FontWeight.w700,
-                            color: deepPurple,
+                            // 🔥 نص أبيض للـ Logout
+                            color: isDanger ? Colors.white : deepPurple,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           subtitle,
                           style: TextStyle(
-                            fontSize: 13,
-                            color: deepPurple.withOpacity(0.5),
-                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                            color: isDanger
+                                ? Colors.white.withOpacity(0.95)
+                                : deepPurple.withOpacity(0.7),
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.2,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -522,18 +545,21 @@ class _SettingsPageState extends State<SettingsPage>
                   Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          gradient.colors.first.withOpacity(0.1),
-                          gradient.colors.last.withOpacity(0.1),
-                        ],
-                      ),
+                      color: isDanger ? Colors.white.withOpacity(0.2) : null,
+                      gradient: isDanger
+                          ? null
+                          : LinearGradient(
+                              colors: [
+                                gradient.colors.first.withOpacity(0.1),
+                                gradient.colors.last.withOpacity(0.1),
+                              ],
+                            ),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       Icons.arrow_forward_ios,
                       size: 15,
-                      color: gradient.colors.first,
+                      color: isDanger ? Colors.white : gradient.colors.first,
                     ),
                   ),
                 ],

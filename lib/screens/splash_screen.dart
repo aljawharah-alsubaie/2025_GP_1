@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'onboarding_screen.dart';
 import 'welcome_screen.dart';
 import 'home_page.dart';
@@ -23,12 +22,12 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _navigate() async {
     // عرض الـ splash لمدة 3 ثواني
     await Future.delayed(const Duration(seconds: 3));
-    
+
     if (!mounted) return;
 
     final storage = FlutterSecureStorage();
     String? hasOpenedBefore = await storage.read(key: 'hasOpenedBefore');
-    
+
     // احفظ إن المستخدم فتح التطبيق
     if (hasOpenedBefore == null) {
       await storage.write(key: 'hasOpenedBefore', value: 'true');
@@ -50,9 +49,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Center(
-        child: Image.asset('assets/images/logo.png', width: 360),
-      ),
+      body: Center(child: Image.asset('assets/images/logo.png', width: 360)),
     );
   }
 }
@@ -92,7 +89,7 @@ class AuthWrapper extends StatelessWidget {
             }
 
             // إذا مسجل دخول، روح للـ HomePage
-            if ((storageSnapshot.data == true) || 
+            if ((storageSnapshot.data == true) ||
                 (snapshot.hasData && snapshot.data != null)) {
               return const HomePage();
             }

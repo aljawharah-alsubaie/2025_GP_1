@@ -705,7 +705,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 child: Text(
                                   'Later',
                                   style: TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     color: vibrantPurple,
                                   ),

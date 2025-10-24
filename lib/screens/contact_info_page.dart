@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import './reminders.dart';
 import './home_page.dart';
 import './settings.dart';
@@ -19,17 +20,26 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FlutterTts _tts = FlutterTts();
+  late stt.SpeechToText _speech;
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
 
   List<Map<String, dynamic>> _contacts = [];
   bool _isLoading = true;
-  bool _isUploading = false;
   String _searchQuery = '';
+  bool _isListening = false;
+
+  // Voice control state
+  int _voiceStep = 0;
+  String _voiceName = '';
+  String _voicePhone = '';
+  bool _isVoiceMode = false;
+  String? _editingContactId; // For voice edit mode
 
   AnimationController? _fadeController;
   AnimationController? _slideController;
+  late AnimationController _pulseController;
 
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
@@ -42,6 +52,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   void initState() {
     super.initState();
     _initTts();
+    _initSpeech();
     _loadContacts();
 
     _fadeController = AnimationController(
@@ -53,12 +64,83 @@ class _ContactInfoPageState extends State<ContactInfoPage>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
   }
 
   Future<void> _initTts() async {
     await _tts.setLanguage("en-US");
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
+  }
+
+  Future<void> _initSpeech() async {
+    _speech = stt.SpeechToText();
+    bool available = await _speech.initialize(
+      onError: (error) {
+        print('Speech error: $error');
+
+        String errorMsg = error.errorMsg.toLowerCase();
+
+        if (errorMsg.contains('no_match') || errorMsg.contains('no match')) {
+          print('No speech detected - cancelling voice mode');
+          if (mounted && _isVoiceMode) {
+            setState(() {
+              _isVoiceMode = false;
+              _isListening = false;
+              _voiceStep = 0;
+              _editingContactId = null;
+            });
+            _speak('Could not hear you clearly. Voice contact cancelled');
+          }
+        } else if (errorMsg.contains('network')) {
+          if (mounted && _isVoiceMode) {
+            setState(() {
+              _isVoiceMode = false;
+              _isListening = false;
+              _voiceStep = 0;
+              _editingContactId = null;
+            });
+            _speak('Network error. Voice contact cancelled');
+          }
+        } else if (errorMsg.contains('permission')) {
+          if (mounted && _isVoiceMode) {
+            setState(() {
+              _isVoiceMode = false;
+              _isListening = false;
+              _voiceStep = 0;
+              _editingContactId = null;
+            });
+            _speak('Microphone permission denied. Voice contact cancelled');
+          }
+        } else {
+          if (mounted && _isVoiceMode) {
+            setState(() {
+              _isVoiceMode = false;
+              _isListening = false;
+              _voiceStep = 0;
+              _editingContactId = null;
+            });
+            _speak('Speech recognition error. Voice contact cancelled');
+          }
+        }
+      },
+      onStatus: (status) {
+        print('Speech status: $status');
+      },
+    );
+
+    if (!available) {
+      print('Speech recognition not available');
+      _speak(
+        'Speech recognition is not available on this device. Please install Google Speech Services from Play Store',
+      );
+    } else {
+      print('Speech recognition initialized successfully');
+    }
   }
 
   Future<void> _speak(String text) async {
@@ -72,11 +154,13 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   @override
   void dispose() {
     _tts.stop();
+    _speech.stop();
     _searchController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     _fadeController?.dispose();
     _slideController?.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -123,41 +207,6 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     return cleanPhone;
   }
 
-  // NEW: Helper to build a front-of-form error banner
-  Widget _buildErrorBanner(String message) {
-    return Semantics(
-      liveRegion: true,
-      label: 'Error',
-      container: true,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          border: Border.all(color: Colors.red.shade300),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.error_outline, color: Colors.red),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(
-                  color: Colors.red.shade800,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _loadContacts() async {
     try {
       final User? user = _auth.currentUser;
@@ -191,83 +240,252 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     }
   }
 
-  Future<void> _addContact() async {
-    // NOTE: validation moved into dialog so message shows in front of the form.
-    final User? user = _auth.currentUser;
-    if (user == null) return;
+  // 🎤 Voice Control Methods
+  Future<void> _startVoiceContact({
+    String? editContactId,
+    String? currentName,
+    String? currentPhone,
+  }) async {
+    if (!_speech.isAvailable) {
+      _speak(
+        'Speech recognition is not available. Please install Google Speech Services from Play Store',
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Speech recognition not available. Install Google Speech Services',
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: Colors.white,
+            onPressed: () {},
+          ),
+        ),
+      );
+      return;
+    }
 
-    setState(() => _isUploading = true);
+    setState(() {
+      _isVoiceMode = true;
+      _voiceStep = 0;
+      _voiceName = currentName ?? '';
+      _voicePhone = currentPhone ?? '';
+      _editingContactId = editContactId;
+    });
 
-    try {
-      final formattedPhone = _formatPhoneNumber(_phoneController.text.trim());
+    _hapticFeedback();
 
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('contacts')
-          .add({
-            'name': _nameController.text.trim(),
-            'phone': formattedPhone,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+    if (editContactId != null) {
+      await _speak(
+        'Starting voice edit for $currentName. Please tell me the new name, or say same to keep it',
+      );
+    } else {
+      await _speak('Starting voice contact. Please tell me the contact name');
+    }
 
-      await _loadContacts();
+    await Future.delayed(const Duration(milliseconds: 3000));
+    _listenForVoiceInput();
+  }
 
-      if (mounted) {
-        Navigator.pop(context);
-        _resetForm();
-        _showSnackBar('Contact added successfully!', Colors.green);
-      }
-    } catch (e) {
-      setState(() => _isUploading = false);
-      if (mounted) {
-        _showSnackBar('Error adding contact: $e', Colors.red);
-      }
+  Future<void> _listenForVoiceInput() async {
+    if (!_speech.isAvailable) {
+      _speak('Speech recognition is not available');
+      setState(() {
+        _isVoiceMode = false;
+        _isListening = false;
+        _voiceStep = 0;
+        _editingContactId = null;
+      });
+      return;
+    }
+
+    setState(() => _isListening = true);
+
+    await _speech.listen(
+      onResult: (result) {
+        if (result.finalResult) {
+          _processVoiceInput(result.recognizedWords);
+        }
+      },
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 10),
+      localeId: 'en_US',
+      cancelOnError: false,
+      partialResults: false,
+    );
+  }
+
+  Future<void> _processVoiceInput(String input) async {
+    setState(() => _isListening = false);
+
+    if (input.isEmpty) {
+      await _speak('Could not hear you clearly. Voice contact cancelled');
+      setState(() {
+        _isVoiceMode = false;
+        _voiceStep = 0;
+        _editingContactId = null;
+      });
+      return;
+    }
+
+    switch (_voiceStep) {
+      case 0: // Name
+        if (_editingContactId != null && input.toLowerCase().contains('same')) {
+          // Keep the same name
+          await _speak(
+            'Keeping the name as $_voiceName. Now, please say the phone number, or say same to keep it',
+          );
+        } else {
+          _voiceName = input;
+          await _speak(
+            'Got it. Name is: $input. Now, please say the phone number',
+          );
+        }
+        setState(() => _voiceStep = 1);
+        await Future.delayed(const Duration(milliseconds: 3500));
+        _listenForVoiceInput();
+        break;
+
+      case 1: // Phone
+        if (_editingContactId != null && input.toLowerCase().contains('same')) {
+          // Keep the same phone
+          await _speak('Keeping the phone number. Updating contact now');
+          await Future.delayed(const Duration(milliseconds: 2000));
+          await _saveVoiceContact();
+        } else {
+          final phoneNumber = _extractPhoneNumber(input);
+          if (phoneNumber != null && _isValidSaudiPhoneNumber(phoneNumber)) {
+            _voicePhone = phoneNumber;
+            await _speak(
+              'Perfect. Phone number is $phoneNumber. ${_editingContactId != null ? "Updating" : "Creating"} contact now',
+            );
+            await Future.delayed(const Duration(milliseconds: 2000));
+            await _saveVoiceContact();
+          } else {
+            await _speak(
+              'Sorry, I could not understand the phone number. Please say it again. For example: zero five one two three four five six seven eight',
+            );
+            await Future.delayed(const Duration(milliseconds: 3500));
+            _listenForVoiceInput();
+          }
+        }
+        break;
     }
   }
 
-  Future<void> _updateContact(
-    String contactId,
-    String newName,
-    String newPhone,
-  ) async {
-    // NOTE: validation moved into dialog so message shows in front of the form.
+  String? _extractPhoneNumber(String input) {
+    // Remove common words
+    String cleaned = input
+        .toLowerCase()
+        .replaceAll('zero', '0')
+        .replaceAll('one', '1')
+        .replaceAll('two', '2')
+        .replaceAll('three', '3')
+        .replaceAll('four', '4')
+        .replaceAll('five', '5')
+        .replaceAll('six', '6')
+        .replaceAll('seven', '7')
+        .replaceAll('eight', '8')
+        .replaceAll('nine', '9')
+        .replaceAll(' ', '');
+
+    // Extract numbers only
+    String numbers = cleaned.replaceAll(RegExp(r'[^0-9+]'), '');
+
+    if (numbers.isEmpty) return null;
+
+    return numbers;
+  }
+
+  Future<void> _saveVoiceContact() async {
+    try {
+      final User? user = _auth.currentUser;
+      if (user == null) return;
+
+      final formattedPhone = _formatPhoneNumber(_voicePhone);
+
+      if (_editingContactId != null) {
+        // Update existing contact
+        await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('contacts')
+            .doc(_editingContactId)
+            .update({'name': _voiceName, 'phone': formattedPhone});
+
+        await _loadContacts();
+
+        setState(() {
+          _isVoiceMode = false;
+          _voiceStep = 0;
+          _editingContactId = null;
+        });
+
+        _hapticFeedback();
+        await _speak(
+          'Contact updated successfully. Name: $_voiceName, Phone: $formattedPhone',
+        );
+      } else {
+        // Add new contact
+        await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .collection('contacts')
+            .add({
+              'name': _voiceName,
+              'phone': formattedPhone,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+
+        await _loadContacts();
+
+        setState(() {
+          _isVoiceMode = false;
+          _voiceStep = 0;
+        });
+
+        _hapticFeedback();
+        await _speak(
+          'Contact created successfully. Name: $_voiceName, Phone: $formattedPhone',
+        );
+      }
+    } catch (e) {
+      print('Error saving voice contact: $e');
+      await _speak(
+        'Sorry, there was an error saving the contact. Please try again',
+      );
+      setState(() {
+        _isVoiceMode = false;
+        _voiceStep = 0;
+        _editingContactId = null;
+      });
+    }
+  }
+
+  Future<void> _deleteContact(String contactId, String contactName) async {
     final User? user = _auth.currentUser;
     if (user == null) return;
 
-    setState(() => _isUploading = true);
-
     try {
-      final formattedPhone = _formatPhoneNumber(newPhone.trim());
-
       await _firestore
           .collection('users')
           .doc(user.uid)
           .collection('contacts')
           .doc(contactId)
-          .update({'name': newName.trim(), 'phone': formattedPhone});
+          .delete();
 
       await _loadContacts();
 
       if (mounted) {
-        Navigator.pop(context);
-        _resetForm();
-        _showSnackBar('Contact updated successfully!', Colors.green);
+        _showSnackBar('$contactName deleted successfully!', Colors.green);
       }
     } catch (e) {
-      setState(() => _isUploading = false);
       if (mounted) {
-        _showSnackBar('Error updating contact: $e', Colors.red);
+        _showSnackBar('Error deleting contact: $e', Colors.red);
       }
     }
-  }
-
-  void _resetForm() {
-    setState(() {
-      _nameController.clear();
-      _phoneController.clear();
-      _isUploading = false;
-    });
   }
 
   void _showSnackBar(String message, Color color) {
@@ -416,30 +634,6 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     );
   }
 
-  Future<void> _deleteContact(String contactId, String contactName) async {
-    final User? user = _auth.currentUser;
-    if (user == null) return;
-
-    try {
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('contacts')
-          .doc(contactId)
-          .delete();
-
-      await _loadContacts();
-
-      if (mounted) {
-        _showSnackBar('$contactName deleted successfully!', Colors.green);
-      }
-    } catch (e) {
-      if (mounted) {
-        _showSnackBar('Error deleting contact: $e', Colors.red);
-      }
-    }
-  }
-
   List<Map<String, dynamic>> get _filteredContacts {
     if (_searchQuery.isEmpty) return _contacts;
     return _contacts
@@ -483,11 +677,20 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               ],
             ),
           ),
+          if (_isVoiceMode || _isListening) _buildVoiceOverlay(),
         ],
       ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [_buildAddButton(), _buildFloatingBottomNav()],
+      bottomNavigationBar: Stack(
+        children: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [_buildVoiceAddButton(), _buildFloatingBottomNav()],
+          ),
+          if (_isVoiceMode || _isListening)
+            Positioned.fill(
+              child: Container(color: Colors.black.withOpacity(0.85)),
+            ),
+        ],
       ),
     );
   }
@@ -513,33 +716,37 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           children: [
             Row(
               children: [
-                GestureDetector(
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Going back');
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [vibrantPurple, primaryPurple],
-                      ),
-                      borderRadius: BorderRadius.all(Radius.circular(18)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color.fromARGB(76, 142, 58, 149),
-                          blurRadius: 12,
-                          offset: Offset(0, 4),
+                Semantics(
+                  label: 'Back to home',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () {
+                      _hapticFeedback();
+                      _speak('Going back');
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      width: 52,
+                      height: 52,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [vibrantPurple, primaryPurple],
                         ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.arrow_back_ios_new,
-                        color: Colors.white,
-                        size: 20,
+                        borderRadius: BorderRadius.all(Radius.circular(18)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color.fromARGB(76, 142, 58, 149),
+                            blurRadius: 12,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.arrow_back_ios_new,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
@@ -563,7 +770,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Manage your contacts',
+                        '${_contacts.length} Contacts',
                         style: TextStyle(
                           fontSize: 14,
                           color: deepPurple.withOpacity(0.6),
@@ -664,159 +871,159 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Widget _buildContactCard(Map<String, dynamic> contact) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: palePurple.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    return Semantics(
+      label:
+          'Contact: ${contact['name']}. Phone: ${contact['phone']}. Double tap to edit',
+      button: true,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          onTap: () {
-            _hapticFeedback();
-            _speak(contact['name'] ?? 'Unknown');
-            _showEditDialog(
-              contact['id'],
-              contact['name']?.toString() ?? 'Unknown',
-              contact['phone']?.toString() ?? '',
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [vibrantPurple, primaryPurple],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Color.fromARGB(76, 142, 58, 149),
-                        blurRadius: 8,
-                        offset: Offset(0, 4),
+          boxShadow: [
+            BoxShadow(
+              color: palePurple.withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () {
+              _hapticFeedback();
+              _speak('${contact['name']}. ${contact['phone']}');
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [vibrantPurple, primaryPurple],
                       ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(3),
-                  child: CircleAvatar(
-                    radius: 25,
-                    backgroundColor: Colors.white,
-                    child: Text(
-                      contact['name']
-                              ?.toString()
-                              .substring(0, 1)
-                              .toUpperCase() ??
-                          '?',
-                      style: TextStyle(
-                        color: deepPurple.withOpacity(0.5),
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color.fromARGB(76, 142, 58, 149),
+                          blurRadius: 8,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        contact['name']?.toString() ?? 'Unknown',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
+                    padding: const EdgeInsets.all(3),
+                    child: CircleAvatar(
+                      radius: 25,
+                      backgroundColor: Colors.white,
+                      child: Text(
+                        contact['name']
+                                ?.toString()
+                                .substring(0, 1)
+                                .toUpperCase() ??
+                            '?',
+                        style: TextStyle(
                           color: deepPurple,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.phone,
-                            size: 14,
-                            color: vibrantPurple.withOpacity(0.6),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          contact['name']?.toString() ?? 'Unknown',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: deepPurple,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            contact['phone']?.toString() ?? 'No phone',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: deepPurple.withOpacity(0.5),
-                              fontWeight: FontWeight.w500,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.phone,
+                              size: 14,
+                              color: vibrantPurple.withOpacity(0.6),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Edit ${contact['name']}');
-                    _showEditDialog(
-                      contact['id'],
-                      contact['name']?.toString() ?? 'Unknown',
-                      contact['phone']?.toString() ?? '',
-                    );
-                  },
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    margin: const EdgeInsets.only(right: 8),
-                    decoration: BoxDecoration(
-                      color: vibrantPurple.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: vibrantPurple.withOpacity(0.3),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.edit_outlined,
-                      color: vibrantPurple,
-                      size: 20,
+                            const SizedBox(width: 4),
+                            Text(
+                              contact['phone']?.toString() ?? 'No phone',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: deepPurple.withOpacity(0.5),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    _hapticFeedback();
-                    _showDeleteConfirmation(
-                      contact['id'],
-                      contact['name']?.toString() ?? 'Unknown',
-                    );
-                  },
-                  child: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.red.withOpacity(0.3),
-                        width: 1.5,
+                  GestureDetector(
+                    onTap: () {
+                      _hapticFeedback();
+                      _speak('Edit ${contact['name']} with voice');
+                      _startVoiceContact(
+                        editContactId: contact['id'],
+                        currentName: contact['name']?.toString(),
+                        currentPhone: contact['phone']?.toString(),
+                      );
+                    },
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: vibrantPurple.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: vibrantPurple.withOpacity(0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.mic,
+                        color: vibrantPurple,
+                        size: 20,
                       ),
                     ),
-                    child: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.red,
-                      size: 20,
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      _hapticFeedback();
+                      _showDeleteConfirmation(
+                        contact['id'],
+                        contact['name']?.toString() ?? 'Unknown',
+                      );
+                    },
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.red.withOpacity(0.3),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                        size: 20,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -908,51 +1115,201 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     );
   }
 
-  Widget _buildAddButton() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 25),
-      child: GestureDetector(
-        onTap: () {
-          _hapticFeedback();
-          _speak('Add New Contact');
-          _showAddDialog();
-        },
+  Widget _buildVoiceOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.85),
+      child: Center(
         child: Container(
-          width: double.infinity,
-          height: 58,
+          margin: const EdgeInsets.all(40),
+          padding: const EdgeInsets.all(30),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
-            borderRadius: BorderRadius.circular(18),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
             boxShadow: [
               BoxShadow(
-                color: vibrantPurple.withOpacity(0.4),
-                blurRadius: 15,
-                offset: const Offset(0, 6),
+                color: vibrantPurple.withOpacity(0.3),
+                blurRadius: 30,
+                offset: const Offset(0, 15),
               ),
             ],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.add, color: Colors.white, size: 24),
+              AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: 1.0 + (_pulseController.value * 0.2),
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [vibrantPurple, primaryPurple],
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: vibrantPurple.withOpacity(0.5),
+                            blurRadius: 30,
+                            spreadRadius: 5,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        _isListening ? Icons.mic : Icons.mic_none,
+                        color: Colors.white,
+                        size: 50,
+                      ),
+                    ),
+                  );
+                },
               ),
-              const SizedBox(width: 12),
-              const Text(
-                'Add New Contact',
-                style: TextStyle(
-                  color: Colors.white,
+              const SizedBox(height: 30),
+              Text(
+                _isListening ? 'Listening...' : _getVoiceStepText(),
+                style: const TextStyle(
+                  fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  letterSpacing: 0.5,
+                  color: deepPurple,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _getVoiceStepHint(),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: deepPurple.withOpacity(0.6),
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 30),
+              Semantics(
+                label: 'Cancel voice input',
+                button: true,
+                child: OutlinedButton(
+                  onPressed: () {
+                    _hapticFeedback();
+                    _speak('Cancelled');
+                    _speech.stop();
+                    setState(() {
+                      _isVoiceMode = false;
+                      _isListening = false;
+                      _voiceStep = 0;
+                      _editingContactId = null;
+                    });
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 16,
+                    ),
+                    side: const BorderSide(color: vibrantPurple, width: 2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: vibrantPurple,
+                    ),
+                  ),
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getVoiceStepText() {
+    switch (_voiceStep) {
+      case 0:
+        return _editingContactId != null
+            ? 'Update contact name?'
+            : 'What\'s the contact name?';
+      case 1:
+        return _editingContactId != null
+            ? 'Update phone number?'
+            : 'What\'s the phone number?';
+      default:
+        return 'Processing...';
+    }
+  }
+
+  String _getVoiceStepHint() {
+    switch (_voiceStep) {
+      case 0:
+        return _editingContactId != null
+            ? 'Say the new name or "same" to keep it\nCurrent: $_voiceName'
+            : 'Say the contact\'s full name';
+      case 1:
+        return _editingContactId != null
+            ? 'Say the new phone number or "same" to keep it\nExample: "zero five one two three..."\nCurrent: $_voicePhone'
+            : 'Say the phone number digit by digit\nExample: "zero five one two three four five six seven eight"';
+      default:
+        return '';
+    }
+  }
+
+  Widget _buildVoiceAddButton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 25),
+      child: Semantics(
+        label: 'Add new contact with voice',
+        button: true,
+        hint: 'Double tap to add a new contact using voice commands',
+        child: GestureDetector(
+          onTap: () {
+            _hapticFeedback();
+            _startVoiceContact();
+          },
+          child: Container(
+            width: double.infinity,
+            height: 58,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [deepPurple, vibrantPurple],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: vibrantPurple.withOpacity(0.4),
+                  blurRadius: 15,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.mic, color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Add Voice Contact',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1054,709 +1411,44 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     bool isActive = false,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.white.withOpacity(0.25) : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: isActive
-              ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
-              : null,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-              size: 22,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
+    return Semantics(
+      label: '$label button',
+      button: true,
+      selected: isActive,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.white.withOpacity(0.25)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: isActive
+                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
                 color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                fontSize: 13,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                size: 22,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddDialog() {
-    _resetForm();
-
-    final Color fieldBackground = vibrantPurple.withOpacity(0.08);
-    final Color fieldBorder = vibrantPurple.withOpacity(0.35);
-    final Color fieldFocus = vibrantPurple;
-
-    String? errorText; // NEW: local error state for front-of-form banner
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxWidth: 820),
-            padding: const EdgeInsets.all(28),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(11),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [vibrantPurple, primaryPurple],
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.person_add,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 13),
-                      Text(
-                        "Add New Contact",
-                        style: TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.w800,
-                          color: deepPurple,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // NEW: Error banner in front of the form
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: (errorText == null)
-                        ? const SizedBox.shrink()
-                        : _buildErrorBanner(errorText!),
-                  ),
-
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      "Name",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: deepPurple,
-                        fontSize: 18,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _nameController,
-                    enabled: !_isUploading,
-                    onChanged: (_) {
-                      if (errorText != null) {
-                        setDialogState(() => errorText = null);
-                      }
-                    },
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: deepPurple,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: "Enter contact's name",
-                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                      filled: true,
-                      fillColor: fieldBackground,
-                      prefixIcon: Icon(
-                        Icons.person,
-                        color: vibrantPurple,
-                        size: 24,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldFocus, width: 2),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      "Phone Number",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: deepPurple,
-                        fontSize: 17,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _phoneController,
-                    enabled: !_isUploading,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'[\d\+\-\(\)\s]'),
-                      ),
-                    ],
-                    onChanged: (_) {
-                      if (errorText != null) {
-                        setDialogState(() => errorText = null);
-                      }
-                    },
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: deepPurple,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: "05xxxxxxxx or +966xxxxxxxxx",
-                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                      filled: true,
-                      fillColor: fieldBackground,
-                      prefixIcon: Icon(
-                        Icons.phone,
-                        color: vibrantPurple,
-                        size: 24,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldFocus, width: 2),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.lightbulb_outline,
-                          color: Colors.red,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Accepted formats: 05xxxxxxxx, +966xxxxxxxxx',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.red,
-                              fontWeight: FontWeight.w500,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 45),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _isUploading
-                              ? null
-                              : () {
-                                  _hapticFeedback();
-                                  Navigator.pop(context);
-                                },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            backgroundColor: deepPurple.withOpacity(0.15),
-                            foregroundColor: deepPurple,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(
-                                color: vibrantPurple.withOpacity(0.35),
-                                width: 1.3,
-                              ),
-                            ),
-                          ),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _isUploading
-                              ? null
-                              : () async {
-                                  _hapticFeedback();
-                                  final name = _nameController.text.trim();
-                                  final phone = _phoneController.text.trim();
-
-                                  // VALIDATION moved here to show message in front of form
-                                  if (name.isEmpty) {
-                                    setDialogState(
-                                      () => errorText = 'Please provide a name',
-                                    );
-                                    await _speak('Please provide a name');
-                                    return;
-                                  }
-                                  if (phone.isEmpty) {
-                                    setDialogState(
-                                      () => errorText =
-                                          'Please provide a phone number',
-                                    );
-                                    await _speak(
-                                      'Please provide a phone number',
-                                    );
-                                    return;
-                                  }
-                                  if (!_isValidSaudiPhoneNumber(phone)) {
-                                    setDialogState(
-                                      () => errorText =
-                                          'Please enter a valid Saudi phone number',
-                                    );
-                                    await _speak(
-                                      'Please enter a valid Saudi phone number',
-                                    );
-                                    return;
-                                  }
-
-                                  setDialogState(() => _isUploading = true);
-                                  await _addContact();
-                                  if (mounted && Navigator.canPop(context)) {
-                                    setDialogState(() => _isUploading = false);
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            backgroundColor: primaryPurple,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: _isUploading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : const Text(
-                                  'Add Contact',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.9),
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showEditDialog(
-    String contactId,
-    String currentName,
-    String currentPhone,
-  ) {
-    _resetForm();
-    _nameController.text = currentName;
-    _phoneController.text = currentPhone;
-
-    final Color fieldBackground = vibrantPurple.withOpacity(0.08);
-    final Color fieldBorder = vibrantPurple.withOpacity(0.35);
-    final Color fieldFocus = vibrantPurple;
-
-    String? errorText; // NEW: local error state for front-of-form banner
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxWidth: 820),
-            padding: const EdgeInsets.all(28),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(11),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [vibrantPurple, primaryPurple],
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.edit,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 13),
-                      Text(
-                        "Edit Contact",
-                        style: TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.w800,
-                          color: deepPurple,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // NEW: Error banner in front of the form
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
-                    child: (errorText == null)
-                        ? const SizedBox.shrink()
-                        : _buildErrorBanner(errorText!),
-                  ),
-
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      "Name",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: deepPurple,
-                        fontSize: 18,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _nameController,
-                    enabled: !_isUploading,
-                    onChanged: (_) {
-                      if (errorText != null) {
-                        setDialogState(() => errorText = null);
-                      }
-                    },
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: deepPurple,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: "Enter contact's name",
-                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                      filled: true,
-                      fillColor: fieldBackground,
-                      prefixIcon: Icon(
-                        Icons.person,
-                        color: vibrantPurple,
-                        size: 24,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldFocus, width: 2),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      "Phone Number",
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: deepPurple,
-                        fontSize: 17,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _phoneController,
-                    enabled: !_isUploading,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'[\d\+\-\(\)\s]'),
-                      ),
-                    ],
-                    onChanged: (_) {
-                      if (errorText != null) {
-                        setDialogState(() => errorText = null);
-                      }
-                    },
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: deepPurple,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: "05xxxxxxxx or +966xxxxxxxxx",
-                      hintStyle: TextStyle(color: Colors.grey.shade500),
-                      filled: true,
-                      fillColor: fieldBackground,
-                      prefixIcon: Icon(
-                        Icons.phone,
-                        color: vibrantPurple,
-                        size: 24,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldBorder, width: 1.3),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: fieldFocus, width: 2),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.lightbulb_outline,
-                          color: Colors.red,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Accepted formats: 05xxxxxxxx, +966xxxxxxxxx',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.red.shade800,
-                              fontWeight: FontWeight.w400,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 45),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _isUploading
-                              ? null
-                              : () {
-                                  _hapticFeedback();
-                                  Navigator.pop(context);
-                                },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            backgroundColor: deepPurple.withOpacity(0.15),
-                            foregroundColor: deepPurple,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              side: BorderSide(
-                                color: vibrantPurple.withOpacity(0.35),
-                                width: 1.3,
-                              ),
-                            ),
-                          ),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _isUploading
-                              ? null
-                              : () async {
-                                  final newName = _nameController.text.trim();
-                                  final newPhone = _phoneController.text.trim();
-
-                                  // VALIDATION moved here to show message in front of form
-                                  if (newName.isEmpty) {
-                                    setDialogState(
-                                      () => errorText = 'Please provide a name',
-                                    );
-                                    await _speak('Please provide a name');
-                                    return;
-                                  }
-                                  if (newPhone.isEmpty) {
-                                    setDialogState(
-                                      () => errorText =
-                                          'Please provide a phone number',
-                                    );
-                                    await _speak(
-                                      'Please provide a phone number',
-                                    );
-                                    return;
-                                  }
-                                  if (!_isValidSaudiPhoneNumber(newPhone)) {
-                                    setDialogState(
-                                      () => errorText =
-                                          'Please enter a valid Saudi phone number',
-                                    );
-                                    await _speak(
-                                      'Please enter a valid Saudi phone number',
-                                    );
-                                    return;
-                                  }
-
-                                  if (newName == currentName &&
-                                      newPhone == currentPhone) {
-                                    Navigator.pop(context);
-                                    _showSnackBar(
-                                      'No changes made',
-                                      Colors.orange,
-                                    );
-                                    return;
-                                  }
-
-                                  _hapticFeedback();
-                                  setDialogState(() => _isUploading = true);
-                                  await _updateContact(
-                                    contactId,
-                                    newName,
-                                    newPhone,
-                                  );
-                                  if (mounted && Navigator.canPop(context)) {
-                                    setDialogState(() => _isUploading = false);
-                                  }
-                                },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            backgroundColor: primaryPurple,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: _isUploading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
-                                  ),
-                                )
-                              : const Text(
-                                  'Save Changes',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            ],
           ),
         ),
       ),
