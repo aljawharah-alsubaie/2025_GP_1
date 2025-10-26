@@ -240,7 +240,6 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     }
   }
 
-  // 🎤 Voice Control Methods
   Future<void> _startVoiceContact({
     String? editContactId,
     String? currentName,
@@ -285,7 +284,11 @@ class _ContactInfoPageState extends State<ContactInfoPage>
       await _speak('Starting voice contact. Please tell me the contact name');
     }
 
-    await Future.delayed(const Duration(milliseconds: 3000));
+    // ✅ نعطي وقت أطول (4 ثواني) بعد الكلام قبل ما نبدأ الاستماع
+    await Future.delayed(const Duration(milliseconds: 4000));
+
+    if (!mounted || !_isVoiceMode) return;
+
     _listenForVoiceInput();
   }
 
@@ -303,17 +306,25 @@ class _ContactInfoPageState extends State<ContactInfoPage>
 
     setState(() => _isListening = true);
 
+    // ✅ نعطي اليوزر وقت قبل ما نبدأ الاستماع الفعلي
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted || !_isVoiceMode) return;
+
     await _speech.listen(
       onResult: (result) {
         if (result.finalResult) {
           _processVoiceInput(result.recognizedWords);
         }
       },
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 10),
+      listenFor: const Duration(seconds: 30), // ✅ إجمالي وقت الاستماع
+      pauseFor: const Duration(
+        seconds: 5,
+      ), // ✅ وقت السكوت قبل ما يقطع (4-5 ثواني)
       localeId: 'en_US',
       cancelOnError: false,
       partialResults: false,
+      listenMode: stt.ListenMode.confirmation, // ✅ يعطي وقت أطول للتأكيد
     );
   }
 
@@ -321,12 +332,10 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     setState(() => _isListening = false);
 
     if (input.isEmpty) {
-      await _speak('Could not hear you clearly. Voice contact cancelled');
-      setState(() {
-        _isVoiceMode = false;
-        _voiceStep = 0;
-        _editingContactId = null;
-      });
+      await _speak('Could not hear you clearly. Please try again');
+      await Future.delayed(const Duration(milliseconds: 3000)); // ✅ 3 ثواني
+      if (!mounted || !_isVoiceMode) return;
+      _listenForVoiceInput();
       return;
     }
 
@@ -344,7 +353,8 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           );
         }
         setState(() => _voiceStep = 1);
-        await Future.delayed(const Duration(milliseconds: 3500));
+        await Future.delayed(const Duration(milliseconds: 4000)); // ✅ 4 ثواني
+        if (!mounted || !_isVoiceMode) return;
         _listenForVoiceInput();
         break;
 
@@ -353,21 +363,102 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           // Keep the same phone
           await _speak('Keeping the phone number. Updating contact now');
           await Future.delayed(const Duration(milliseconds: 2000));
+          if (!mounted || !_isVoiceMode) return;
           await _saveVoiceContact();
         } else {
           final phoneNumber = _extractPhoneNumber(input);
-          if (phoneNumber != null && _isValidSaudiPhoneNumber(phoneNumber)) {
-            _voicePhone = phoneNumber;
+
+          // ✅ أولاً: نشيك إذا الرقم فاضي
+          if (phoneNumber == null || phoneNumber.isEmpty) {
             await _speak(
-              'Perfect. Phone number is $phoneNumber. ${_editingContactId != null ? "Updating" : "Creating"} contact now',
+              'Sorry, I could not understand the phone number. Please say it again clearly. Say each digit separately. For example: zero five one two three four five six seven eight',
+            );
+            await Future.delayed(
+              const Duration(milliseconds: 5000),
+            ); // ✅ 5 ثواني
+            if (!mounted || !_isVoiceMode) return;
+            _listenForVoiceInput();
+            return;
+          }
+
+          // ✅ ثانياً: نشيك إذا فيه حروف
+          String cleanPhone = phoneNumber.replaceAll(
+            RegExp(r'[\s\-\(\)\+]'),
+            '',
+          );
+
+          if (!RegExp(r'^[0-9]+$').hasMatch(cleanPhone)) {
+            await _speak(
+              'I detected letters in the phone number. Please say only numbers. Say each digit separately. For example: zero five one two three four five six seven eight',
+            );
+            await Future.delayed(
+              const Duration(milliseconds: 5000),
+            ); // ✅ 5 ثواني
+            if (!mounted || !_isVoiceMode) return;
+            _listenForVoiceInput();
+            return;
+          }
+
+          // ✅ ثالثاً: نشيك الفورمات
+          bool isValidFormat = false;
+          String errorMessage = '';
+
+          if (cleanPhone.startsWith('05') && cleanPhone.length == 10) {
+            isValidFormat = true;
+          } else if (cleanPhone.startsWith('5') && cleanPhone.length == 9) {
+            isValidFormat = true;
+          } else if (cleanPhone.startsWith('966')) {
+            String withoutPrefix = cleanPhone.replaceFirst(RegExp(r'^966'), '');
+            if (withoutPrefix.startsWith('5') && withoutPrefix.length == 9) {
+              isValidFormat = true;
+            }
+          }
+
+          if (!isValidFormat) {
+            if (!cleanPhone.startsWith('05') &&
+                !cleanPhone.startsWith('5') &&
+                !cleanPhone.startsWith('966')) {
+              errorMessage =
+                  'The phone number must start with zero five. Please say it again. Say each digit clearly: zero five, then the remaining 8 digits';
+            } else if (cleanPhone.length < 9) {
+              errorMessage =
+                  'The phone number is too short. You said ${cleanPhone.length} digits. Saudi numbers must be 10 digits starting with zero five. Please say all 10 digits again';
+            } else if (cleanPhone.length > 10 &&
+                !cleanPhone.startsWith('966')) {
+              errorMessage =
+                  'The phone number is too long. You said ${cleanPhone.length} digits. Saudi numbers must be 10 digits starting with zero five. Please say only 10 digits';
+            } else {
+              errorMessage =
+                  'Invalid phone number format. Saudi numbers must start with zero five and be exactly 10 digits. Please say it again clearly. For example: zero five one two three four five six seven eight';
+            }
+
+            await _speak(errorMessage);
+            await Future.delayed(
+              const Duration(milliseconds: 6000),
+            ); // ✅ 6 ثواني للرسائل الطويلة
+            if (!mounted || !_isVoiceMode) return;
+            _listenForVoiceInput();
+            return;
+          }
+
+          if (_isValidSaudiPhoneNumber(phoneNumber)) {
+            _voicePhone = phoneNumber;
+
+            String readablePhone = cleanPhone.split('').join(' ');
+            await _speak(
+              'Perfect. Phone number is: $readablePhone. ${_editingContactId != null ? "Updating" : "Creating"} contact now',
             );
             await Future.delayed(const Duration(milliseconds: 2000));
+            if (!mounted || !_isVoiceMode) return;
             await _saveVoiceContact();
           } else {
             await _speak(
-              'Sorry, I could not understand the phone number. Please say it again. For example: zero five one two three four five six seven eight',
+              'Sorry, the phone number format is incorrect. Saudi numbers must start with zero five and be exactly 10 digits. Please say it again clearly',
             );
-            await Future.delayed(const Duration(milliseconds: 3500));
+            await Future.delayed(
+              const Duration(milliseconds: 5000),
+            ); // ✅ 5 ثواني
+            if (!mounted || !_isVoiceMode) return;
             _listenForVoiceInput();
           }
         }
@@ -376,25 +467,43 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   String? _extractPhoneNumber(String input) {
-    // Remove common words
-    String cleaned = input
-        .toLowerCase()
-        .replaceAll('zero', '0')
-        .replaceAll('one', '1')
-        .replaceAll('two', '2')
-        .replaceAll('three', '3')
-        .replaceAll('four', '4')
-        .replaceAll('five', '5')
-        .replaceAll('six', '6')
-        .replaceAll('seven', '7')
-        .replaceAll('eight', '8')
-        .replaceAll('nine', '9')
-        .replaceAll(' ', '');
+    // Remove common words and convert to lowercase
+    String cleaned = input.toLowerCase();
 
-    // Extract numbers only
+    // ✅ نحول الكلمات للأرقام (باللغة الإنجليزية فقط عشان نتأكد)
+    final Map<String, String> numberWords = {
+      'zero': '0',
+      'one': '1',
+      'two': '2',
+      'three': '3',
+      'four': '4',
+      'five': '5',
+      'six': '6',
+      'seven': '7',
+      'eight': '8',
+      'nine': '9',
+      'oh': '0', // بعض الناس يقولون "oh" بدل "zero"
+    };
+
+    // نستبدل كل كلمة برقمها
+    numberWords.forEach((word, digit) {
+      cleaned = cleaned.replaceAll(word, digit);
+    });
+
+    // نشيل المسافات
+    cleaned = cleaned.replaceAll(' ', '');
+
+    // ✅ Extract numbers only (نسمح فقط بالأرقام و + للكود الدولي)
     String numbers = cleaned.replaceAll(RegExp(r'[^0-9+]'), '');
 
+    // ✅ نشيك إذا طلع فاضي بعد التحويل
     if (numbers.isEmpty) return null;
+
+    // ✅ نشيك إذا فيه أكثر من + واحد (غلط)
+    if (numbers.split('+').length > 2) return null;
+
+    // ✅ نشيك إذا + موجود بس مو في البداية (غلط)
+    if (numbers.contains('+') && !numbers.startsWith('+')) return null;
 
     return numbers;
   }
@@ -450,6 +559,11 @@ class _ContactInfoPageState extends State<ContactInfoPage>
         await _speak(
           'Contact created successfully. Name: $_voiceName, Phone: $formattedPhone',
         );
+
+        // ✅ إذا تم إضافة contact جديد، نرجع للصفحة اللي قبل مع result = true
+        if (mounted) {
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
       print('Error saving voice contact: $e');

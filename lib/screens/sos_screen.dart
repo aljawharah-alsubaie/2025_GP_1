@@ -601,29 +601,65 @@ class _SosButtonState extends State<SosButton>
     await Future.delayed(const Duration(milliseconds: 100));
     _hapticFeedback();
 
-    _speak('Emergency SOS activated');
-
     setState(() {
       _isProcessing = true;
     });
 
     try {
+      // ✅ أولاً: نشيك إذا عنده contacts
+      final User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        _speak('Please sign in first');
+        setState(() {
+          _isProcessing = false;
+        });
+        return;
+      }
+
+      // نجيب الـ contacts من Firebase
+      final contactsSnapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('contacts')
+          .get();
+
+      // ✅ إذا ما عنده contacts → نحوله لصفحة الـ contacts
+      if (contactsSnapshot.docs.isEmpty) {
+        _speak('Please add emergency contacts first');
+
+        setState(() {
+          _isProcessing = false;
+        });
+
+        // نحوله لصفحة الـ contacts
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ContactInfoPage()),
+        );
+
+        return;
+      }
+
+      // ✅ إذا عنده contacts → نرسل اللوكيشن مباشرة!
+      _speak('Emergency SOS activated. Sending location to all contacts');
+
+      // نفتح صفحة اختيار اللوكيشن
       final result = await Navigator.push<bool>(
         context,
         MaterialPageRoute(builder: (_) => const LocationSelectionPage()),
       );
 
       if (result == true && mounted) {
-        // ✅ صوت تأكيد عالي
-        await _speak('Emergency alert sent successfully');
+        // ✅ تم إرسال اللوكيشن بنجاح
+        await _speak('Emergency alert sent successfully to all contacts');
         widget.onLocationSent(context);
       }
     } catch (e) {
       if (mounted) {
-        _speak('Failed to send location');
+        _speak('Failed to send emergency alert');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Failed to send location. Please try again.'),
+            content: const Text('Failed to process request. Please try again.'),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
             margin: const EdgeInsets.all(16),
