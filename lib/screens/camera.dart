@@ -47,7 +47,7 @@ class _CameraScreenState extends State<CameraScreen> {
     script: TextRecognitionScript.latin,
   );
 
-  static const Map<String, List<int>> _colorNames = {
+  /*static const Map<String, List<int>> _colorNames = {
     'red': [255, 0, 0],
     'green': [0, 128, 0],
     'blue': [0, 0, 255],
@@ -77,7 +77,7 @@ class _CameraScreenState extends State<CameraScreen> {
     'salmon': [250, 128, 114],
     'turquoise': [64, 224, 208],
     'violet': [238, 130, 238],
-  };
+  }; */
 
   @override
   void initState() {
