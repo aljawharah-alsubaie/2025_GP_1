@@ -6,7 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import '../services/face_recognition_api.dart'; // 👈 استخدم الـ API الجديد
+import '../services/face_recognition_api.dart';
 
 class AddPersonPage extends StatefulWidget {
   const AddPersonPage({super.key});
@@ -84,7 +84,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
     }
   }
 
-  // 👇 دالة جديدة لحفظ البيانات في Firebase
   Future<void> _saveToFirestore(String personName, List<String> photoUrls) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -109,7 +108,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
     }
   }
 
-  // 👇 دالة جديدة لرفع الصور إلى Firebase Storage
   Future<List<String>> _uploadImagesToStorage(String personName) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return [];
@@ -133,14 +131,12 @@ class _AddPersonPageState extends State<AddPersonPage> {
         print('✅ Image $i uploaded to Firebase Storage');
       } catch (e) {
         print('❌ Error uploading image $i: $e');
-        // استمر في رفع الصور الأخرى حتى لو فشلت بعضها
       }
     }
     
     return photoUrls;
   }
 
-  // 👇 الدالة الرئيسية المحسنة باستخدام الـ API
   Future<void> _addPerson() async {
     if (_nameController.text.trim().isEmpty) {
       _showSnackBar('Please enter a name', Colors.red);
@@ -168,18 +164,15 @@ class _AddPersonPageState extends State<AddPersonPage> {
       int failedCount = 0;
       List<String> failReasons = [];
 
-      print('🚀 Starting to process ${_selectedImages.length} images for $personName using API');
+      print('🚀 Starting to process ${_selectedImages.length} images for $personName');
 
       // 🔄 معالجة كل صورة باستخدام الـ API
       for (int i = 0; i < _selectedImages.length; i++) {
         try {
           print('📸 Processing image ${i + 1}/${_selectedImages.length}');
           
-          // قراءة bytes الصورة
-          final imageBytes = await _selectedImages[i].readAsBytes();
-          
-          // 👇 استخدام الـ API لإضافة الوجه
-          final success = await FaceRecognitionAPI.addFace(personName, imageBytes);
+          // استخدام الـ API لإضافة الوجه
+          final success = await FaceRecognitionAPI.registerFace(personName, _selectedImages[i]);
           
           if (success) {
             successCount++;
@@ -208,20 +201,16 @@ class _AddPersonPageState extends State<AddPersonPage> {
         await _saveToFirestore(personName, photoUrls);
 
         if (mounted) {
-          // 🎉 عرض رسالة النجاح
           _showSnackBar(
             'Person $personName added successfully with $successCount photo${successCount > 1 ? 's' : ''}',
             Colors.green,
           );
 
-          // 🗣️ نطق رسالة النجاح
           await _speak(
             'Person $personName added successfully with $successCount photo${successCount > 1 ? 's' : ''}',
           );
 
-          // ⏳ انتظار قليل قبل العودة
           await Future.delayed(const Duration(milliseconds: 2000));
-
           Navigator.pop(context, true);
         }
       } else {

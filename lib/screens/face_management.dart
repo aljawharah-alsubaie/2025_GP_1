@@ -3,9 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'dart:typed_data';
-
-import '../services/face_recognition_api.dart'; // 👈 استبدل الـ pipeline بالـ API
+import '../services/face_recognition_api.dart';
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
@@ -27,7 +25,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   List<Map<String, dynamic>> _people = [];
   bool _isLoading = true;
   String _searchQuery = '';
-  bool _apiConnected = false;
 
   AnimationController? _fadeController;
   AnimationController? _slideController;
@@ -44,7 +41,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   void initState() {
     super.initState();
     _initTts();
-    _initializeAPI(); // 👈 بدلاً من تهيئة الـ pipeline
     _loadPeople();
 
     _fadeController = AnimationController(
@@ -81,42 +77,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     HapticFeedback.mediumImpact();
   }
 
-  // 🔗 تهيئة الاتصال بالـ API
-  Future<void> _initializeAPI() async {
-    try {
-      _apiConnected = await FaceRecognitionAPI.testConnection();
-      if (_apiConnected) {
-        print('✅ API Connected Successfully');
-        if (mounted) {
-          _showSnackBar('API Connected Successfully!', Colors.green);
-        }
-      } else {
-        print('❌ API Connection Failed');
-        if (mounted) {
-          _showSnackBar('API Connection Failed', Colors.red);
-        }
-      }
-    } catch (e) {
-      print('❌ API Initialization Error: $e');
-      _apiConnected = false;
-    }
-    setState(() {});
-  }
-
-  // 🔍 البحث باستخدام الـ API
-  Future<void> _searchFacesWithAPI(String query) async {
-    if (query.length < 2) return;
-    
-    try {
-      // يمكنك إضافة دالة بحث في الـ API إذا كانت متوفرة
-      setState(() {
-        _searchQuery = query;
-      });
-    } catch (e) {
-      print('❌ API Search Error: $e');
-    }
-  }
-
   Future<void> _loadPeople() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -140,9 +100,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading people: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading people: $e')));
       }
     }
   }
@@ -152,7 +112,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     if (user == null) return;
 
     try {
-      // حذف من Firebase
+      // حذف من Firebase فقط
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -166,12 +126,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           .collection('face_embeddings')
           .doc(personName)
           .delete();
-
-      // حذف من الـ API
-      final apiSuccess = await FaceRecognitionAPI.deleteFace(personName);
-      if (!apiSuccess) {
-        print('⚠️ Warning: Failed to delete face from API');
-      }
 
       await _loadPeople();
 
@@ -326,47 +280,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  // 🔗 اختبار التعرف باستخدام الـ API
-  Future<void> _testAPIRecognition() async {
-    _hapticFeedback();
-    _speak('Testing face recognition');
-    
-    try {
-      _showSnackBar('Testing API Recognition...', Colors.blue);
-      
-      // هنا يمكنك إضافة كود لالتقاط صورة أو استخدام صورة اختبار
-      // مثال: يمكنك استبدال هذا بكود الالتقاط الفعلي
-      // final result = await FaceRecognitionAPI.recognizeFace(testImageBytes);
-      
-      // _showSnackBar(
-      //   'API Result: ${result.personId} (${result.similarity.toStringAsFixed(1)}%)',
-      //   result.isMatch ? Colors.green : Colors.orange,
-      // );
-      
-      // _speak('Recognized as ${result.personId} with ${result.similarity.toStringAsFixed(1)} percent accuracy');
-      
-      _showSnackBar('Face recognition test initiated', Colors.blue);
-      _speak('Recognition test started');
-    } catch (e) {
-      _showSnackBar('Recognition test failed: $e', Colors.red);
-      _speak('Recognition test failed');
-    }
-  }
-
-  // 🔗 الحصول على قائمة الوجوه من الـ API
-  Future<void> _loadFacesFromAPI() async {
-    try {
-      final facesList = await FaceRecognitionAPI.getFacesList();
-      print('📋 Faces from API: $facesList');
-      
-      if (facesList.isNotEmpty) {
-        _showSnackBar('Loaded ${facesList.length} faces from API', Colors.green);
-      }
-    } catch (e) {
-      print('❌ Error loading faces from API: $e');
-    }
-  }
-
   List<Map<String, dynamic>> get _filteredPeople {
     if (_searchQuery.isEmpty) return _people;
     return _people
@@ -405,7 +318,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               ],
             ),
           ),
-          _buildAccuracyTestButton(), // 👈 زر اختبار التعرف
         ],
       ),
       bottomNavigationBar: Column(
@@ -486,41 +398,12 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Using AI API for face recognition',
+                        'Manage saved faces',
                         style: TextStyle(
                           fontSize: 13,
                           color: deepPurple.withOpacity(0.8),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // 🔗 مؤشر حالة الـ API
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _apiConnected ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _apiConnected ? Colors.green : Colors.red,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _apiConnected ? Icons.cloud_done : Icons.cloud_off,
-                        size: 12,
-                        color: _apiConnected ? Colors.green : Colors.red,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _apiConnected ? 'API Connected' : 'API Offline',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _apiConnected ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -559,10 +442,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                   Expanded(
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (value) {
-                        setState(() => _searchQuery = value);
-                        _searchFacesWithAPI(value);
-                      },
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
                       decoration: InputDecoration(
                         hintText: "Search people...",
                         border: InputBorder.none,
@@ -604,16 +485,16 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       child: _isLoading
           ? const Center(child: CircularProgressIndicator(color: vibrantPurple))
           : _filteredPeople.isEmpty && _searchQuery.isNotEmpty
-              ? _buildEmptySearch()
-              : _people.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                      itemCount: _filteredPeople.length,
-                      itemBuilder: (context, index) {
-                        return _buildPersonCard(_filteredPeople[index]);
-                      },
-                    ),
+          ? _buildEmptySearch()
+          : _people.isEmpty
+          ? _buildEmptyState()
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+              itemCount: _filteredPeople.length,
+              itemBuilder: (context, index) {
+                return _buildPersonCard(_filteredPeople[index]);
+              },
+            ),
     );
   }
 
@@ -670,10 +551,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     backgroundColor: Colors.white,
                     backgroundImage:
                         person['photoUrls'] != null &&
-                                (person['photoUrls'] as List).isNotEmpty
-                            ? NetworkImage(person['photoUrls'][0])
-                            : null,
-                    child: person['photoUrls'] == null ||
+                            (person['photoUrls'] as List).isNotEmpty
+                        ? NetworkImage(person['photoUrls'][0])
+                        : null,
+                    child:
+                        person['photoUrls'] == null ||
                             (person['photoUrls'] as List).isEmpty
                         ? Icon(
                             Icons.person,
@@ -697,25 +579,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         ),
                       ),
                       const SizedBox(height: 4),
-                      // 🔗 حالة الـ API
-                      Row(
-                        children: [
-                          Icon(
-                            _apiConnected ? Icons.cloud_done : Icons.cloud_off,
-                            size: 14,
-                            color: _apiConnected ? Colors.green : Colors.orange,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _apiConnected ? 'API Ready' : 'API Offline',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _apiConnected ? Colors.green : Colors.orange,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
@@ -862,51 +725,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
-            // 🔗 زر اختبار الـ API
-            ElevatedButton(
-              onPressed: _testAPIRecognition,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: vibrantPurple,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Test Face Recognition',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-            const SizedBox(height: 8),
-            // 🔗 زر تحميل الوجوه من الـ API
-            ElevatedButton(
-              onPressed: _loadFacesFromAPI,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: deepPurple,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Load Faces from API',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
           ],
         ),
-      ),
-    );
-  }
-
-  // 👇 زر اختبار التعرف
-  Widget _buildAccuracyTestButton() {
-    return Positioned(
-      bottom: 100,
-      right: 20,
-      child: FloatingActionButton(
-        onPressed: _testAPIRecognition,
-        backgroundColor: vibrantPurple,
-        child: const Icon(Icons.face_retouching_natural, color: Colors.white),
       ),
     );
   }

@@ -10,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import '../services/face_recognition_api.dart'; // 👈 استبدل الـ pipeline بالـ API
+import '../services/face_recognition_api.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -326,11 +326,8 @@ class _CameraScreenState extends State<CameraScreen> {
         print('🔍 Starting face recognition with API...');
         
         try {
-          // قراءة bytes الصورة
-          final imageBytes = await File(imagePath).readAsBytes();
-          
-          // استخدام الـ API للتعرف على الوجه
-          final result = await FaceRecognitionAPI.recognizeFace(imageBytes);
+          // استخدام الـ API للتعرف على الوجه مع File مباشرة
+          final result = await FaceRecognitionAPI.recognizeFace(File(imagePath));
 
           setState(() {
             _faceResult = result;
@@ -457,12 +454,12 @@ class _CameraScreenState extends State<CameraScreen> {
               _buildInfoRow('Name', result.personId, Icons.person),
               _buildInfoRow(
                 'Confidence',
-                '${result.confidence.toStringAsFixed(1)}%',
+                '${(result.confidence * 100).toStringAsFixed(1)}%',
                 Icons.analytics,
               ),
               _buildInfoRow(
                 'Similarity',
-                '${result.similarity.toStringAsFixed(1)}%',
+                '${(result.similarity * 100).toStringAsFixed(1)}%',
                 Icons.percent,
               ),
             ] else ...[
@@ -478,7 +475,7 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
               _buildInfoRow(
                 'Confidence',
-                '${result.confidence.toStringAsFixed(1)}%',
+                '${(result.confidence * 100).toStringAsFixed(1)}%',
                 Icons.analytics,
               ),
               const SizedBox(height: 12),
@@ -848,7 +845,7 @@ class _CameraScreenState extends State<CameraScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Confidence: ${_faceResult!.confidence.toStringAsFixed(1)}%',
+                              'Confidence: ${(_faceResult!.confidence * 100).toStringAsFixed(1)}%',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14,
