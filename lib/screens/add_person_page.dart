@@ -5,9 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image/image.dart' as img;
 import 'package:flutter_tts/flutter_tts.dart';
-import '../services/insightface_pipeline.dart';
+import '../services/face_recognition_api.dart'; // 👈 استخدم الـ API الجديد
 
 class AddPersonPage extends StatefulWidget {
   const AddPersonPage({super.key});
@@ -85,31 +84,63 @@ class _AddPersonPageState extends State<AddPersonPage> {
     }
   }
 
-  Future<void> _saveEmbeddingsToFirestore(String personId) async {
+  // 👇 دالة جديدة لحفظ البيانات في Firebase
+  Future<void> _saveToFirestore(String personName, List<String> photoUrls) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     try {
-      final embeddings = InsightFacePipeline.getStoredEmbeddings();
-      if (embeddings.containsKey(personId)) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('face_embeddings')
-            .doc(personId)
-            .set({
-              'name': personId,
-              'embeddings': embeddings[personId],
-              'image_count': (embeddings[personId] as List).length,
-              'created_at': FieldValue.serverTimestamp(),
-              'updated_at': FieldValue.serverTimestamp(),
-            });
-      }
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('people')
+          .add({
+            'name': personName,
+            'photoUrls': photoUrls,
+            'photoCount': photoUrls.length,
+            'faceDetected': true,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+
+      print('✅ Person $personName saved to Firestore with ${photoUrls.length} photos');
     } catch (e) {
-      print('Error saving embeddings: $e');
+      print('❌ Error saving to Firestore: $e');
+      throw Exception('Failed to save person data: $e');
     }
   }
 
+  // 👇 دالة جديدة لرفع الصور إلى Firebase Storage
+  Future<List<String>> _uploadImagesToStorage(String personName) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return [];
+
+    List<String> photoUrls = [];
+    
+    for (int i = 0; i < _selectedImages.length; i++) {
+      try {
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('users')
+            .child(user.uid)
+            .child('faces')
+            .child(personName)
+            .child('${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
+
+        final uploadTask = await storageRef.putFile(_selectedImages[i]);
+        final photoUrl = await uploadTask.ref.getDownloadURL();
+        photoUrls.add(photoUrl);
+        
+        print('✅ Image $i uploaded to Firebase Storage');
+      } catch (e) {
+        print('❌ Error uploading image $i: $e');
+        // استمر في رفع الصور الأخرى حتى لو فشلت بعضها
+      }
+    }
+    
+    return photoUrls;
+  }
+
+  // 👇 الدالة الرئيسية المحسنة باستخدام الـ API
   Future<void> _addPerson() async {
     if (_nameController.text.trim().isEmpty) {
       _showSnackBar('Please enter a name', Colors.red);
@@ -133,134 +164,69 @@ class _AddPersonPageState extends State<AddPersonPage> {
 
     try {
       final personName = _nameController.text.trim();
-      List<String> photoUrls = [];
       int successCount = 0;
       int failedCount = 0;
       List<String> failReasons = [];
 
-      print('Processing ${_selectedImages.length} images for $personName');
+      print('🚀 Starting to process ${_selectedImages.length} images for $personName using API');
 
+      // 🔄 معالجة كل صورة باستخدام الـ API
       for (int i = 0; i < _selectedImages.length; i++) {
         try {
-          print('Processing image ${i + 1}/${_selectedImages.length}');
-
-          final faceRect = await InsightFacePipeline.detectFace(
-            _selectedImages[i],
-          );
-
-          if (faceRect == null) {
-            failedCount++;
-            failReasons.add('Image ${i + 1}: No face detected');
-            print('Image $i: No face detected');
-            continue;
-          }
-
-          print(
-            'Image $i: Face detected at ${faceRect.width.toInt()}x${faceRect.height.toInt()}',
-          );
-
-          final croppedFace = await InsightFacePipeline.cropFace(
-            _selectedImages[i],
-            faceRect,
-          );
-
-          if (croppedFace == null) {
-            failedCount++;
-            failReasons.add('Image ${i + 1}: Failed to crop face');
-            print('Image $i: Failed to crop face');
-            continue;
-          }
-
-          final tempDir = await Directory.systemTemp.createTemp();
-          final tempFile = File('${tempDir.path}/face_$i.jpg');
-          final jpg = img.encodeJpg(croppedFace);
-          await tempFile.writeAsBytes(jpg);
-
-          print('Image $i: Saved cropped face to temp file');
-
-          final success = await InsightFacePipeline.storeFaceEmbedding(
-            personName,
-            tempFile,
-          );
-
+          print('📸 Processing image ${i + 1}/${_selectedImages.length}');
+          
+          // قراءة bytes الصورة
+          final imageBytes = await _selectedImages[i].readAsBytes();
+          
+          // 👇 استخدام الـ API لإضافة الوجه
+          final success = await FaceRecognitionAPI.addFace(personName, imageBytes);
+          
           if (success) {
             successCount++;
-            print('Image $i: Embedding stored successfully');
-
-            try {
-              final storageRef = FirebaseStorage.instance
-                  .ref()
-                  .child('users')
-                  .child(user.uid)
-                  .child('faces')
-                  .child(personName)
-                  .child('${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
-
-              final uploadTask = await storageRef.putFile(tempFile);
-              final photoUrl = await uploadTask.ref.getDownloadURL();
-              photoUrls.add(photoUrl);
-              print('Image $i: Uploaded to Firebase Storage');
-            } catch (e) {
-              print('Image $i: Failed to upload to storage: $e');
-            }
+            print('✅ Image $i: Face added successfully via API');
           } else {
             failedCount++;
-            failReasons.add('Image ${i + 1}: Failed to extract face features');
-            print('Image $i: Failed to extract embedding');
+            failReasons.add('Image ${i + 1}: API failed to process face');
+            print('❌ Image $i: API processing failed');
           }
-
-          try {
-            await tempFile.delete();
-            await tempDir.delete();
-          } catch (e) {
-            print('Cleanup error: $e');
-          }
+          
         } catch (e, stackTrace) {
-          print('Error processing image $i: $e');
+          print('❌ Error processing image $i: $e');
           print('Stack trace: $stackTrace');
           failedCount++;
-          failReasons.add('Image ${i + 1}: Processing error');
+          failReasons.add('Image ${i + 1}: Processing error - $e');
         }
       }
 
-      print('Results: Success=$successCount, Failed=$failedCount');
+      print('📊 Final Results: Success=$successCount, Failed=$failedCount');
 
       if (successCount > 0) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('people')
-            .add({
-              'name': personName,
-              'photoUrls': photoUrls,
-              'photoCount': photoUrls.length,
-              'embeddingCount': successCount,
-              'faceDetected': true,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-
-        await _saveEmbeddingsToFirestore(personName);
+        // 📤 رفع الصور إلى Firebase Storage
+        final photoUrls = await _uploadImagesToStorage(personName);
+        
+        // 💾 حفظ البيانات في Firestore
+        await _saveToFirestore(personName, photoUrls);
 
         if (mounted) {
-          //  Show success message with green snackbar
+          // 🎉 عرض رسالة النجاح
           _showSnackBar(
             'Person $personName added successfully with $successCount photo${successCount > 1 ? 's' : ''}',
             Colors.green,
           );
 
-          //  Speak the success message BEFORE navigating back
+          // 🗣️ نطق رسالة النجاح
           await _speak(
             'Person $personName added successfully with $successCount photo${successCount > 1 ? 's' : ''}',
           );
 
-          //  Wait a bit for the speech to complete before navigating
-          await Future.delayed(const Duration(milliseconds: 5000));
+          // ⏳ انتظار قليل قبل العودة
+          await Future.delayed(const Duration(milliseconds: 2000));
 
           Navigator.pop(context, true);
         }
       } else {
         if (mounted) {
-          String errorMsg = 'Failed to process any images with faces.\n\n';
+          String errorMsg = 'Failed to process any images with the AI API.\n\n';
           if (failReasons.isNotEmpty) {
             errorMsg += 'Issues found:\n${failReasons.take(3).join('\n')}';
             if (failReasons.length > 3) {
@@ -268,13 +234,13 @@ class _AddPersonPageState extends State<AddPersonPage> {
             }
           }
           errorMsg +=
-              '\n\nTips:\n• Use well-lit photos\n• Face should be clearly visible\n• Avoid blurry images';
+              '\n\nTips:\n• Use well-lit photos\n• Face should be clearly visible\n• Avoid blurry images\n• Check API connection';
 
           _showDetailedErrorDialog(errorMsg);
         }
       }
     } catch (e, stackTrace) {
-      print('Error in _addPerson: $e');
+      print('❌ Error in _addPerson: $e');
       print('Stack trace: $stackTrace');
       if (mounted) {
         _showSnackBar('Error adding person: $e', Colors.red);

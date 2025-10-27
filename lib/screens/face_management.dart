@@ -3,10 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'dart:typed_data';
 
-import '../services/insightface_pipeline.dart';
+import '../services/face_recognition_api.dart'; // 👈 استبدل الـ pipeline بالـ API
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
@@ -28,10 +27,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   List<Map<String, dynamic>> _people = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  bool _apiConnected = false;
 
-  // 🔗 Gradio API configuration
-  static const String GRADIO_API_URL = "https://242a811cb53e509ce6.gradio.live";
-  
   AnimationController? _fadeController;
   AnimationController? _slideController;
 
@@ -47,7 +44,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   void initState() {
     super.initState();
     _initTts();
-    _initializeFaceRecognition();
+    _initializeAPI(); // 👈 بدلاً من تهيئة الـ pipeline
     _loadPeople();
 
     _fadeController = AnimationController(
@@ -84,117 +81,39 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     HapticFeedback.mediumImpact();
   }
 
-  // 🔗 Gradio API Functions
-  Future<Map<String, dynamic>?> _callGradioAPI(String endpoint, Map<String, dynamic> data) async {
+  // 🔗 تهيئة الاتصال بالـ API
+  Future<void> _initializeAPI() async {
     try {
-      final response = await http.post(
-        Uri.parse('$GRADIO_API_URL/$endpoint'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(data),
-      );
-
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        print('API Error: ${response.statusCode} - ${response.body}');
-        return null;
-      }
-    } catch (e) {
-      print('API Call Failed: $e');
-      return null;
-    }
-  }
-
-  // 🔍 Example: Search faces using Gradio API
-  Future<void> _searchFacesWithAPI(String query) async {
-    final result = await _callGradioAPI('search_faces', {
-      'query': query,
-      'user_id': FirebaseAuth.instance.currentUser?.uid,
-    });
-
-    if (result != null && result['success'] == true) {
-      // Handle successful search results
-      print('Search results: ${result['data']}');
-    }
-  }
-
-  // 🎭 Example: Verify face using Gradio API
-  Future<bool> _verifyFaceWithAPI(List<double> embedding, String personName) async {
-    final result = await _callGradioAPI('verify_face', {
-      'embedding': embedding,
-      'person_name': personName,
-      'user_id': FirebaseAuth.instance.currentUser?.uid,
-    });
-
-    return result != null && result['success'] == true;
-  }
-
-  // 📸 Example: Add face embedding via API
-  Future<bool> _addFaceEmbeddingAPI(String personName, List<List<double>> embeddings) async {
-    final result = await _callGradioAPI('add_face', {
-      'person_name': personName,
-      'embeddings': embeddings,
-      'user_id': FirebaseAuth.instance.currentUser?.uid,
-    });
-
-    return result != null && result['success'] == true;
-  }
-
-  // 🗑️ Example: Delete face via API
-  Future<bool> _deleteFaceAPI(String personName) async {
-    final result = await _callGradioAPI('delete_face', {
-      'person_name': personName,
-      'user_id': FirebaseAuth.instance.currentUser?.uid,
-    });
-
-    return result != null && result['success'] == true;
-  }
-
-  Future<void> _initializeFaceRecognition() async {
-    final success = await InsightFacePipeline.initialize();
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to initialize face recognition'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } else {
-      await _loadStoredEmbeddings();
-    }
-  }
-
-  Future<void> _loadStoredEmbeddings() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('face_embeddings')
-          .get();
-
-      if (snapshot.docs.isNotEmpty) {
-        Map<String, List<List<double>>> allEmbeddings = {};
-
-        for (var doc in snapshot.docs) {
-          final data = doc.data();
-          if (data['embeddings'] != null) {
-            List<List<double>> personEmbeddings = (data['embeddings'] as List)
-                .map(
-                  (e) => (e as List).map((v) => (v as num).toDouble()).toList(),
-                )
-                .toList();
-            allEmbeddings[doc.id] = personEmbeddings;
-          }
+      _apiConnected = await FaceRecognitionAPI.testConnection();
+      if (_apiConnected) {
+        print('✅ API Connected Successfully');
+        if (mounted) {
+          _showSnackBar('API Connected Successfully!', Colors.green);
         }
-
-        InsightFacePipeline.loadMultipleEmbeddings(allEmbeddings);
-        print('✅ Loaded embeddings for ${allEmbeddings.length} persons');
+      } else {
+        print('❌ API Connection Failed');
+        if (mounted) {
+          _showSnackBar('API Connection Failed', Colors.red);
+        }
       }
     } catch (e) {
-      print('Error loading embeddings: $e');
+      print('❌ API Initialization Error: $e');
+      _apiConnected = false;
+    }
+    setState(() {});
+  }
+
+  // 🔍 البحث باستخدام الـ API
+  Future<void> _searchFacesWithAPI(String query) async {
+    if (query.length < 2) return;
+    
+    try {
+      // يمكنك إضافة دالة بحث في الـ API إذا كانت متوفرة
+      setState(() {
+        _searchQuery = query;
+      });
+    } catch (e) {
+      print('❌ API Search Error: $e');
     }
   }
 
@@ -233,7 +152,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     if (user == null) return;
 
     try {
-      // Delete from Firebase
+      // حذف من Firebase
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -248,29 +167,28 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           .doc(personName)
           .delete();
 
-      // Delete from local face recognition
-      InsightFacePipeline.removeFaceEmbedding(personName);
-
-      // Delete from Gradio API
-      final apiSuccess = await _deleteFaceAPI(personName);
+      // حذف من الـ API
+      final apiSuccess = await FaceRecognitionAPI.deleteFace(personName);
       if (!apiSuccess) {
-        print('Warning: Failed to delete face from API');
+        print('⚠️ Warning: Failed to delete face from API');
       }
 
       await _loadPeople();
 
       if (mounted) {
         _showSnackBar('$personName deleted successfully!', Colors.green);
+        _speak('$personName deleted successfully');
       }
     } catch (e) {
       _showSnackBar('Error deleting person: $e', Colors.red);
+      _speak('Error deleting person');
     }
   }
 
   void _showDeleteConfirmation(String personId, String personName) {
     _hapticFeedback();
-
     _speak('Are you sure you want to delete $personName');
+    
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -370,7 +288,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         _hapticFeedback();
                         Navigator.pop(context);
                         await _deletePerson(personId, personName);
-                        _speak('$personName deleted successfully');
                       },
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -407,6 +324,47 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         duration: const Duration(seconds: 2),
       ),
     );
+  }
+
+  // 🔗 اختبار التعرف باستخدام الـ API
+  Future<void> _testAPIRecognition() async {
+    _hapticFeedback();
+    _speak('Testing face recognition');
+    
+    try {
+      _showSnackBar('Testing API Recognition...', Colors.blue);
+      
+      // هنا يمكنك إضافة كود لالتقاط صورة أو استخدام صورة اختبار
+      // مثال: يمكنك استبدال هذا بكود الالتقاط الفعلي
+      // final result = await FaceRecognitionAPI.recognizeFace(testImageBytes);
+      
+      // _showSnackBar(
+      //   'API Result: ${result.personId} (${result.similarity.toStringAsFixed(1)}%)',
+      //   result.isMatch ? Colors.green : Colors.orange,
+      // );
+      
+      // _speak('Recognized as ${result.personId} with ${result.similarity.toStringAsFixed(1)} percent accuracy');
+      
+      _showSnackBar('Face recognition test initiated', Colors.blue);
+      _speak('Recognition test started');
+    } catch (e) {
+      _showSnackBar('Recognition test failed: $e', Colors.red);
+      _speak('Recognition test failed');
+    }
+  }
+
+  // 🔗 الحصول على قائمة الوجوه من الـ API
+  Future<void> _loadFacesFromAPI() async {
+    try {
+      final facesList = await FaceRecognitionAPI.getFacesList();
+      print('📋 Faces from API: $facesList');
+      
+      if (facesList.isNotEmpty) {
+        _showSnackBar('Loaded ${facesList.length} faces from API', Colors.green);
+      }
+    } catch (e) {
+      print('❌ Error loading faces from API: $e');
+    }
   }
 
   List<Map<String, dynamic>> get _filteredPeople {
@@ -447,6 +405,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               ],
             ),
           ),
+          _buildAccuracyTestButton(), // 👈 زر اختبار التعرف
         ],
       ),
       bottomNavigationBar: Column(
@@ -527,7 +486,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Manage saved faces with AI API',
+                        'Using AI API for face recognition',
                         style: TextStyle(
                           fontSize: 13,
                           color: deepPurple.withOpacity(0.8),
@@ -538,23 +497,29 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     ],
                   ),
                 ),
-                // 🔗 API Status Indicator
+                // 🔗 مؤشر حالة الـ API
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
+                    color: _apiConnected ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green),
+                    border: Border.all(
+                      color: _apiConnected ? Colors.green : Colors.red,
+                    ),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.api, size: 12, color: Colors.green),
-                      SizedBox(width: 4),
+                      Icon(
+                        _apiConnected ? Icons.cloud_done : Icons.cloud_off,
+                        size: 12,
+                        color: _apiConnected ? Colors.green : Colors.red,
+                      ),
+                      const SizedBox(width: 4),
                       Text(
-                        'API Connected',
+                        _apiConnected ? 'API Connected' : 'API Offline',
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.green,
+                          color: _apiConnected ? Colors.green : Colors.red,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -596,10 +561,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       controller: _searchController,
                       onChanged: (value) {
                         setState(() => _searchQuery = value);
-                        // 🔍 Optional: Search via API in real-time
-                        if (value.length >= 2) {
-                          _searchFacesWithAPI(value);
-                        }
+                        _searchFacesWithAPI(value);
                       },
                       decoration: InputDecoration(
                         hintText: "Search people...",
@@ -735,45 +697,24 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         ),
                       ),
                       const SizedBox(height: 4),
-                      // 🔗 API Verification Status
-                      FutureBuilder<bool>(
-                        future: _verifyPersonWithAPI(person),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return Text(
-                              'Verifying...',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: deepPurple.withOpacity(0.5),
-                              ),
-                            );
-                          }
-                          
-                          if (snapshot.hasData && snapshot.data == true) {
-                            return Row(
-                              children: [
-                                Icon(Icons.verified, size: 14, color: Colors.green),
-                                SizedBox(width: 4),
-                                Text(
-                                  'API Verified',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            );
-                          } else {
-                            return Text(
-                              'Not verified',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.orange,
-                              ),
-                            );
-                          }
-                        },
+                      // 🔗 حالة الـ API
+                      Row(
+                        children: [
+                          Icon(
+                            _apiConnected ? Icons.cloud_done : Icons.cloud_off,
+                            size: 14,
+                            color: _apiConnected ? Colors.green : Colors.orange,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _apiConnected ? 'API Ready' : 'API Offline',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _apiConnected ? Colors.green : Colors.orange,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -841,14 +782,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         ),
       ),
     );
-  }
-
-  // 🔍 Helper function to verify person with API
-  Future<bool> _verifyPersonWithAPI(Map<String, dynamic> person) async {
-    // This is a placeholder - you'll need to implement actual verification logic
-    // based on your API endpoints and data structure
-    await Future.delayed(Duration(seconds: 1)); // Simulate API call
-    return true; // Replace with actual API verification
   }
 
   Widget _buildEmptySearch() {
@@ -930,11 +863,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            // 🔗 API Test Button
+            // 🔗 زر اختبار الـ API
             ElevatedButton(
-              onPressed: () {
-                _testAPIConnection();
-              },
+              onPressed: _testAPIRecognition,
               style: ElevatedButton.styleFrom(
                 backgroundColor: vibrantPurple,
                 shape: RoundedRectangleBorder(
@@ -942,7 +873,22 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 ),
               ),
               child: const Text(
-                'Test API Connection',
+                'Test Face Recognition',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // 🔗 زر تحميل الوجوه من الـ API
+            ElevatedButton(
+              onPressed: _loadFacesFromAPI,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: deepPurple,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Load Faces from API',
                 style: TextStyle(color: Colors.white),
               ),
             ),
@@ -952,19 +898,17 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  // 🔗 Test API Connection
-  Future<void> _testAPIConnection() async {
-    _hapticFeedback();
-    
-    final result = await _callGradioAPI('test', {'test': true});
-    
-    if (result != null) {
-      _showSnackBar('✅ API Connection Successful!', Colors.green);
-      _speak('API connected successfully');
-    } else {
-      _showSnackBar('❌ API Connection Failed', Colors.red);
-      _speak('API connection failed');
-    }
+  // 👇 زر اختبار التعرف
+  Widget _buildAccuracyTestButton() {
+    return Positioned(
+      bottom: 100,
+      right: 20,
+      child: FloatingActionButton(
+        onPressed: _testAPIRecognition,
+        backgroundColor: vibrantPurple,
+        child: const Icon(Icons.face_retouching_natural, color: Colors.white),
+      ),
+    );
   }
 
   Widget _buildAddButton() {

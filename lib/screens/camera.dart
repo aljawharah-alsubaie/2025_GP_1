@@ -10,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import '../services/insightface_pipeline.dart';
+import '../services/face_recognition_api.dart'; // 👈 استبدل الـ pipeline بالـ API
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -38,16 +38,14 @@ class _CameraScreenState extends State<CameraScreen> {
   String _processingMode = 'text';
 
   // IBM Watson TTS credentials
-  static const String IBM_TTS_API_KEY =
-      "Ibvg1Q2qca9ALJa1JCZVp09gFJMstnyeAXaOWKNrq6o-";
-  static const String IBM_TTS_URL =
-      "https://api.au-syd.text-to-speech.watson.cloud.ibm.com/instances/892ef34b-36b6-4ba6-b29c-d4a55108f114";
+  static const String IBM_TTS_API_KEY = "Ibvg1Q2qca9ALJa1JCZVp09gFJMstnyeAXaOWKNrq6o-";
+  static const String IBM_TTS_URL = "https://api.au-syd.text-to-speech.watson.cloud.ibm.com/instances/892ef34b-36b6-4ba6-b29c-d4a55108f114";
 
   final TextRecognizer _textRecognizer = TextRecognizer(
     script: TextRecognitionScript.latin,
   );
 
-  /*static const Map<String, List<int>> _colorNames = {
+  static const Map<String, List<int>> _colorNames = {
     'red': [255, 0, 0],
     'green': [0, 128, 0],
     'blue': [0, 0, 255],
@@ -77,7 +75,7 @@ class _CameraScreenState extends State<CameraScreen> {
     'salmon': [250, 128, 114],
     'turquoise': [64, 224, 208],
     'violet': [238, 130, 238],
-  }; */
+  };
 
   @override
   void initState() {
@@ -105,72 +103,32 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _initFaceRecognition() async {
-    print('🚀 Initializing InsightFace Pipeline...');
-    final initialized = await InsightFacePipeline.initialize();
-    if (!initialized) {
-      print('❌ Failed to initialize InsightFace Pipeline');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to initialize face recognition'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } else {
-      print('✅ InsightFace Pipeline initialized successfully');
-      // Load embeddings from Firestore
-      await _loadFaceEmbeddings();
-    }
-  }
-
-  Future<void> _loadFaceEmbeddings() async {
+    print('🚀 Initializing Face Recognition API...');
     try {
-      print('📦 Loading face embeddings from Firestore...');
-      
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        print('❌ No user logged in');
-        return;
-      }
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('face_embeddings')
-          .get();
-
-      if (snapshot.docs.isEmpty) {
-        print('⚠️ No face embeddings found in Firestore');
-        return;
-      }
-
-      Map<String, List<List<double>>> allEmbeddings = {};
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        if (data['embeddings'] != null) {
-          List<List<double>> personEmbeddings = (data['embeddings'] as List)
-              .map((e) => (e as List).map((v) => (v as num).toDouble()).toList())
-              .toList();
-          allEmbeddings[doc.id] = personEmbeddings;
+      final apiConnected = await FaceRecognitionAPI.testConnection();
+      if (apiConnected) {
+        print('✅ Face Recognition API connected successfully');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Face recognition API connected'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        print('❌ Failed to connect to Face Recognition API');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to connect to face recognition API'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
       }
-
-      InsightFacePipeline.loadMultipleEmbeddings(allEmbeddings);
-      print('✅ Loaded embeddings for ${allEmbeddings.length} persons');
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Loaded ${allEmbeddings.length} person(s)'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
     } catch (e) {
-      print('❌ Error loading face embeddings: $e');
+      print('❌ API initialization error: $e');
     }
   }
 
@@ -364,24 +322,25 @@ class _CameraScreenState extends State<CameraScreen> {
         textToSpeak = detectedColor;
         
       } else if (_processingMode == 'face') {
-        // Face Recognition using InsightFace Pipeline
-        print('🔍 Starting face recognition with full pipeline...');
+        // Face Recognition using API
+        print('🔍 Starting face recognition with API...');
         
-        final result = await InsightFacePipeline.recognizeFace(
-          File(imagePath),
-          threshold: 0.35,
-        );
+        try {
+          // قراءة bytes الصورة
+          final imageBytes = await File(imagePath).readAsBytes();
+          
+          // استخدام الـ API للتعرف على الوجه
+          final result = await FaceRecognitionAPI.recognizeFace(imageBytes);
 
-        setState(() {
-          _faceResult = result;
-          _extractedText = "";
-          _detectedColor = "";
-        });
+          setState(() {
+            _faceResult = result;
+            _extractedText = "";
+            _detectedColor = "";
+          });
 
-        if (result != null) {
           if (result.isMatch) {
             textToSpeak = "Face recognized. This is ${result.personId}";
-            print('✅ Match found: ${result.personId}');
+            print('✅ Match found: ${result.personId} with ${result.confidence}% confidence');
           } else {
             textToSpeak = "Face detected but not recognized. Unknown person";
             print('⚠️ No match found');
@@ -389,9 +348,18 @@ class _CameraScreenState extends State<CameraScreen> {
           
           // Show result dialog
           _showFaceResultDialog(result, imagePath);
-        } else {
-          textToSpeak = "No face detected in the image";
-          print('❌ No face detected');
+        } catch (e) {
+          print('❌ Face recognition error: $e');
+          textToSpeak = "Error recognizing face. Please try again";
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Face recognition error: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
         }
       }
 
@@ -488,14 +456,14 @@ class _CameraScreenState extends State<CameraScreen> {
             if (result.isMatch) ...[
               _buildInfoRow('Name', result.personId, Icons.person),
               _buildInfoRow(
-                'Match Score',
-                '${(result.similarity * 100).toStringAsFixed(1)}%',
+                'Confidence',
+                '${result.confidence.toStringAsFixed(1)}%',
                 Icons.analytics,
               ),
               _buildInfoRow(
-                'Threshold',
-                '${(result.threshold * 100).toStringAsFixed(1)}%',
-                Icons.settings,
+                'Similarity',
+                '${result.similarity.toStringAsFixed(1)}%',
+                Icons.percent,
               ),
             ] else ...[
               _buildInfoRow(
@@ -505,12 +473,12 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
               _buildInfoRow(
                 'Best Match',
-                result.personId != 'unknown' ? result.personId : 'None',
+                result.personId != 'Unknown' ? result.personId : 'None',
                 Icons.search,
               ),
               _buildInfoRow(
-                'Similarity',
-                '${(result.similarity * 100).toStringAsFixed(1)}%',
+                'Confidence',
+                '${result.confidence.toStringAsFixed(1)}%',
                 Icons.analytics,
               ),
               const SizedBox(height: 12),
@@ -527,7 +495,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Score below recognition threshold',
+                        'Person not found in database',
                         style: TextStyle(fontSize: 13, color: Colors.orange),
                       ),
                     ),
@@ -880,7 +848,7 @@ class _CameraScreenState extends State<CameraScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Match: ${(_faceResult!.similarity * 100).toStringAsFixed(1)}%',
+                              'Confidence: ${_faceResult!.confidence.toStringAsFixed(1)}%',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14,
