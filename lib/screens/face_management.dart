@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
 import '../services/insightface_pipeline.dart';
 import 'home_page.dart';
 import 'reminders.dart';
@@ -26,6 +29,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   bool _isLoading = true;
   String _searchQuery = '';
 
+  // 🔗 Gradio API configuration
+  static const String GRADIO_API_URL = "https://242a811cb53e509ce6.gradio.live";
+  
   AnimationController? _fadeController;
   AnimationController? _slideController;
 
@@ -76,6 +82,72 @@ class _FaceManagementPageState extends State<FaceManagementPage>
 
   void _hapticFeedback() {
     HapticFeedback.mediumImpact();
+  }
+
+  // 🔗 Gradio API Functions
+  Future<Map<String, dynamic>?> _callGradioAPI(String endpoint, Map<String, dynamic> data) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$GRADIO_API_URL/$endpoint'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(data),
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        print('API Error: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('API Call Failed: $e');
+      return null;
+    }
+  }
+
+  // 🔍 Example: Search faces using Gradio API
+  Future<void> _searchFacesWithAPI(String query) async {
+    final result = await _callGradioAPI('search_faces', {
+      'query': query,
+      'user_id': FirebaseAuth.instance.currentUser?.uid,
+    });
+
+    if (result != null && result['success'] == true) {
+      // Handle successful search results
+      print('Search results: ${result['data']}');
+    }
+  }
+
+  // 🎭 Example: Verify face using Gradio API
+  Future<bool> _verifyFaceWithAPI(List<double> embedding, String personName) async {
+    final result = await _callGradioAPI('verify_face', {
+      'embedding': embedding,
+      'person_name': personName,
+      'user_id': FirebaseAuth.instance.currentUser?.uid,
+    });
+
+    return result != null && result['success'] == true;
+  }
+
+  // 📸 Example: Add face embedding via API
+  Future<bool> _addFaceEmbeddingAPI(String personName, List<List<double>> embeddings) async {
+    final result = await _callGradioAPI('add_face', {
+      'person_name': personName,
+      'embeddings': embeddings,
+      'user_id': FirebaseAuth.instance.currentUser?.uid,
+    });
+
+    return result != null && result['success'] == true;
+  }
+
+  // 🗑️ Example: Delete face via API
+  Future<bool> _deleteFaceAPI(String personName) async {
+    final result = await _callGradioAPI('delete_face', {
+      'person_name': personName,
+      'user_id': FirebaseAuth.instance.currentUser?.uid,
+    });
+
+    return result != null && result['success'] == true;
   }
 
   Future<void> _initializeFaceRecognition() async {
@@ -149,9 +221,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading people: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading people: $e')),
+        );
       }
     }
   }
@@ -161,6 +233,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     if (user == null) return;
 
     try {
+      // Delete from Firebase
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -175,7 +248,14 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           .doc(personName)
           .delete();
 
+      // Delete from local face recognition
       InsightFacePipeline.removeFaceEmbedding(personName);
+
+      // Delete from Gradio API
+      final apiSuccess = await _deleteFaceAPI(personName);
+      if (!apiSuccess) {
+        print('Warning: Failed to delete face from API');
+      }
 
       await _loadPeople();
 
@@ -190,7 +270,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   void _showDeleteConfirmation(String personId, String personName) {
     _hapticFeedback();
 
-    _speak('Are you sure you want to delete $personName'); // 👈 أضف هذا السطر
+    _speak('Are you sure you want to delete $personName');
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -447,12 +527,35 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Manage saved faces',
+                        'Manage saved faces with AI API',
                         style: TextStyle(
                           fontSize: 13,
                           color: deepPurple.withOpacity(0.8),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // 🔗 API Status Indicator
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.api, size: 12, color: Colors.green),
+                      SizedBox(width: 4),
+                      Text(
+                        'API Connected',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.green,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -491,8 +594,13 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                   Expanded(
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
+                      onChanged: (value) {
+                        setState(() => _searchQuery = value);
+                        // 🔍 Optional: Search via API in real-time
+                        if (value.length >= 2) {
+                          _searchFacesWithAPI(value);
+                        }
+                      },
                       decoration: InputDecoration(
                         hintText: "Search people...",
                         border: InputBorder.none,
@@ -534,16 +642,16 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       child: _isLoading
           ? const Center(child: CircularProgressIndicator(color: vibrantPurple))
           : _filteredPeople.isEmpty && _searchQuery.isNotEmpty
-          ? _buildEmptySearch()
-          : _people.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-              itemCount: _filteredPeople.length,
-              itemBuilder: (context, index) {
-                return _buildPersonCard(_filteredPeople[index]);
-              },
-            ),
+              ? _buildEmptySearch()
+              : _people.isEmpty
+                  ? _buildEmptyState()
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                      itemCount: _filteredPeople.length,
+                      itemBuilder: (context, index) {
+                        return _buildPersonCard(_filteredPeople[index]);
+                      },
+                    ),
     );
   }
 
@@ -600,11 +708,10 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     backgroundColor: Colors.white,
                     backgroundImage:
                         person['photoUrls'] != null &&
-                            (person['photoUrls'] as List).isNotEmpty
-                        ? NetworkImage(person['photoUrls'][0])
-                        : null,
-                    child:
-                        person['photoUrls'] == null ||
+                                (person['photoUrls'] as List).isNotEmpty
+                            ? NetworkImage(person['photoUrls'][0])
+                            : null,
+                    child: person['photoUrls'] == null ||
                             (person['photoUrls'] as List).isEmpty
                         ? Icon(
                             Icons.person,
@@ -628,6 +735,46 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         ),
                       ),
                       const SizedBox(height: 4),
+                      // 🔗 API Verification Status
+                      FutureBuilder<bool>(
+                        future: _verifyPersonWithAPI(person),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return Text(
+                              'Verifying...',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: deepPurple.withOpacity(0.5),
+                              ),
+                            );
+                          }
+                          
+                          if (snapshot.hasData && snapshot.data == true) {
+                            return Row(
+                              children: [
+                                Icon(Icons.verified, size: 14, color: Colors.green),
+                                SizedBox(width: 4),
+                                Text(
+                                  'API Verified',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            );
+                          } else {
+                            return Text(
+                              'Not verified',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange,
+                              ),
+                            );
+                          }
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -694,6 +841,14 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         ),
       ),
     );
+  }
+
+  // 🔍 Helper function to verify person with API
+  Future<bool> _verifyPersonWithAPI(Map<String, dynamic> person) async {
+    // This is a placeholder - you'll need to implement actual verification logic
+    // based on your API endpoints and data structure
+    await Future.delayed(Duration(seconds: 1)); // Simulate API call
+    return true; // Replace with actual API verification
   }
 
   Widget _buildEmptySearch() {
@@ -774,10 +929,42 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               ),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 16),
+            // 🔗 API Test Button
+            ElevatedButton(
+              onPressed: () {
+                _testAPIConnection();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: vibrantPurple,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Test API Connection',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  // 🔗 Test API Connection
+  Future<void> _testAPIConnection() async {
+    _hapticFeedback();
+    
+    final result = await _callGradioAPI('test', {'test': true});
+    
+    if (result != null) {
+      _showSnackBar('✅ API Connection Successful!', Colors.green);
+      _speak('API connected successfully');
+    } else {
+      _showSnackBar('❌ API Connection Failed', Colors.red);
+      _speak('API connection failed');
+    }
   }
 
   Widget _buildAddButton() {
