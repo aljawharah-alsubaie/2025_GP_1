@@ -1,10 +1,8 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -14,14 +12,12 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  File? _image;
-  String? _profileImageUrl;
   bool _isUploading = false;
   final picker = ImagePicker();
+  final FlutterTts _flutterTts = FlutterTts();
 
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
-  final _storage = FirebaseStorage.instance;
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -47,11 +43,60 @@ class _ProfilePageState extends State<ProfilePage> {
     _emailFocus = FocusNode();
     _phoneFocus = FocusNode();
     _saveFocus = FocusNode();
+    _initializeTts();
     _loadUserData();
+  }
+
+  Future<void> _initializeTts() async {
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setPitch(1.0);
+  }
+
+  Future<void> _speak(String text) async {
+    await _flutterTts.speak(text);
+  }
+
+  Future<void> _speakWelcome() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    await _speak(
+      "Personal information page. You can edit your name and phone number.",
+    );
+  }
+
+  Future<void> _loadUserData() async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      try {
+        DocumentSnapshot userDoc = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (userDoc.exists) {
+          Map<String, dynamic> userData =
+              userDoc.data() as Map<String, dynamic>;
+
+          setState(() {
+            _nameController.text = userData['full_name'] ?? '';
+            _emailController.text = userData['email'] ?? user.email ?? '';
+            _phoneController.text = userData['phone'] ?? '';
+          });
+
+          // النطق بعد تحميل البيانات
+          await _speakWelcome();
+        }
+      } catch (e) {
+        print('Error loading user data: $e');
+        await _speakWelcome();
+      }
+    }
   }
 
   @override
   void dispose() {
+    _flutterTts.stop();
     _nameFocus.dispose();
     _emailFocus.dispose();
     _phoneFocus.dispose();
@@ -62,64 +107,28 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  Future<void> _loadUserData() async {
-    final user = _auth.currentUser;
-    if (user != null) {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists) {
-        final data = doc.data();
-        _emailController.text = data?['email'] ?? '';
-        _nameController.text = data?['full_name'] ?? '';
-        _phoneController.text = data?['phone'] ?? '';
-        _profileImageUrl = data?['profileImageUrl'];
-        setState(() {});
-      }
-    }
-  }
-
-  Future<String?> _uploadImageToFirebase(File imageFile) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return null;
-
-      final storageRef = _storage.ref().child('profilePic/${user.uid}.jpg');
-      final uploadTask = storageRef.putFile(imageFile);
-      final snapshot = await uploadTask;
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-      return downloadUrl;
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to upload image: $e'),
-            backgroundColor: vibrantPurple,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-      return null;
-    }
-  }
-
   Future<void> _saveProfile() async {
+    await _speak("Are you sure you want to save changes?");
+
     final confirm = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: const EdgeInsets.all(32),
+        contentPadding: const EdgeInsets.all(35),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
         title: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: vibrantPurple.withOpacity(0.1),
+                color: vibrantPurple.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 Icons.save_outlined,
                 color: vibrantPurple,
-                size: 48,
+                size: 52,
                 semanticLabel: 'Save confirmation',
               ),
             ),
@@ -129,7 +138,8 @@ class _ProfilePageState extends State<ProfilePage> {
               style: TextStyle(
                 color: deepPurple,
                 fontWeight: FontWeight.w800,
-                fontSize: 24,
+                fontSize: 26,
+                letterSpacing: 0.3,
               ),
               textAlign: TextAlign.center,
             ),
@@ -138,30 +148,31 @@ class _ProfilePageState extends State<ProfilePage> {
         content: Text(
           'Are you sure you want to save changes to your profile?',
           style: TextStyle(
-            color: deepPurple.withOpacity(0.7),
-            fontSize: 18,
+            color: deepPurple.withOpacity(0.8),
+            fontSize: 19,
             height: 1.5,
+            fontWeight: FontWeight.w600,
           ),
           textAlign: TextAlign.center,
         ),
         actions: [
           Column(
             children: [
-              // Yes Button - Prominent
+              // Yes Button
               SizedBox(
                 width: double.infinity,
-                height: 56,
+                height: 62,
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [vibrantPurple, primaryPurple],
                     ),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: vibrantPurple.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
+                        color: vibrantPurple.withOpacity(0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
@@ -170,7 +181,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     style: TextButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(18),
                       ),
                     ),
                     child: const Text(
@@ -178,35 +189,46 @@ class _ProfilePageState extends State<ProfilePage> {
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                        fontSize: 18,
+                        fontSize: 20,
+                        letterSpacing: 0.3,
                       ),
                       semanticsLabel: 'Yes, save changes to profile',
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               // Cancel Button
               SizedBox(
                 width: double.infinity,
-                height: 56,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.grey.shade100,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: Colors.grey.shade300, width: 2),
+                height: 58,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: palePurple.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: vibrantPurple.withOpacity(0.5),
+                      width: 2.5,
                     ),
                   ),
-                  child: Text(
-                    'Cancel',
-                    style: TextStyle(
-                      color: deepPurple,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 18,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
                     ),
-                    semanticsLabel: 'Cancel, do not save changes',
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: vibrantPurple,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 19,
+                        letterSpacing: 0.3,
+                      ),
+                      semanticsLabel: 'Cancel, do not save changes',
+                    ),
                   ),
                 ),
               ),
@@ -217,6 +239,8 @@ class _ProfilePageState extends State<ProfilePage> {
     );
 
     if (confirm == true) {
+      await _speak("Saving your changes, please wait.");
+
       final user = _auth.currentUser;
       if (user != null) {
         Map<String, dynamic> userData = {
@@ -225,66 +249,31 @@ class _ProfilePageState extends State<ProfilePage> {
           'phone': _phoneController.text.trim(),
         };
 
-        if (_image != null) {
-          setState(() => _isUploading = true);
-          final imageUrl = await _uploadImageToFirebase(_image!);
-          if (imageUrl != null) {
-            userData['profileImageUrl'] = imageUrl;
-            _profileImageUrl = imageUrl;
-          }
-          setState(() => _isUploading = false);
-        }
-
         await _firestore.collection('users').doc(user.uid).update(userData);
         setState(() {});
+
+        await _speak("Your changes have been saved successfully.");
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text(
                 'Your changes have been saved successfully',
-                style: TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
               ),
               backgroundColor: vibrantPurple,
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 4),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             ),
           );
         }
       }
-    }
-  }
-
-  Future<void> _getImage() async {
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
-    );
-
-    if (pickedFile != null) {
-      setState(() => _image = File(pickedFile.path));
-      // Announce image selection for screen readers
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Profile image selected'),
-            duration: const Duration(seconds: 2),
-            backgroundColor: vibrantPurple,
-          ),
-        );
-      }
-    }
-  }
-
-  ImageProvider _getProfileImage() {
-    if (_image != null) {
-      return FileImage(_image!);
-    } else if (_profileImageUrl != null && _profileImageUrl!.isNotEmpty) {
-      return NetworkImage(_profileImageUrl!);
-    } else {
-      return const AssetImage('assets/images/profileimg.jpg');
+    } else if (confirm == false) {
+      await _speak("Changes cancelled.");
     }
   }
 
@@ -333,13 +322,14 @@ class _ProfilePageState extends State<ProfilePage> {
           SingleChildScrollView(
             child: Column(
               children: [
+                // 🎯 الهيدر الجديد - زر الرجوع والعنوان منزلين
                 _buildModernHeader(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 15),
 
                       // 📝 Personal Details Section
                       _buildSectionCard(
@@ -387,10 +377,15 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // 🎯 Modern Header مثل الصفحة الرئيسية
+  // 🎯 الهيدر الجديد - زر الرجوع والعنوان منزلين
   Widget _buildModernHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 50, 20, 30),
+      padding: const EdgeInsets.fromLTRB(
+        25,
+        100,
+        25,
+        60,
+      ), // زيادة الـ top إلى 100 لتنزيل المحتوى
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -403,140 +398,74 @@ class _ProfilePageState extends State<ProfilePage> {
           ],
         ),
       ),
-      child: Column(
+      child: Row(
         children: [
-          // Header Row
-          Row(
-            children: [
-              // Back Button
-              Semantics(
-                label: 'Go back',
-                button: true,
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [vibrantPurple, primaryPurple],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: vibrantPurple.withOpacity(0.4),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+          // 🔙 زر الرجوع على اليسار - بنفسجي
+          Semantics(
+            label: 'Go back to previous page',
+            button: true,
+            child: GestureDetector(
+              onTap: () async {
+                await _speak("Going back");
+                await Future.delayed(const Duration(milliseconds: 800));
+                if (mounted) {
+                  Navigator.pop(context);
+                }
+              },
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [vibrantPurple, primaryPurple],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: vibrantPurple.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
-                    child: Icon(
-                      Icons.arrow_back_ios_new,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.arrow_back_ios_new,
+                    color: Colors.white,
+                    size: 21,
                   ),
                 ),
               ),
-
-              const SizedBox(width: 12),
-
-              // Title
-              Expanded(
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    'My Profile',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      foreground: Paint()
-                        ..shader = LinearGradient(
-                          colors: [deepPurple, vibrantPurple],
-                        ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
 
-          const SizedBox(height: 30),
+          const SizedBox(width: 16),
 
-          // Profile Picture
-          Semantics(
-            label: 'Profile picture. Double tap to change',
-            button: true,
-            image: true,
-            child: Stack(
+          // النص في المنتصف
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: vibrantPurple.withOpacity(0.3),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+                Text(
+                  'My Profile',
+                  style: TextStyle(
+                    fontSize: 25.5,
+                    fontWeight: FontWeight.w900,
+                    foreground: Paint()
+                      ..shader = LinearGradient(
+                        colors: [deepPurple, vibrantPurple],
+                      ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
                   ),
-                  child: CircleAvatar(
-                    radius: 70,
-                    backgroundColor: Colors.white,
-                    child: CircleAvatar(
-                      radius: 66,
-                      backgroundColor: palePurple,
-                      backgroundImage: _getProfileImage(),
-                    ),
-                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-
-                if (_isUploading)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.black.withOpacity(0.5),
-                      ),
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          strokeWidth: 4,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                Positioned(
-                  bottom: 4,
-                  right: 4,
-                  child: GestureDetector(
-                    onTap: _isUploading ? null : _getImage,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [vibrantPurple, primaryPurple],
-                        ),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: vibrantPurple.withOpacity(0.4),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.camera_alt,
-                        size: 24,
-                        color: Colors.white,
-                      ),
-                    ),
+                const SizedBox(height: 4),
+                Text(
+                  'Manage your personal information',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    color: deepPurple.withOpacity(0.6),
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],
@@ -556,7 +485,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Semantics(
       label: '$title section',
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(30),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -570,35 +499,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [vibrantPurple, primaryPurple],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 24),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: deepPurple,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            ...children,
-          ],
+          children: [...children],
         ),
       ),
     );
@@ -612,6 +513,8 @@ class _ProfilePageState extends State<ProfilePage> {
     FocusNode nextFocus,
     IconData icon,
   ) {
+    final bool isEmail = label == "Email Address";
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -629,29 +532,39 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 20),
         Semantics(
-          label: '$label input field',
-          textField: true,
-          child: TextField(
-            controller: controller,
-            focusNode: currentFocus,
-            textInputAction: TextInputAction.next,
-            onSubmitted: (_) => nextFocus.requestFocus(),
-            keyboardType: label == "Email Address"
-                ? TextInputType.emailAddress
-                : label == "Phone Number"
-                ? TextInputType.phone
-                : TextInputType.text,
-            decoration: _buildInputDecoration(label),
-            style: TextStyle(
-              fontSize: 16,
-              color: deepPurple,
-              fontWeight: FontWeight.w500,
+          label: isEmail ? '$label (not editable)' : '$label input field',
+          textField: !isEmail,
+          child: GestureDetector(
+            onTap: isEmail ? () => _speak("Email cannot be edited.") : null,
+            child: TextField(
+              controller: controller,
+              focusNode: currentFocus,
+              enabled: !isEmail,
+              readOnly: isEmail,
+              textInputAction: TextInputAction.next,
+              onSubmitted: (_) => nextFocus.requestFocus(),
+              onTap: () {
+                if (!isEmail) {
+                  _speak("Editing $label");
+                }
+              },
+              keyboardType: label == "Email Address"
+                  ? TextInputType.emailAddress
+                  : label == "Phone Number"
+                  ? TextInputType.phone
+                  : TextInputType.text,
+              decoration: _buildInputDecoration(label),
+              style: TextStyle(
+                fontSize: 16,
+                color: deepPurple,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
       ],
     );
   }
@@ -665,7 +578,7 @@ class _ProfilePageState extends State<ProfilePage> {
       button: true,
       child: Container(
         width: double.infinity,
-        height: 60,
+        height: 70,
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
           borderRadius: BorderRadius.circular(16),
@@ -679,7 +592,12 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         child: ElevatedButton(
           focusNode: _saveFocus,
-          onPressed: _isUploading ? null : _saveProfile,
+          onPressed: _isUploading
+              ? null
+              : () {
+                  _speak("Save changes button.");
+                  _saveProfile();
+                },
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
@@ -689,7 +607,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           child: _isUploading
               ? const SizedBox(
-                  height: 28,
+                  height: 80,
                   width: 28,
                   child: CircularProgressIndicator(
                     strokeWidth: 3,

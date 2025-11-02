@@ -7,6 +7,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import './reminders.dart';
 import './home_page.dart';
 import './settings.dart';
+import './sos_screen.dart';
 
 class ContactInfoPage extends StatefulWidget {
   const ContactInfoPage({super.key});
@@ -1429,96 +1430,175 @@ class _ContactInfoPageState extends State<ContactInfoPage>
       ),
     );
   }
+  // ✅ استبدل _buildFloatingBottomNav في home_page.dart بهذا الكود
 
   Widget _buildFloatingBottomNav() {
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(24),
-        topRight: Radius.circular(24),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              deepPurple.withOpacity(0.95),
-              vibrantPurple.withOpacity(0.98),
-              primaryPurple,
-            ],
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      clipBehavior: Clip.none,
+      children: [
+        // الفوتر الأساسي
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: deepPurple.withOpacity(0.3),
-              blurRadius: 25,
-              offset: const Offset(0, -8),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavButton(
-                  icon: Icons.home_rounded,
-                  label: 'Home',
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Home');
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HomePage()),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.notifications_rounded,
-                  label: 'Reminders',
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Reminders');
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RemindersPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.contact_phone,
-                  label: 'Emergency',
-                  isActive: true,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Emergency Contact');
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.settings_rounded,
-                  label: 'Settings',
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Settings');
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsPage(),
-                      ),
-                    );
-                  },
+          child: Container(
+            height: 90,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  deepPurple.withOpacity(0.95),
+                  vibrantPurple.withOpacity(0.98),
+                  primaryPurple,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: deepPurple.withOpacity(0.3),
+                  blurRadius: 25,
+                  offset: const Offset(0, -8),
                 ),
               ],
             ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 12,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildNavButton(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Homepage');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.notifications_rounded,
+                      label: 'Reminders',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Reminders');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RemindersPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 60), // مساحة للدائرة
+                    _buildNavButton(
+                      icon: Icons.contacts_rounded,
+                      label: 'Contacts',
+                      isActive: true,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Emergency Contacts');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ContactInfoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Settings');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-      ),
+
+        // 🔴 الدائرة الكبيرة للطوارئ
+        Positioned(
+          bottom: 35,
+          child: Semantics(
+            label: 'Emergency SOS button',
+            button: true,
+            hint: 'Double tap for emergency',
+            child: GestureDetector(
+              onTap: () {
+                _hapticFeedback();
+                _speak('Emergency SOS');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SosScreen()),
+                );
+              },
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.red.shade400, Colors.red.shade700],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.6),
+                      blurRadius: 25,
+                      spreadRadius: 3,
+                    ),
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.3),
+                      blurRadius: 40,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.emergency_outlined,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
+  // ✅ _buildNavButton (بحجم أصغر للمربع الأبيض)
   Widget _buildNavButton({
     required IconData icon,
     required String label,
@@ -1533,12 +1613,12 @@ class _ContactInfoPageState extends State<ContactInfoPage>
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: isActive
                 ? Colors.white.withOpacity(0.25)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(10),
             border: isActive
                 ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
                 : null,

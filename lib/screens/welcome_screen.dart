@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
@@ -14,6 +16,8 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final FlutterTts _flutterTts = FlutterTts();
 
   @override
   void initState() {
@@ -36,12 +40,63 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         );
 
     _animationController.forward();
+    _initTts();
+    _speakWelcomeMessage();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _audioPlayer.dispose();
+    _flutterTts.stop();
     super.dispose();
+  }
+
+  void _initTts() async {
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setPitch(1.0);
+    await _flutterTts.setVolume(1.0);
+  }
+
+  // دالة جديدة لنطق رسالة الترحيب
+  Future<void> _speakWelcomeMessage() async {
+    await Future.delayed(
+      const Duration(milliseconds: 200),
+    ); // انتظار بسيط قبل البدء
+    await _flutterTts.speak(
+      "Welcome to your new journey. Please choose Create Account or Login",
+    );
+  }
+
+  Future<void> _playButtonSound() async {
+    try {
+      await _audioPlayer.play(AssetSource('sounds/button_click.mp3'));
+    } catch (e) {
+      print('Error playing sound: $e');
+    }
+  }
+
+  Future<void> _speakButtonText(String buttonText) async {
+    await _flutterTts.speak(buttonText);
+  }
+
+  void _navigateWithSoundAndSpeech(Widget screen, String buttonName) async {
+    // إيقاف أي كلام سابق
+    await _flutterTts.stop();
+
+    // تشغيل الصوت أولاً
+    await _playButtonSound();
+
+    // ثم التحدث باسم الزر
+    await _speakButtonText(buttonName);
+
+    // الانتقال بعد انتهاء الكلام
+    _flutterTts.setCompletionHandler(() {
+      if (mounted) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+      }
+    });
   }
 
   @override
@@ -52,7 +107,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         children: [
           // Background same as registration page
           Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               image: DecorationImage(
                 image: AssetImage('assets/images/backk.jpg'),
                 fit: BoxFit.cover,
@@ -130,11 +185,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         icon: Icons.person_add_outlined,
                         isPrimary: true,
                         onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const SignupScreen(),
-                            ),
+                          _navigateWithSoundAndSpeech(
+                            const SignupScreen(),
+                            'Create Account',
                           );
                         },
                       ),
@@ -157,11 +210,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         icon: Icons.login_outlined,
                         isPrimary: false,
                         onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginScreen(),
-                            ),
+                          _navigateWithSoundAndSpeech(
+                            const LoginScreen(),
+                            'Login',
                           );
                         },
                       ),

@@ -3,15 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'dart:typed_data';
-
-import '../services/face_recognition_api.dart'; // 👈 استبدل الـ pipeline بالـ API
+import '../services/face_recognition_api.dart';
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
 import 'settings.dart';
 import 'add_person_page.dart';
 import 'edit_person_page.dart';
+import './sos_screen.dart';
 
 class FaceManagementPage extends StatefulWidget {
   const FaceManagementPage({super.key});
@@ -106,7 +105,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   // 🔍 البحث باستخدام الـ API
   Future<void> _searchFacesWithAPI(String query) async {
     if (query.length < 2) return;
-    
+
     try {
       // يمكنك إضافة دالة بحث في الـ API إذا كانت متوفرة
       setState(() {
@@ -140,9 +139,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading people: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading people: $e')));
       }
     }
   }
@@ -188,7 +187,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   void _showDeleteConfirmation(String personId, String personName) {
     _hapticFeedback();
     _speak('Are you sure you want to delete $personName');
-    
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -330,21 +329,21 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   Future<void> _testAPIRecognition() async {
     _hapticFeedback();
     _speak('Testing face recognition');
-    
+
     try {
       _showSnackBar('Testing API Recognition...', Colors.blue);
-      
+
       // هنا يمكنك إضافة كود لالتقاط صورة أو استخدام صورة اختبار
       // مثال: يمكنك استبدال هذا بكود الالتقاط الفعلي
       // final result = await FaceRecognitionAPI.recognizeFace(testImageBytes);
-      
+
       // _showSnackBar(
       //   'API Result: ${result.personId} (${result.similarity.toStringAsFixed(1)}%)',
       //   result.isMatch ? Colors.green : Colors.orange,
       // );
-      
+
       // _speak('Recognized as ${result.personId} with ${result.similarity.toStringAsFixed(1)} percent accuracy');
-      
+
       _showSnackBar('Face recognition test initiated', Colors.blue);
       _speak('Recognition test started');
     } catch (e) {
@@ -358,9 +357,12 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     try {
       final facesList = await FaceRecognitionAPI.getFacesList();
       print('📋 Faces from API: $facesList');
-      
+
       if (facesList.isNotEmpty) {
-        _showSnackBar('Loaded ${facesList.length} faces from API', Colors.green);
+        _showSnackBar(
+          'Loaded ${facesList.length} faces from API',
+          Colors.green,
+        );
       }
     } catch (e) {
       print('❌ Error loading faces from API: $e');
@@ -439,8 +441,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 GestureDetector(
                   onTap: () {
                     _hapticFeedback();
+                    _tts.stop(); // ✅ يوقف الكلام فوراً
                     _speak('Going back');
-                    Navigator.pop(context);
+                    Future.delayed(const Duration(milliseconds: 800), () {
+                      Navigator.pop(context);
+                    });
                   },
                   child: Container(
                     width: 52,
@@ -499,9 +504,14 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 ),
                 // 🔗 مؤشر حالة الـ API
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: _apiConnected ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                    color: _apiConnected
+                        ? Colors.green.withOpacity(0.1)
+                        : Colors.red.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: _apiConnected ? Colors.green : Colors.red,
@@ -604,16 +614,16 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       child: _isLoading
           ? const Center(child: CircularProgressIndicator(color: vibrantPurple))
           : _filteredPeople.isEmpty && _searchQuery.isNotEmpty
-              ? _buildEmptySearch()
-              : _people.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                      itemCount: _filteredPeople.length,
-                      itemBuilder: (context, index) {
-                        return _buildPersonCard(_filteredPeople[index]);
-                      },
-                    ),
+          ? _buildEmptySearch()
+          : _people.isEmpty
+          ? _buildEmptyState()
+          : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+              itemCount: _filteredPeople.length,
+              itemBuilder: (context, index) {
+                return _buildPersonCard(_filteredPeople[index]);
+              },
+            ),
     );
   }
 
@@ -670,10 +680,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     backgroundColor: Colors.white,
                     backgroundImage:
                         person['photoUrls'] != null &&
-                                (person['photoUrls'] as List).isNotEmpty
-                            ? NetworkImage(person['photoUrls'][0])
-                            : null,
-                    child: person['photoUrls'] == null ||
+                            (person['photoUrls'] as List).isNotEmpty
+                        ? NetworkImage(person['photoUrls'][0])
+                        : null,
+                    child:
+                        person['photoUrls'] == null ||
                             (person['photoUrls'] as List).isEmpty
                         ? Icon(
                             Icons.person,
@@ -710,7 +721,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                             _apiConnected ? 'API Ready' : 'API Offline',
                             style: TextStyle(
                               fontSize: 12,
-                              color: _apiConnected ? Colors.green : Colors.orange,
+                              color: _apiConnected
+                                  ? Colors.green
+                                  : Colors.orange,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -966,102 +979,167 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  // 📍 Bottom Navigation matching HomePage
+  // 📍 Bottom Navigation - الفوتر الجديد مع الدائرة الحمراء
   Widget _buildFloatingBottomNav() {
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(24),
-        topRight: Radius.circular(24),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              deepPurple.withOpacity(0.95),
-              vibrantPurple.withOpacity(0.98),
-              primaryPurple,
-            ],
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      clipBehavior: Clip.none,
+      children: [
+        // الفوتر الأساسي
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: deepPurple.withOpacity(0.3),
-              blurRadius: 25,
-              offset: const Offset(0, -8),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavButton(
-                  icon: Icons.home_rounded,
-                  label: 'Home',
-                  isActive: true,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Home');
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HomePage()),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.notifications_rounded,
-                  label: 'Reminders',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Reminders');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RemindersPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.contact_phone,
-                  label: 'Emergency',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Emergency Contact');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ContactInfoPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.settings_rounded,
-                  label: 'Settings',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Settings');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsPage(),
-                      ),
-                    );
-                  },
+          child: Container(
+            height: 90,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  deepPurple.withOpacity(0.95),
+                  vibrantPurple.withOpacity(0.98),
+                  primaryPurple,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: deepPurple.withOpacity(0.3),
+                  blurRadius: 25,
+                  offset: const Offset(0, -8),
                 ),
               ],
             ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 12,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildNavButton(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      isActive: true,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Home');
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.notifications_rounded,
+                      label: 'Reminders',
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Reminders');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RemindersPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 60), // مساحة للدائرة
+                    _buildNavButton(
+                      icon: Icons.contacts_rounded,
+                      label: 'Contacts',
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Contact');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ContactInfoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Settings');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-      ),
+
+        // 🔴 الدائرة الكبيرة للطوارئ
+        Positioned(
+          bottom: 35,
+          child: Semantics(
+            label: 'Emergency SOS button',
+            button: true,
+            hint: 'Double tap for emergency',
+            child: GestureDetector(
+              onTap: () {
+                _hapticFeedback();
+                _speak('Emergency SOS');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SosScreen()),
+                );
+              },
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.red.shade400, Colors.red.shade700],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.6),
+                      blurRadius: 25,
+                      spreadRadius: 3,
+                    ),
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.3),
+                      blurRadius: 40,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.emergency_outlined,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1095,7 +1173,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             children: [
               Icon(
                 icon,
-                color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
+                color: isActive
+                    ? Colors.white
+                    : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
                 size: 22,
               ),
               const SizedBox(height: 3),

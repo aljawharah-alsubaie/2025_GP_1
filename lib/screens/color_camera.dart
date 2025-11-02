@@ -1,4 +1,4 @@
-import 'dart:io';
+/*import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
@@ -305,4 +305,4 @@ class _ColorCameraPageState extends State<ColorCameraPage> {
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
-}
+}*/

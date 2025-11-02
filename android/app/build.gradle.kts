@@ -189,7 +189,6 @@ dependencies {
     // ✅ Image Processing - معالجة الصور
     // ---------------------------
     implementation("com.github.bumptech.glide:glide:4.16.0")
-    implementation("com.github.CanHub:Android-Image-Cropper:4.5.0")
 
     // ---------------------------
     // ✅ Audio/Video - للصوت والفيديو

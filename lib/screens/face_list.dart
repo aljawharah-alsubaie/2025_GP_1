@@ -7,6 +7,7 @@ import './home_page.dart';
 import './reminders.dart';
 import './settings.dart';
 import './contact_info_page.dart';
+import './sos_screen.dart';
 
 class FaceListPage extends StatefulWidget {
   const FaceListPage({super.key});
@@ -43,6 +44,13 @@ class _FaceListPageState extends State<FaceListPage>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
+
+    // 🎤 نطق مقدمة عند فتح الصفحة مع delay أطول
+    Future.delayed(const Duration(milliseconds: 1500), () {
+      _speak(
+        'You can manage stored faces or identify a person using the camera. Choose an option below.',
+      );
+    });
   }
 
   Future<void> _initTts() async {
@@ -132,8 +140,11 @@ class _FaceListPageState extends State<FaceListPage>
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
+                  _tts.stop(); // ✅ يوقف الكلام فوراً
                   _speak('Going back');
-                  Navigator.pop(context);
+                  Future.delayed(const Duration(milliseconds: 800), () {
+                    Navigator.pop(context);
+                  });
                 },
                 child: Container(
                   width: 52,
@@ -225,17 +236,21 @@ class _FaceListPageState extends State<FaceListPage>
             gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
             onTap: () {
               _hapticFeedback();
-              _speak('Face Management');
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const FaceManagementPage(),
-                ),
+              _speak(
+                'Face Management selected. You can add, edit, or delete saved faces',
               );
+              Future.delayed(const Duration(milliseconds: 800), () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const FaceManagementPage(),
+                  ),
+                );
+              });
             },
           ),
 
-          const SizedBox(height: 15), // ✅ مسافة إضافية بين الخيارين
+          const SizedBox(height: 15),
           // Identify Person Card
           _buildOptionCard(
             title: 'Identify Person',
@@ -244,13 +259,17 @@ class _FaceListPageState extends State<FaceListPage>
             gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
             onTap: () {
               _hapticFeedback();
-              _speak('Identify Person');
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CameraScreen(mode: 'face'),
-                ),
+              _speak(
+                'Identify Person selected.Take a photo of the person in front of you to identify them',
               );
+              Future.delayed(const Duration(milliseconds: 800), () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CameraScreen(mode: 'face'),
+                  ),
+                );
+              });
             },
           ),
         ],
@@ -370,106 +389,175 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 📍 Bottom Navigation matching HomePage
+  // ✅ استبدل _buildFloatingBottomNav في home_page.dart بهذا الكود
+
   Widget _buildFloatingBottomNav() {
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(24),
-        topRight: Radius.circular(24),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              deepPurple.withOpacity(0.95),
-              vibrantPurple.withOpacity(0.98),
-              primaryPurple,
-            ],
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      clipBehavior: Clip.none,
+      children: [
+        // الفوتر الأساسي
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: deepPurple.withOpacity(0.3),
-              blurRadius: 25,
-              offset: const Offset(0, -8),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavButton(
-                  icon: Icons.home_rounded,
-                  label: 'Home',
-                  isActive: true,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Home');
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HomePage()),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.notifications_rounded,
-                  label: 'Reminders',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Reminders');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RemindersPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.contact_phone,
-                  label: 'Emergency',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Emergency Contact');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ContactInfoPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.settings_rounded,
-                  label: 'Settings',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Settings');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsPage(),
-                      ),
-                    );
-                  },
+          child: Container(
+            height: 90,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  deepPurple.withOpacity(0.95),
+                  vibrantPurple.withOpacity(0.98),
+                  primaryPurple,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: deepPurple.withOpacity(0.3),
+                  blurRadius: 25,
+                  offset: const Offset(0, -8),
                 ),
               ],
             ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 12,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildNavButton(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      isActive: true,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Homepage');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.notifications_rounded,
+                      label: 'Reminders',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Reminders');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RemindersPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 60), // مساحة للدائرة
+                    _buildNavButton(
+                      icon: Icons.contacts_rounded,
+                      label: 'Contacts',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Emergency Contacts');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ContactInfoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Settings');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-      ),
+
+        // 🔴 الدائرة الكبيرة للطوارئ
+        Positioned(
+          bottom: 35,
+          child: Semantics(
+            label: 'Emergency SOS button',
+            button: true,
+            hint: 'Double tap for emergency',
+            child: GestureDetector(
+              onTap: () {
+                _hapticFeedback();
+                _speak('Emergency SOS');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SosScreen()),
+                );
+              },
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.red.shade400, Colors.red.shade700],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.6),
+                      blurRadius: 25,
+                      spreadRadius: 3,
+                    ),
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.3),
+                      blurRadius: 40,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.emergency_outlined,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  // 🔘 Navigation button
+  // ✅ _buildNavButton (بالأحجام الأصلية)
   Widget _buildNavButton({
     required IconData icon,
     required String label,

@@ -6,10 +6,11 @@ import 'home_page.dart';
 import 'accountinfopage.dart';
 import 'DeviceAlertsPage .dart';
 import 'securitydatapage.dart';
-import 'welcome_screen.dart';
+import 'login_screen.dart';
 import 'Reminders.dart';
 import 'contact_info_page.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import './sos_screen.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -213,24 +214,32 @@ class _SettingsPageState extends State<SettingsPage>
     if (confirmed == true) {
       try {
         final storage = FlutterSecureStorage();
-        await storage.delete(key: 'isLoggedIn');
-        await storage.delete(key: 'userEmail');
+
+        // ✅ احذف **كل** البيانات المحفوظة
+        await storage.deleteAll();
 
         await FirebaseAuth.instance.signOut();
 
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-          (route) => false,
-        );
+        // ✅ انتظر شوي عشان يتم الحذف بشكل صحيح
+        await Future.delayed(Duration(milliseconds: 100));
+
+        // ✅ روح للـ LoginScreen وامسح **كل** الصفحات السابقة
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (route) => false, // هذا يمسح كل الـ navigation stack
+          );
+        }
       } catch (e) {
         print('Logout error: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to logout. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to logout. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -571,95 +580,175 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
+  // ✅ استبدل _buildFloatingBottomNav في home_page.dart بهذا الكود
+
   Widget _buildFloatingBottomNav() {
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(24),
-        topRight: Radius.circular(24),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              deepPurple.withOpacity(0.95),
-              vibrantPurple.withOpacity(0.98),
-              primaryPurple,
-            ],
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      clipBehavior: Clip.none,
+      children: [
+        // الفوتر الأساسي
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: deepPurple.withOpacity(0.3),
-              blurRadius: 25,
-              offset: const Offset(0, -8),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavButton(
-                  icon: Icons.home_rounded,
-                  label: 'Home',
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Home');
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HomePage()),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.notifications_rounded,
-                  label: 'Reminders',
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Reminders');
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RemindersPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.contact_phone,
-                  label: 'Emergency',
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Emergency Contact');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ContactInfoPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.settings_rounded,
-                  label: 'Settings',
-                  isActive: true,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Settings');
-                  },
+          child: Container(
+            height: 90,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  deepPurple.withOpacity(0.95),
+                  vibrantPurple.withOpacity(0.98),
+                  primaryPurple,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: deepPurple.withOpacity(0.3),
+                  blurRadius: 25,
+                  offset: const Offset(0, -8),
                 ),
               ],
             ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 12,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildNavButton(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Homepage');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.notifications_rounded,
+                      label: 'Reminders',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Reminders');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RemindersPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 60), // مساحة للدائرة
+                    _buildNavButton(
+                      icon: Icons.contacts_rounded,
+                      label: 'Contacts',
+                      isActive: false,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Emergency Contacts');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ContactInfoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      isActive: true,
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Settings');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-      ),
+
+        // 🔴 الدائرة الكبيرة للطوارئ
+        Positioned(
+          bottom: 35,
+          child: Semantics(
+            label: 'Emergency SOS button',
+            button: true,
+            hint: 'Double tap for emergency',
+            child: GestureDetector(
+              onTap: () {
+                _hapticFeedback();
+                _speak('Emergency SOS');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SosScreen()),
+                );
+              },
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.red.shade400, Colors.red.shade700],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.6),
+                      blurRadius: 25,
+                      spreadRadius: 3,
+                    ),
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.3),
+                      blurRadius: 40,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.emergency_outlined,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
+  // ✅ _buildNavButton (بالأحجام الأصلية)
   Widget _buildNavButton({
     required IconData icon,
     required String label,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/google_signin_handler.dart';
@@ -6,6 +7,7 @@ import 'home_page.dart';
 import 'signup_screen.dart';
 import 'set_password_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/semantics.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -23,6 +25,10 @@ class _LoginScreenState extends State<LoginScreen>
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _rememberMe = false;
+
+  // ✅ إضافة متغيرات للشريط الأحمر
+  String? _currentErrorMessage;
+  bool _showErrorBanner = false;
 
   late AnimationController _animationController;
   late AnimationController _buttonAnimationController;
@@ -103,7 +109,10 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      _showErrorWithSoundAndBanner("Please check your email and password");
+      return;
+    }
 
     setState(() => _isLoading = true);
     _buttonAnimationController.forward().then((_) {
@@ -188,9 +197,11 @@ class _LoginScreenState extends State<LoginScreen>
         default:
           errorMessage = e.message ?? "An error occurred";
       }
-      _showSnackBar(errorMessage, const Color.fromARGB(255, 200, 15, 1));
+      // ✅ استبدال _showSnackBar بـ _showErrorWithSoundAndBanner
+      _showErrorWithSoundAndBanner(errorMessage);
     } catch (e) {
-      _showSnackBar("An unexpected error occurred", Colors.red);
+      // ✅ استبدال _showSnackBar بـ _showErrorWithSoundAndBanner
+      _showErrorWithSoundAndBanner("An unexpected error occurred");
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -203,7 +214,8 @@ class _LoginScreenState extends State<LoginScreen>
       setState(() => _isLoading = true);
       await GoogleSignInHandler.signInWithGoogle(context);
     } catch (e) {
-      _showSnackBar("Google sign-in failed", Colors.red);
+      // ✅ استبدال _showSnackBar بـ _showErrorWithSoundAndBanner
+      _showErrorWithSoundAndBanner("Google sign-in failed");
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -234,6 +246,99 @@ class _LoginScreenState extends State<LoginScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  // ✅ دالة عرض الشريط الأحمر مع الصوت
+  void _showErrorWithSoundAndBanner(String errorMessage) {
+    setState(() {
+      _currentErrorMessage = errorMessage;
+      _showErrorBanner = true;
+    });
+
+    // استخدام WidgetsBinding بدلاً من SemanticsService المباشر
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      SemanticsService.announce(errorMessage, TextDirection.ltr);
+    });
+
+    // اهتزاز للإشارة إلى الخطأ
+    HapticFeedback.heavyImpact();
+
+    // إخفاء الشريط بعد 8 ثواني
+    Future.delayed(const Duration(seconds: 8), () {
+      if (mounted) {
+        setState(() {
+          _showErrorBanner = false;
+          _currentErrorMessage = null;
+        });
+      }
+    });
+  }
+
+  // ✅ دالة إخفاء الشريط الأحمر
+  void _hideErrorBanner() {
+    setState(() {
+      _showErrorBanner = false;
+      _currentErrorMessage = null;
+    });
+  }
+
+  // ✅ Widget للشريط الأحمر في الأسفل
+  Widget _buildErrorBanner() {
+    if (!_showErrorBanner || _currentErrorMessage == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD32F2F), // نفس اللون الأحمر
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // أيقونة الخطأ
+          ExcludeSemantics(
+            child: Icon(Icons.error_outline, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 12),
+
+          // نص الخطأ
+          Expanded(
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                _currentErrorMessage!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 8,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+
+          // زر الإغلاق
+          Semantics(
+            label: 'Close error message',
+            button: true,
+            hint: 'Double tap to close error message',
+            child: IconButton(
+              onPressed: _hideErrorBanner,
+              icon: Icon(Icons.close, color: Colors.white, size: 24),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -650,6 +755,9 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
+
+          // ✅ الشريط الأحمر في الأسفل
+          Positioned(bottom: 0, left: 0, right: 0, child: _buildErrorBanner()),
         ],
       ),
     );

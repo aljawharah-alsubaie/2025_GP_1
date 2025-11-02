@@ -10,9 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import '../services/face_recognition_api.dart'; // 👈 استبدل الـ pipeline بالـ API
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import '../services/face_recognition_api.dart';
 
 class CameraScreen extends StatefulWidget {
   final String mode; // 'text', 'color', or 'face'
@@ -38,8 +36,10 @@ class _CameraScreenState extends State<CameraScreen> {
   String _processingMode = 'text';
 
   // IBM Watson TTS credentials
-  static const String IBM_TTS_API_KEY = "Ibvg1Q2qca9ALJa1JCZVp09gFJMstnyeAXaOWKNrq6o-";
-  static const String IBM_TTS_URL = "https://api.au-syd.text-to-speech.watson.cloud.ibm.com/instances/892ef34b-36b6-4ba6-b29c-d4a55108f114";
+  static const String IBM_TTS_API_KEY =
+      "Ibvg1Q2qca9ALJa1JCZVp09gFJMstnyeAXaOWKNrq6o-";
+  static const String IBM_TTS_URL =
+      "https://api.au-syd.text-to-speech.watson.cloud.ibm.com/instances/892ef34b-36b6-4ba6-b29c-d4a55108f114";
 
   final TextRecognizer _textRecognizer = TextRecognizer(
     script: TextRecognitionScript.latin,
@@ -147,8 +147,9 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<String> _extractTextFromImage(String imagePath) async {
     try {
       final InputImage inputImage = InputImage.fromFilePath(imagePath);
-      final RecognizedText recognizedText =
-          await _textRecognizer.processImage(inputImage);
+      final RecognizedText recognizedText = await _textRecognizer.processImage(
+        inputImage,
+      );
       return recognizedText.text;
     } catch (e) {
       print('OCR Error: $e');
@@ -184,8 +185,9 @@ class _CameraScreenState extends State<CameraScreen> {
       final Uint8List imageBytes = await imageFile.readAsBytes();
 
       final ui.Image image = await decodeImageFromList(imageBytes);
-      final ByteData? byteData =
-          await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      final ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
 
       if (byteData == null) return [128, 128, 128];
 
@@ -212,7 +214,9 @@ class _CameraScreenState extends State<CameraScreen> {
             final double brightness = (r + g + b) / 3.0;
             final int maxRgb = math.max(r, math.max(g, b));
             final int minRgb = math.min(r, math.min(g, b));
-            final double saturation = maxRgb == 0 ? 0 : (maxRgb - minRgb) / maxRgb;
+            final double saturation = maxRgb == 0
+                ? 0
+                : (maxRgb - minRgb) / maxRgb;
 
             if (brightness > 40 && brightness < 245 && saturation > 0.15) {
               final String colorKey = '$r,$g,$b';
@@ -288,7 +292,10 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  Future<void> _processImage(String imagePath, {bool fromGallery = false}) async {
+  Future<void> _processImage(
+    String imagePath, {
+    bool fromGallery = false,
+  }) async {
     setState(() => _busy = true);
 
     try {
@@ -311,7 +318,6 @@ class _CameraScreenState extends State<CameraScreen> {
         } else {
           textToSpeak = "No text detected in the image";
         }
-        
       } else if (_processingMode == 'color') {
         String detectedColor = await _detectColorFromImage(imagePath);
         setState(() {
@@ -320,15 +326,14 @@ class _CameraScreenState extends State<CameraScreen> {
           _faceResult = null;
         });
         textToSpeak = detectedColor;
-        
       } else if (_processingMode == 'face') {
         // Face Recognition using API
         print('🔍 Starting face recognition with API...');
-        
+
         try {
           // قراءة bytes الصورة
           final imageBytes = await File(imagePath).readAsBytes();
-          
+
           // استخدام الـ API للتعرف على الوجه
           final result = await FaceRecognitionAPI.recognizeFace(imageBytes);
 
@@ -340,18 +345,20 @@ class _CameraScreenState extends State<CameraScreen> {
 
           if (result.isMatch) {
             textToSpeak = "Face recognized. This is ${result.personId}";
-            print('✅ Match found: ${result.personId} with ${result.confidence}% confidence');
+            print(
+              '✅ Match found: ${result.personId} with ${result.confidence}% confidence',
+            );
           } else {
             textToSpeak = "Face detected but not recognized. Unknown person";
             print('⚠️ No match found');
           }
-          
+
           // Show result dialog
           _showFaceResultDialog(result, imagePath);
         } catch (e) {
           print('❌ Face recognition error: $e');
           textToSpeak = "Error recognizing face. Please try again";
-          
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -391,7 +398,7 @@ class _CameraScreenState extends State<CameraScreen> {
               default:
                 successMessage = 'Text extracted and playing audio!';
             }
-            
+
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(successMessage),
@@ -406,10 +413,7 @@ class _CameraScreenState extends State<CameraScreen> {
       print('❌ Processing error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -466,11 +470,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 Icons.percent,
               ),
             ] else ...[
-              _buildInfoRow(
-                'Status',
-                'Not in database',
-                Icons.person_outline,
-              ),
+              _buildInfoRow('Status', 'Not in database', Icons.person_outline),
               _buildInfoRow(
                 'Best Match',
                 result.personId != 'Unknown' ? result.personId : 'None',
@@ -516,9 +516,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 Navigator.pop(context);
                 Navigator.pop(context);
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
               child: const Text('Done'),
             ),
         ],
@@ -535,10 +533,7 @@ class _CameraScreenState extends State<CameraScreen> {
           const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           Expanded(
             child: Text(
@@ -632,7 +627,8 @@ class _CameraScreenState extends State<CameraScreen> {
                               fit: BoxFit.cover,
                               child: SizedBox(
                                 width: size.width,
-                                height: size.width * _controller!.value.aspectRatio,
+                                height:
+                                    size.width * _controller!.value.aspectRatio,
                                 child: CameraPreview(_controller!),
                               ),
                             ),
@@ -651,8 +647,10 @@ class _CameraScreenState extends State<CameraScreen> {
                           color: _busy
                               ? Colors.orange
                               : (_faceResult != null
-                                  ? (_faceResult!.isMatch ? Colors.green : Colors.red)
-                                  : Colors.white),
+                                    ? (_faceResult!.isMatch
+                                          ? Colors.green
+                                          : Colors.red)
+                                    : Colors.white),
                           width: 3,
                         ),
                         borderRadius: BorderRadius.circular(20),
@@ -660,7 +658,11 @@ class _CameraScreenState extends State<CameraScreen> {
                       child: Stack(
                         children: [
                           // Corner indicators
-                          Positioned(top: -2, left: -2, child: _buildCornerIndicator()),
+                          Positioned(
+                            top: -2,
+                            left: -2,
+                            child: _buildCornerIndicator(),
+                          ),
                           Positioned(
                             top: -2,
                             right: -2,
@@ -717,7 +719,10 @@ class _CameraScreenState extends State<CameraScreen> {
                   right: 16,
                   left: 80,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(20),
@@ -759,11 +764,18 @@ class _CameraScreenState extends State<CameraScreen> {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                            Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                             SizedBox(width: 4),
                             Text(
                               'New Photo',
-                              style: TextStyle(color: Colors.white, fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -788,7 +800,8 @@ class _CameraScreenState extends State<CameraScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (_processingMode == 'text' && _extractedText.isNotEmpty) ...[
+                          if (_processingMode == 'text' &&
+                              _extractedText.isNotEmpty) ...[
                             const Text(
                               'Extracted Text:',
                               style: TextStyle(
@@ -808,7 +821,8 @@ class _CameraScreenState extends State<CameraScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ],
-                          if (_processingMode == 'color' && _detectedColor.isNotEmpty) ...[
+                          if (_processingMode == 'color' &&
+                              _detectedColor.isNotEmpty) ...[
                             const Text(
                               'Detected Color:',
                               style: TextStyle(
@@ -826,7 +840,8 @@ class _CameraScreenState extends State<CameraScreen> {
                               ),
                             ),
                           ],
-                          if (_processingMode == 'face' && _faceResult != null) ...[
+                          if (_processingMode == 'face' &&
+                              _faceResult != null) ...[
                             Text(
                               _faceResult!.isMatch ? 'Recognized:' : 'Status:',
                               style: const TextStyle(
@@ -841,7 +856,9 @@ class _CameraScreenState extends State<CameraScreen> {
                                   ? _faceResult!.personId
                                   : 'Unknown Person',
                               style: TextStyle(
-                                color: _faceResult!.isMatch ? Colors.greenAccent : Colors.redAccent,
+                                color: _faceResult!.isMatch
+                                    ? Colors.greenAccent
+                                    : Colors.redAccent,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -973,8 +990,8 @@ class _CameraScreenState extends State<CameraScreen> {
                               _processingMode == 'color'
                                   ? 'Detecting color...'
                                   : _processingMode == 'face'
-                                      ? 'Recognizing face...'
-                                      : 'Processing text...',
+                                  ? 'Recognizing face...'
+                                  : 'Processing text...',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -1001,16 +1018,16 @@ class _CameraScreenState extends State<CameraScreen> {
             color: _busy
                 ? Colors.orange
                 : (_faceResult != null
-                    ? (_faceResult!.isMatch ? Colors.green : Colors.red)
-                    : Colors.white),
+                      ? (_faceResult!.isMatch ? Colors.green : Colors.red)
+                      : Colors.white),
             width: 4,
           ),
           left: BorderSide(
             color: _busy
                 ? Colors.orange
                 : (_faceResult != null
-                    ? (_faceResult!.isMatch ? Colors.green : Colors.red)
-                    : Colors.white),
+                      ? (_faceResult!.isMatch ? Colors.green : Colors.red)
+                      : Colors.white),
             width: 4,
           ),
         ),
