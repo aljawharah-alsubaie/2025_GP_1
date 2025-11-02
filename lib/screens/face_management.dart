@@ -26,7 +26,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   List<Map<String, dynamic>> _people = [];
   bool _isLoading = true;
   String _searchQuery = '';
-  bool _apiConnected = false;
 
   AnimationController? _fadeController;
   AnimationController? _slideController;
@@ -43,7 +42,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   void initState() {
     super.initState();
     _initTts();
-    _initializeAPI(); // 👈 بدلاً من تهيئة الـ pipeline
     _loadPeople();
 
     _fadeController = AnimationController(
@@ -80,6 +78,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     HapticFeedback.mediumImpact();
   }
 
+<<<<<<< HEAD
   // 🔗 تهيئة الاتصال بالـ API
   Future<void> _initializeAPI() async {
     try {
@@ -116,6 +115,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     }
   }
 
+=======
+>>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
   Future<void> _loadPeople() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -151,7 +152,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     if (user == null) return;
 
     try {
-      // حذف من Firebase
+      // حذف من Firebase فقط
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -165,12 +166,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           .collection('face_embeddings')
           .doc(personName)
           .delete();
-
-      // حذف من الـ API
-      final apiSuccess = await FaceRecognitionAPI.deleteFace(personName);
-      if (!apiSuccess) {
-        print('⚠️ Warning: Failed to delete face from API');
-      }
 
       await _loadPeople();
 
@@ -325,6 +320,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
+<<<<<<< HEAD
   // 🔗 اختبار التعرف باستخدام الـ API
   Future<void> _testAPIRecognition() async {
     _hapticFeedback();
@@ -369,6 +365,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     }
   }
 
+=======
+>>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
   List<Map<String, dynamic>> get _filteredPeople {
     if (_searchQuery.isEmpty) return _people;
     return _people
@@ -407,7 +405,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               ],
             ),
           ),
-          _buildAccuracyTestButton(), // 👈 زر اختبار التعرف
         ],
       ),
       bottomNavigationBar: Column(
@@ -491,7 +488,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Using AI API for face recognition',
+                        'Manage saved faces',
                         style: TextStyle(
                           fontSize: 13,
                           color: deepPurple.withOpacity(0.8),
@@ -502,6 +499,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     ],
                   ),
                 ),
+<<<<<<< HEAD
                 // 🔗 مؤشر حالة الـ API
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -536,6 +534,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     ],
                   ),
                 ),
+=======
+>>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
               ],
             ),
             const SizedBox(height: 25),
@@ -569,10 +569,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                   Expanded(
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (value) {
-                        setState(() => _searchQuery = value);
-                        _searchFacesWithAPI(value);
-                      },
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
                       decoration: InputDecoration(
                         hintText: "Search people...",
                         border: InputBorder.none,
@@ -708,6 +706,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         ),
                       ),
                       const SizedBox(height: 4),
+<<<<<<< HEAD
                       // 🔗 حالة الـ API
                       Row(
                         children: [
@@ -729,6 +728,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                           ),
                         ],
                       ),
+=======
+>>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
                     ],
                   ),
                 ),
@@ -875,51 +876,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
-            // 🔗 زر اختبار الـ API
-            ElevatedButton(
-              onPressed: _testAPIRecognition,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: vibrantPurple,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Test Face Recognition',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-            const SizedBox(height: 8),
-            // 🔗 زر تحميل الوجوه من الـ API
-            ElevatedButton(
-              onPressed: _loadFacesFromAPI,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: deepPurple,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Load Faces from API',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
           ],
         ),
-      ),
-    );
-  }
-
-  // 👇 زر اختبار التعرف
-  Widget _buildAccuracyTestButton() {
-    return Positioned(
-      bottom: 100,
-      right: 20,
-      child: FloatingActionButton(
-        onPressed: _testAPIRecognition,
-        backgroundColor: vibrantPurple,
-        child: const Icon(Icons.face_retouching_natural, color: Colors.white),
       ),
     );
   }
