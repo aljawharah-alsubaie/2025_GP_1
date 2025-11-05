@@ -5,7 +5,6 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'dart:math';
 
 class CurrencyCameraScreen extends StatefulWidget {
@@ -20,11 +19,11 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   List<CameraDescription>? _cameras;
   final picker = ImagePicker();
   final AudioPlayer _player = AudioPlayer();
-  
+
   Interpreter? _interpreter;
   bool _modelLoaded = false;
   String _loadingStatus = '📥 جاري تحميل الموديل...';
-  
+
   bool _busy = false;
   String _detectedCurrency = "";
   double _confidence = 0.0;
@@ -32,7 +31,12 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   int _waitingSeconds = 3;
 
   static const List<String> CURRENCY_LABELS = [
-    '10 SR', '100 SR', '200 SR', '5 SR', '50 SR', '500 SR'
+    '10 SR',
+    '100 SR',
+    '200 SR',
+    '5 SR',
+    '50 SR',
+    '500 SR',
   ];
 
   @override
@@ -59,19 +63,20 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     try {
       setState(() => _loadingStatus = '📥 جاري تحميل الموديل...');
       print('📥 تحميل الموديل...\n');
-      
+
       await Future.delayed(const Duration(seconds: 3));
-      
-      _interpreter = await Interpreter.fromAsset('assets/models/banknote_model.tflite');
-      
+
+      _interpreter = await Interpreter.fromAsset(
+        'assets/models/banknote_model.tflite',
+      );
+
       setState(() {
         _modelLoaded = true;
         _loadingStatus = '✅ تم تحميل الموديل!';
       });
-      
+
       print('✅ تم تحميل الموديل بنجاح!\n');
       await Future.delayed(const Duration(seconds: 1));
-      
     } catch (e) {
       print('❌ خطأ في تحميل الموديل: $e');
       setState(() => _loadingStatus = '❌ فشل تحميل الموديل\n$e');
@@ -92,25 +97,25 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     try {
       setState(() => _loadingStatus = '📷 جاري تهيئة الكاميرة...');
       print('📷 تهيئة الكاميرة...\n');
-      
+
       _cameras = await availableCameras();
-      
+
       if (_cameras != null && _cameras!.isNotEmpty) {
         _controller = CameraController(
           _cameras![0],
           ResolutionPreset.high,
           enableAudio: false,
         );
-        
+
         await _controller!.initialize();
-        
+
         if (mounted) {
           setState(() => _loadingStatus = '✅ جاهز!');
         }
-        
+
         print('✅ تم تهيئة الكاميرة!\n');
         await Future.delayed(const Duration(seconds: 1));
-        
+
         if (mounted) {
           setState(() => _modelLoaded = true);
         }
@@ -119,7 +124,10 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
       print('❌ خطأ في الكاميرة: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ خطأ في الكاميرة: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('❌ خطأ في الكاميرة: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -128,18 +136,24 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   Future<void> _switchCamera() async {
     if (_cameras == null || _cameras!.length < 2) return;
     final newIndex = _controller!.description == _cameras![0] ? 1 : 0;
-    _controller = CameraController(_cameras![newIndex], ResolutionPreset.high, enableAudio: false);
+    _controller = CameraController(
+      _cameras![newIndex],
+      ResolutionPreset.high,
+      enableAudio: false,
+    );
     await _controller!.initialize();
     if (mounted) setState(() {});
   }
 
   // معالجة الصورة - نفس طريقة Colab
-  Future<List<List<List<List<double>>>>> _preprocessImage(String imagePath) async {
+  Future<List<List<List<List<double>>>>> _preprocessImage(
+    String imagePath,
+  ) async {
     try {
       final imageFile = File(imagePath);
       final bytes = await imageFile.readAsBytes();
       var image = img.decodeImage(bytes);
-      
+
       if (image == null) {
         throw Exception('Failed to decode image');
       }
@@ -155,39 +169,39 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
 
       // ⭐ تطبيق Gamma Correction (مثل Colab)
       double gamma = 1.2;
-      
+
       List<List<List<List<double>>>> input = [];
-      
+
       for (int batch = 0; batch < 1; batch++) {
         List<List<List<double>>> batchData = [];
-        
+
         for (int y = 0; y < 224; y++) {
           List<List<double>> rowData = [];
-          
+
           for (int x = 0; x < 224; x++) {
             final pixel = image.getPixel(x, y);
-            
+
             // ⭐ استخراج RGB
             double r = pixel.r.toDouble() / 255.0;
             double g = pixel.g.toDouble() / 255.0;
             double b = pixel.b.toDouble() / 255.0;
-            
+
             // ⭐ تطبيق Gamma Correction (مثل Colab)
             r = pow(r, 1.0 / gamma).toDouble();
             g = pow(g, 1.0 / gamma).toDouble();
             b = pow(b, 1.0 / gamma).toDouble();
-            
+
             // تأكد من أن القيم بين 0 و 1
             r = r.clamp(0.0, 1.0);
             g = g.clamp(0.0, 1.0);
             b = b.clamp(0.0, 1.0);
-            
+
             rowData.add([r, g, b]);
           }
-          
+
           batchData.add(rowData);
         }
-        
+
         input.add(batchData);
       }
 
@@ -202,17 +216,21 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   // 2️⃣ DEBUG
   void _debugModelInput(List<List<List<List<double>>>> input) {
     print('\n🔍 === DEBUG MODEL INPUT ===');
-    print('📊 Shape: [${input.length}, ${input[0].length}, ${input[0][0].length}, ${input[0][0][0].length}]');
-    
+    print(
+      '📊 Shape: [${input.length}, ${input[0].length}, ${input[0][0].length}, ${input[0][0][0].length}]',
+    );
+
     print('\n📸 أول 3 pixels من الصف الأول:');
     for (int x = 0; x < 3; x++) {
       final rgb = input[0][0][x];
-      print('  Pixel[$x]: R=${rgb[0].toStringAsFixed(3)}, G=${rgb[1].toStringAsFixed(3)}, B=${rgb[2].toStringAsFixed(3)}');
+      print(
+        '  Pixel[$x]: R=${rgb[0].toStringAsFixed(3)}, G=${rgb[1].toStringAsFixed(3)}, B=${rgb[2].toStringAsFixed(3)}',
+      );
     }
-    
+
     double minVal = 1.0, maxVal = 0.0, avgVal = 0.0;
     int count = 0;
-    
+
     for (int y = 0; y < input[0].length; y++) {
       for (int x = 0; x < input[0][y].length; x++) {
         for (int c = 0; c < input[0][y][x].length; c++) {
@@ -225,13 +243,13 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
       }
     }
     avgVal /= count;
-    
+
     print('\n📊 إحصائيات الـ Input:');
     print('  Min Value: ${minVal.toStringAsFixed(4)} (يجب ≈ 0.0)');
     print('  Max Value: ${maxVal.toStringAsFixed(4)} (يجب ≈ 1.0)');
     print('  Avg Value: ${avgVal.toStringAsFixed(4)} (يجب ≈ 0.5)');
     print('  Total pixels: $count');
-    
+
     print('🔍 === END DEBUG ===\n');
   }
 
@@ -244,33 +262,35 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
 
       print('🔄 معالجة الصورة...');
       final input = await _preprocessImage(imagePath);
-      
+
       _debugModelInput(input);
-      
+
       List<List<double>> output = [List.filled(CURRENCY_LABELS.length, 0.0)];
-      
+
       print('🧠 جاري التنبؤ...');
       _interpreter!.run(input, output);
-      
+
       List<double> predictions = output[0];
-      
+
       print('📊 النتائج الخام: $predictions');
-      
+
       print('\n📈 تحليل التنبؤات:');
       for (int i = 0; i < predictions.length; i++) {
-        print('  ${CURRENCY_LABELS[i]}: ${(predictions[i] * 100).toStringAsFixed(2)}%');
+        print(
+          '  ${CURRENCY_LABELS[i]}: ${(predictions[i] * 100).toStringAsFixed(2)}%',
+        );
       }
-      
+
       double maxConfidence = 0;
       int maxIndex = 0;
-      
+
       for (int i = 0; i < predictions.length; i++) {
         if (predictions[i] > maxConfidence) {
           maxConfidence = predictions[i];
           maxIndex = i;
         }
       }
-      
+
       return {
         'currency': CURRENCY_LABELS[maxIndex],
         'confidence': maxConfidence,
@@ -300,25 +320,29 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     setState(() => _busy = true);
     try {
       print('🔄 جاري المعالجة...\n');
-      
+
       final result = await _predictCurrency(imagePath);
-      
+
       final currency = result['currency'] as String;
       final confidence = result['confidence'] as double;
-      
+
       setState(() {
         _detectedCurrency = currency;
         _confidence = confidence;
       });
 
-      print('✅ النتيجة: $currency (${(confidence * 100).toStringAsFixed(1)}%)\n');
+      print(
+        '✅ النتيجة: $currency (${(confidence * 100).toStringAsFixed(1)}%)\n',
+      );
 
       await _playSound();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ $currency (${(confidence * 100).toStringAsFixed(1)}%)'),
+            content: Text(
+              '✅ $currency (${(confidence * 100).toStringAsFixed(1)}%)',
+            ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -390,7 +414,9 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_modelLoaded || _controller == null || !_controller!.value.isInitialized) {
+    if (!_modelLoaded ||
+        _controller == null ||
+        !_controller!.value.isInitialized) {
       return Scaffold(
         body: Container(
           decoration: BoxDecoration(
@@ -411,10 +437,17 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.attach_money, size: 60, color: Colors.white),
+                  child: const Icon(
+                    Icons.attach_money,
+                    size: 60,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 40),
-                const CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                const CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 3,
+                ),
                 const SizedBox(height: 30),
                 Text(
                   _loadingStatus,
@@ -429,7 +462,10 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                 Text(
                   'Please wait $_waitingSeconds seconds...',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 14),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
@@ -458,7 +494,11 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                   color: Colors.black.withOpacity(0.3),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+                child: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
             ),
           ),
@@ -471,7 +511,9 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: _modelLoaded ? Colors.green.withOpacity(0.7) : Colors.red.withOpacity(0.7),
+                color: _modelLoaded
+                    ? Colors.green.withOpacity(0.7)
+                    : Colors.red.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
@@ -513,7 +555,10 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                     children: [
                       Icon(Icons.camera_alt, color: Colors.white, size: 20),
                       SizedBox(width: 4),
-                      Text('New Photo', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      Text(
+                        'New Photo',
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
@@ -546,22 +591,30 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                     const SizedBox(height: 8),
                     Text(
                       _detectedCurrency,
-                      style: const TextStyle(color: Colors.white70, fontSize: 14),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
                       value: _confidence,
                       backgroundColor: Colors.white24,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        _confidence > 0.8 ? Colors.green : 
-                        _confidence > 0.6 ? Colors.yellow : 
-                        Colors.red
+                        _confidence > 0.8
+                            ? Colors.green
+                            : _confidence > 0.6
+                            ? Colors.yellow
+                            : Colors.red,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Confidence: ${(_confidence * 100).toStringAsFixed(1)}%',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -590,7 +643,11 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.photo, size: 28, color: Colors.white),
+                      child: const Icon(
+                        Icons.photo,
+                        size: 28,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
 
@@ -620,24 +677,34 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : Icon(Icons.camera_alt, color: Colors.grey[800], size: 24),
+                              : Icon(
+                                  Icons.camera_alt,
+                                  color: Colors.grey[800],
+                                  size: 24,
+                                ),
                         ),
                       ),
                     ),
                   ),
 
                   GestureDetector(
-                    onTap: _busy || _selectedImagePath != null ? null : _switchCamera,
+                    onTap: _busy || _selectedImagePath != null
+                        ? null
+                        : _switchCamera,
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(_selectedImagePath != null ? 0.1 : 0.2),
+                        color: Colors.white.withOpacity(
+                          _selectedImagePath != null ? 0.1 : 0.2,
+                        ),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.cameraswitch,
                         size: 28,
-                        color: _selectedImagePath != null ? Colors.white38 : Colors.white,
+                        color: _selectedImagePath != null
+                            ? Colors.white38
+                            : Colors.white,
                       ),
                     ),
                   ),
@@ -655,7 +722,10 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                      CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: Colors.white,
+                      ),
                       SizedBox(height: 16),
                       Text(
                         'Recognizing currency...',

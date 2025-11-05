@@ -11,11 +11,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import '../services/face_recognition_api.dart';
-<<<<<<< HEAD
-=======
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
->>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
 
 class CameraScreen extends StatefulWidget {
   final String mode; // 'text', 'color', or 'face'
@@ -336,16 +331,10 @@ class _CameraScreenState extends State<CameraScreen> {
         print('🔍 Starting face recognition with API...');
 
         try {
-<<<<<<< HEAD
-          // قراءة bytes الصورة
-          final imageBytes = await File(imagePath).readAsBytes();
-
-          // استخدام الـ API للتعرف على الوجه
-          final result = await FaceRecognitionAPI.recognizeFace(imageBytes);
-=======
           // استخدام الـ API للتعرف على الوجه مع File مباشرة
-          final result = await FaceRecognitionAPI.recognizeFace(File(imagePath));
->>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
+          final result = await FaceRecognitionAPI.recognizeFace(
+            File(imagePath),
+          );
 
           setState(() {
             _faceResult = result;

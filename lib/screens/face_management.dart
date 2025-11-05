@@ -3,14 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import '../services/face_recognition_api.dart';
+import '../services/insightface_pipeline.dart';
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
 import 'settings.dart';
 import 'add_person_page.dart';
 import 'edit_person_page.dart';
-import './sos_screen.dart';
 
 class FaceManagementPage extends StatefulWidget {
   const FaceManagementPage({super.key});
@@ -42,6 +41,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   void initState() {
     super.initState();
     _initTts();
+    _initializeFaceRecognition();
     _loadPeople();
 
     _fadeController = AnimationController(
@@ -78,45 +78,54 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     HapticFeedback.mediumImpact();
   }
 
-<<<<<<< HEAD
-  // 🔗 تهيئة الاتصال بالـ API
-  Future<void> _initializeAPI() async {
+  Future<void> _initializeFaceRecognition() async {
+    final success = await InsightFacePipeline.initialize();
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to initialize face recognition'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else {
+      await _loadStoredEmbeddings();
+    }
+  }
+
+  Future<void> _loadStoredEmbeddings() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     try {
-      _apiConnected = await FaceRecognitionAPI.testConnection();
-      if (_apiConnected) {
-        print('✅ API Connected Successfully');
-        if (mounted) {
-          _showSnackBar('API Connected Successfully!', Colors.green);
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('face_embeddings')
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        Map<String, List<List<double>>> allEmbeddings = {};
+
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          if (data['embeddings'] != null) {
+            List<List<double>> personEmbeddings = (data['embeddings'] as List)
+                .map(
+                  (e) => (e as List).map((v) => (v as num).toDouble()).toList(),
+                )
+                .toList();
+            allEmbeddings[doc.id] = personEmbeddings;
+          }
         }
-      } else {
-        print('❌ API Connection Failed');
-        if (mounted) {
-          _showSnackBar('API Connection Failed', Colors.red);
-        }
+
+        InsightFacePipeline.loadMultipleEmbeddings(allEmbeddings);
+        print('✅ Loaded embeddings for ${allEmbeddings.length} persons');
       }
     } catch (e) {
-      print('❌ API Initialization Error: $e');
-      _apiConnected = false;
-    }
-    setState(() {});
-  }
-
-  // 🔍 البحث باستخدام الـ API
-  Future<void> _searchFacesWithAPI(String query) async {
-    if (query.length < 2) return;
-
-    try {
-      // يمكنك إضافة دالة بحث في الـ API إذا كانت متوفرة
-      setState(() {
-        _searchQuery = query;
-      });
-    } catch (e) {
-      print('❌ API Search Error: $e');
+      print('Error loading embeddings: $e');
     }
   }
 
-=======
->>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
   Future<void> _loadPeople() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -152,7 +161,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     if (user == null) return;
 
     try {
-      // حذف من Firebase فقط
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -167,22 +175,22 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           .doc(personName)
           .delete();
 
+      InsightFacePipeline.removeFaceEmbedding(personName);
+
       await _loadPeople();
 
       if (mounted) {
         _showSnackBar('$personName deleted successfully!', Colors.green);
-        _speak('$personName deleted successfully');
       }
     } catch (e) {
       _showSnackBar('Error deleting person: $e', Colors.red);
-      _speak('Error deleting person');
     }
   }
 
   void _showDeleteConfirmation(String personId, String personName) {
     _hapticFeedback();
-    _speak('Are you sure you want to delete $personName');
 
+    _speak('Are you sure you want to delete $personName'); // 👈 أضف هذا السطر
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -282,6 +290,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         _hapticFeedback();
                         Navigator.pop(context);
                         await _deletePerson(personId, personName);
+                        _speak('$personName deleted successfully');
                       },
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 20),
@@ -320,53 +329,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-<<<<<<< HEAD
-  // 🔗 اختبار التعرف باستخدام الـ API
-  Future<void> _testAPIRecognition() async {
-    _hapticFeedback();
-    _speak('Testing face recognition');
-
-    try {
-      _showSnackBar('Testing API Recognition...', Colors.blue);
-
-      // هنا يمكنك إضافة كود لالتقاط صورة أو استخدام صورة اختبار
-      // مثال: يمكنك استبدال هذا بكود الالتقاط الفعلي
-      // final result = await FaceRecognitionAPI.recognizeFace(testImageBytes);
-
-      // _showSnackBar(
-      //   'API Result: ${result.personId} (${result.similarity.toStringAsFixed(1)}%)',
-      //   result.isMatch ? Colors.green : Colors.orange,
-      // );
-
-      // _speak('Recognized as ${result.personId} with ${result.similarity.toStringAsFixed(1)} percent accuracy');
-
-      _showSnackBar('Face recognition test initiated', Colors.blue);
-      _speak('Recognition test started');
-    } catch (e) {
-      _showSnackBar('Recognition test failed: $e', Colors.red);
-      _speak('Recognition test failed');
-    }
-  }
-
-  // 🔗 الحصول على قائمة الوجوه من الـ API
-  Future<void> _loadFacesFromAPI() async {
-    try {
-      final facesList = await FaceRecognitionAPI.getFacesList();
-      print('📋 Faces from API: $facesList');
-
-      if (facesList.isNotEmpty) {
-        _showSnackBar(
-          'Loaded ${facesList.length} faces from API',
-          Colors.green,
-        );
-      }
-    } catch (e) {
-      print('❌ Error loading faces from API: $e');
-    }
-  }
-
-=======
->>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
   List<Map<String, dynamic>> get _filteredPeople {
     if (_searchQuery.isEmpty) return _people;
     return _people
@@ -438,11 +400,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 GestureDetector(
                   onTap: () {
                     _hapticFeedback();
-                    _tts.stop(); // ✅ يوقف الكلام فوراً
                     _speak('Going back');
-                    Future.delayed(const Duration(milliseconds: 800), () {
-                      Navigator.pop(context);
-                    });
+                    Navigator.pop(context);
                   },
                   child: Container(
                     width: 52,
@@ -499,43 +458,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     ],
                   ),
                 ),
-<<<<<<< HEAD
-                // 🔗 مؤشر حالة الـ API
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _apiConnected
-                        ? Colors.green.withOpacity(0.1)
-                        : Colors.red.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _apiConnected ? Colors.green : Colors.red,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _apiConnected ? Icons.cloud_done : Icons.cloud_off,
-                        size: 12,
-                        color: _apiConnected ? Colors.green : Colors.red,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _apiConnected ? 'API Connected' : 'API Offline',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _apiConnected ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-=======
->>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
               ],
             ),
             const SizedBox(height: 25),
@@ -706,30 +628,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         ),
                       ),
                       const SizedBox(height: 4),
-<<<<<<< HEAD
-                      // 🔗 حالة الـ API
-                      Row(
-                        children: [
-                          Icon(
-                            _apiConnected ? Icons.cloud_done : Icons.cloud_off,
-                            size: 14,
-                            color: _apiConnected ? Colors.green : Colors.orange,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _apiConnected ? 'API Ready' : 'API Offline',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _apiConnected
-                                  ? Colors.green
-                                  : Colors.orange,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-=======
->>>>>>> 8d88700b34ef62aa22e05db0d80f9531710f18e3
                     ],
                   ),
                 ),
@@ -937,167 +835,102 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  // 📍 Bottom Navigation - الفوتر الجديد مع الدائرة الحمراء
+  // 📍 Bottom Navigation matching HomePage
   Widget _buildFloatingBottomNav() {
-    return Stack(
-      alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.none,
-      children: [
-        // الفوتر الأساسي
-        ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(24),
+        topRight: Radius.circular(24),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              deepPurple.withOpacity(0.95),
+              vibrantPurple.withOpacity(0.98),
+              primaryPurple,
+            ],
           ),
-          child: Container(
-            height: 90,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  deepPurple.withOpacity(0.95),
-                  vibrantPurple.withOpacity(0.98),
-                  primaryPurple,
-                ],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: deepPurple.withOpacity(0.3),
-                  blurRadius: 25,
-                  offset: const Offset(0, -8),
+          boxShadow: [
+            BoxShadow(
+              color: deepPurple.withOpacity(0.3),
+              blurRadius: 25,
+              offset: const Offset(0, -8),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildNavButton(
+                  icon: Icons.home_rounded,
+                  label: 'Home',
+                  isActive: true,
+                  onTap: () {
+                    _hapticFeedback();
+                    _speak('Home');
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const HomePage()),
+                    );
+                  },
+                ),
+                _buildNavButton(
+                  icon: Icons.notifications_rounded,
+                  label: 'Reminders',
+                  isActive: false,
+                  onTap: () {
+                    _hapticFeedback();
+                    _speak('Reminders');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RemindersPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildNavButton(
+                  icon: Icons.contact_phone,
+                  label: 'Emergency',
+                  isActive: false,
+                  onTap: () {
+                    _hapticFeedback();
+                    _speak('Emergency Contact');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ContactInfoPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildNavButton(
+                  icon: Icons.settings_rounded,
+                  label: 'Settings',
+                  isActive: false,
+                  onTap: () {
+                    _hapticFeedback();
+                    _speak('Settings');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsPage(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 12,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _buildNavButton(
-                      icon: Icons.home_rounded,
-                      label: 'Home',
-                      isActive: true,
-                      onTap: () {
-                        _hapticFeedback();
-                        _speak('Home');
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const HomePage(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildNavButton(
-                      icon: Icons.notifications_rounded,
-                      label: 'Reminders',
-                      onTap: () {
-                        _hapticFeedback();
-                        _speak('Reminders');
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const RemindersPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 60), // مساحة للدائرة
-                    _buildNavButton(
-                      icon: Icons.contacts_rounded,
-                      label: 'Contacts',
-                      onTap: () {
-                        _hapticFeedback();
-                        _speak('Contact');
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ContactInfoPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    _buildNavButton(
-                      icon: Icons.settings_rounded,
-                      label: 'Settings',
-                      onTap: () {
-                        _hapticFeedback();
-                        _speak('Settings');
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const SettingsPage(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ),
         ),
-
-        // 🔴 الدائرة الكبيرة للطوارئ
-        Positioned(
-          bottom: 35,
-          child: Semantics(
-            label: 'Emergency SOS button',
-            button: true,
-            hint: 'Double tap for emergency',
-            child: GestureDetector(
-              onTap: () {
-                _hapticFeedback();
-                _speak('Emergency SOS');
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SosScreen()),
-                );
-              },
-              child: Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.red.shade400, Colors.red.shade700],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.6),
-                      blurRadius: 25,
-                      spreadRadius: 3,
-                    ),
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.3),
-                      blurRadius: 40,
-                      spreadRadius: 5,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.emergency_outlined,
-                  color: Colors.white,
-                  size: 36,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -1131,9 +964,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             children: [
               Icon(
                 icon,
-                color: isActive
-                    ? Colors.white
-                    : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
+                color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
                 size: 22,
               ),
               const SizedBox(height: 3),
