@@ -415,7 +415,7 @@ class _SettingsPageState extends State<SettingsPage>
             },
           ),
           _buildSettingCard(
-            title: 'Security & Data',
+            title: 'Change Password',
             subtitle: 'Manage your password',
             icon: Icons.lock_outline,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),

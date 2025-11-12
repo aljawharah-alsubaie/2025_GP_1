@@ -1,8 +1,11 @@
+import 'dart:async'; // Timer
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:flutter/services.dart'; // HapticFeedback
+import 'package:flutter/semantics.dart'; // SemanticsService
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -14,7 +17,6 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   bool _isUploading = false;
   final picker = ImagePicker();
-  final FlutterTts _flutterTts = FlutterTts();
 
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
@@ -28,13 +30,64 @@ class _ProfilePageState extends State<ProfilePage> {
   late FocusNode _phoneFocus;
   late FocusNode _saveFocus;
 
-  // 🎨 نفس ألوان الصفحة الرئيسية
+  // 🎨 Colors
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
   static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
+
+  // ===== Error banner & typing throttle =====
+  String? _currentErrorMessage;
+  bool _showErrorBanner = false;
+
+  Timer? _typingTimer;
+  final Duration _typingDelay = const Duration(seconds: 1);
+  final Map<String, String> _lastValues = {'name': '', 'phone': ''};
+
+  // ===== TTS =====
+  final FlutterTts _flutterTts = FlutterTts();
+  bool _ttsInitialized = false;
+
+  // 🆕 نحتفظ بالقيم الأصلية للمقارنة وقت الضغط على Save
+  String? _initialName;
+  String? _initialPhone;
+
+  Future<void> _initTTS() async {
+    await _flutterTts.setLanguage("en-US");
+    await _flutterTts.setSpeechRate(0.5);
+    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setPitch(1.0);
+    try {
+      await _flutterTts.awaitSpeakCompletion(true);
+    } catch (_) {}
+    _ttsInitialized = true;
+  }
+
+  Future<void> _speak(String text) async {
+    if (!_ttsInitialized || text.trim().isEmpty || !mounted) return;
+    try {
+      await _flutterTts.speak(text);
+    } catch (_) {}
+  }
+
+  Future<void> _speakForce(String text) async {
+    if (!_ttsInitialized || text.trim().isEmpty || !mounted) return;
+    try {
+      await _flutterTts.stop();
+    } catch (_) {}
+    await Future.delayed(const Duration(milliseconds: 50));
+    try {
+      await _flutterTts.speak(text);
+    } catch (_) {}
+  }
+
+  Future<void> _stopSpeech() async {
+    try {
+      await _flutterTts.stop();
+    } catch (_) {}
+  }
 
   @override
   void initState() {
@@ -43,60 +96,58 @@ class _ProfilePageState extends State<ProfilePage> {
     _emailFocus = FocusNode();
     _phoneFocus = FocusNode();
     _saveFocus = FocusNode();
-    _initializeTts();
+    _initTTS();
     _loadUserData();
   }
 
-  Future<void> _initializeTts() async {
-    await _flutterTts.setLanguage("en-US");
-    await _flutterTts.setSpeechRate(0.5);
-    await _flutterTts.setVolume(1.0);
-    await _flutterTts.setPitch(1.0);
-  }
-
-  Future<void> _speak(String text) async {
-    await _flutterTts.speak(text);
-  }
-
   Future<void> _speakWelcome() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    await _speak(
-      "Personal information page. You can edit your name and phone number.",
-    );
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _speak("Manage your personal information");
   }
 
   Future<void> _loadUserData() async {
     final user = _auth.currentUser;
     if (user != null) {
       try {
-        DocumentSnapshot userDoc = await _firestore
+        final userDoc = await _firestore
             .collection('users')
             .doc(user.uid)
             .get();
-
         if (userDoc.exists) {
-          Map<String, dynamic> userData =
-              userDoc.data() as Map<String, dynamic>;
+          final data = userDoc.data() as Map<String, dynamic>;
+
+          // خزّني النسخ الأصلية قبل عرضها
+          _initialName = (data['full_name'] ?? '').toString();
+          _initialPhone = (data['phone'] ?? '').toString();
 
           setState(() {
-            _nameController.text = userData['full_name'] ?? '';
-            _emailController.text = userData['email'] ?? user.email ?? '';
-            _phoneController.text = userData['phone'] ?? '';
+            _nameController.text = _initialName ?? '';
+            _emailController.text = data['email'] ?? user.email ?? '';
+            _phoneController.text = _initialPhone ?? '';
           });
-
-          // النطق بعد تحميل البيانات
           await _speakWelcome();
         }
-      } catch (e) {
-        print('Error loading user data: $e');
+      } catch (_) {
         await _speakWelcome();
       }
     }
   }
 
+  // يوقف الكلام ويخفي الشريط لما الصفحة تفقد التركيز/نطلع
+  @override
+  void deactivate() {
+    _stopSpeech();
+    if (mounted) {
+      _showErrorBanner = false;
+      _currentErrorMessage = null;
+    }
+    super.deactivate();
+  }
+
   @override
   void dispose() {
-    _flutterTts.stop();
+    _typingTimer?.cancel();
+    _stopSpeech();
     _nameFocus.dispose();
     _emailFocus.dispose();
     _phoneFocus.dispose();
@@ -107,7 +158,210 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  // ===== Helpers: phone errors list =====
+  List<String> _getPhoneErrors(String raw) {
+    final cleaned = raw.trim().replaceAll(RegExp(r'[-\s()]'), '');
+    final errors = <String>[];
+    if (!cleaned.startsWith('05')) errors.add("Must start with 05");
+    if (cleaned.length != 10) errors.add("Must be exactly 10 digits");
+    if (!RegExp(r'^[0-9]+$').hasMatch(cleaned)) {
+      errors.add("Should contain only numbers");
+    }
+    return errors;
+  }
+
+  // ===== Validators =====
+  String? _validateName(String? v) {
+    final value = (v ?? '').trim();
+    if (value.isEmpty) return "Name is required";
+    if (RegExp(r'[0-9]').hasMatch(value)) {
+      return "Name should not contain numbers";
+    }
+    return null;
+  }
+
+  String? _validatePhone(String? v) {
+    final raw = (v ?? '').trim();
+    if (raw.isEmpty) return "Mobile number is required";
+    final errors = _getPhoneErrors(raw);
+    if (errors.isEmpty) return null;
+    return "Mobile number issues: ${errors.join('; ')}";
+  }
+
+  // ===== Banner helpers =====
+
+  void _showBannerSilent({
+    required String msg,
+    bool autoHide = true,
+    Duration hideAfter = const Duration(seconds: 20),
+  }) {
+    setState(() {
+      _currentErrorMessage = msg;
+      _showErrorBanner = true;
+    });
+    if (autoHide) {
+      Future.delayed(hideAfter).then((_) {
+        if (!mounted) return;
+        setState(() {
+          _showErrorBanner = false;
+          _currentErrorMessage = null;
+        });
+      });
+    }
+  }
+
+  void _showErrorWithSoundAndBanner(
+    String msg, {
+    bool autoHide = true,
+    Duration hideAfter = const Duration(seconds: 20),
+  }) {
+    setState(() {
+      _currentErrorMessage = msg;
+      _showErrorBanner = true;
+    });
+    SemanticsService.announce(msg, TextDirection.ltr);
+    _speakForce("Error: $msg");
+    HapticFeedback.heavyImpact();
+
+    if (autoHide) {
+      Future.delayed(hideAfter).then((_) {
+        if (!mounted) return;
+        setState(() {
+          _showErrorBanner = false;
+          _currentErrorMessage = null;
+        });
+      });
+    }
+  }
+
+  void _hideErrorBanner() async {
+    await _stopSpeech(); // يوقف الكلام عند الضغط على X
+    setState(() {
+      _showErrorBanner = false;
+      _currentErrorMessage = null;
+    });
+  }
+
+  // يجمع كل الأخطاء ويعرضها بشريط واحد وينطقها بندًا بندًا
+  Future<bool> _validateAllAndAnnounce() async {
+    final nameErr = _validateName(_nameController.text);
+
+    final phoneRaw = _phoneController.text.trim();
+    String? phoneSummary;
+    List<String> phoneList = [];
+    if (phoneRaw.isEmpty) {
+      phoneSummary = "Mobile number is required";
+    } else {
+      phoneList = _getPhoneErrors(phoneRaw);
+      if (phoneList.isNotEmpty) {
+        phoneSummary = "Mobile number has ${phoneList.length} issue(s)";
+      }
+    }
+
+    final hasErrors = (nameErr != null) || (phoneSummary != null);
+    if (!hasErrors) return true;
+
+    final buf = StringBuffer("Please fix the following errors:\n\n");
+    if (nameErr != null) buf.writeln("• Name: $nameErr\n");
+    if (phoneSummary != null) {
+      if (phoneList.isEmpty) {
+        buf.writeln("• Mobile Number: $phoneSummary\n");
+      } else {
+        buf.writeln("• Mobile Number:");
+        for (final e in phoneList) {
+          buf.writeln("   - $e");
+        }
+        buf.writeln();
+      }
+    }
+    final msg = buf.toString().trimRight();
+
+    _showBannerSilent(
+      msg: msg,
+      autoHide: true,
+      hideAfter: const Duration(seconds: 25), // نفس كودك الحالي
+    );
+
+    await _stopSpeech();
+    await _speak(
+      "Found ${(nameErr != null ? 1 : 0) + (phoneSummary != null ? 1 : 0)} errors.",
+    );
+    if (nameErr != null) {
+      await _speak("Name: $nameErr");
+    }
+    if (phoneSummary != null) {
+      if (phoneList.isEmpty) {
+        await _speak("Mobile Number: $phoneSummary");
+      } else {
+        await _speak("Mobile number issues:");
+        for (final e in phoneList) {
+          await _speak(e);
+        }
+      }
+    }
+    await _speak("Please fix these errors and try again.");
+
+    return false;
+  }
+
+  // 🆕 فحص إن كان فيه تغييرات فعلًا
+  bool _noChangesMade() {
+    final currentName = _nameController.text.trim();
+    final currentPhone = _phoneController.text.trim();
+    final initialName = (_initialName ?? '').trim();
+    final initialPhone = (_initialPhone ?? '').trim();
+    return currentName == initialName && currentPhone == initialPhone;
+  }
+
+  // ===== Real-time typing validation =====
+  void _onFieldChanged(String fieldName, String value) {
+    _typingTimer?.cancel();
+    if (_lastValues[fieldName] == value) return;
+    _lastValues[fieldName] = value;
+
+    _typingTimer = Timer(_typingDelay, () {
+      _validateFieldInRealTime(fieldName, value);
+    });
+  }
+
+  void _validateFieldInRealTime(String fieldName, String value) {
+    String? err;
+    if (fieldName == 'name') err = _validateName(value);
+    if (fieldName == 'phone') err = _validatePhone(value);
+
+    if (err != null && value.trim().isNotEmpty) {
+      _showErrorWithSoundAndBanner(
+        err,
+        autoHide: true,
+        hideAfter: const Duration(seconds: 20),
+      );
+    }
+  }
+
   Future<void> _saveProfile() async {
+    // 🆕 أولًا: إذا ما فيه تغييرات، ننطق ونطلع
+    if (_noChangesMade()) {
+      await _speakForce("No changes made to your profile");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No changes to save',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: Color(0xFF7A7A7A),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // بعدها نتحقق من الصحة (حتى بدون تعديل في الحقول الأخرى)
+    final ok = await _validateAllAndAnnounce();
+    if (!ok) return;
+
     await _speak("Are you sure you want to save changes?");
 
     final confirm = await showDialog<bool>(
@@ -125,12 +379,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 color: vibrantPurple.withOpacity(0.12),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.save_outlined,
-                color: vibrantPurple,
-                size: 52,
-                semanticLabel: 'Save confirmation',
-              ),
+              child: Icon(Icons.save_outlined, color: vibrantPurple, size: 52),
             ),
             const SizedBox(height: 20),
             Text(
@@ -158,7 +407,6 @@ class _ProfilePageState extends State<ProfilePage> {
         actions: [
           Column(
             children: [
-              // Yes Button
               SizedBox(
                 width: double.infinity,
                 height: 62,
@@ -192,13 +440,11 @@ class _ProfilePageState extends State<ProfilePage> {
                         fontSize: 20,
                         letterSpacing: 0.3,
                       ),
-                      semanticsLabel: 'Yes, save changes to profile',
                     ),
                   ),
                 ),
               ),
               const SizedBox(height: 14),
-              // Cancel Button
               SizedBox(
                 width: double.infinity,
                 height: 58,
@@ -227,7 +473,6 @@ class _ProfilePageState extends State<ProfilePage> {
                         fontSize: 19,
                         letterSpacing: 0.3,
                       ),
-                      semanticsLabel: 'Cancel, do not save changes',
                     ),
                   ),
                 ),
@@ -243,31 +488,31 @@ class _ProfilePageState extends State<ProfilePage> {
 
       final user = _auth.currentUser;
       if (user != null) {
-        Map<String, dynamic> userData = {
+        final userData = {
           'email': _emailController.text.trim(),
           'full_name': _nameController.text.trim(),
           'phone': _phoneController.text.trim(),
         };
 
         await _firestore.collection('users').doc(user.uid).update(userData);
-        setState(() {});
+        setState(() {
+          // حدّث النسخ الأصلية بعد الحفظ الناجح
+          _initialName = _nameController.text.trim();
+          _initialPhone = _phoneController.text.trim();
+        });
 
         await _speak("Your changes have been saved successfully.");
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
+            const SnackBar(
+              content: Text(
                 'Your changes have been saved successfully',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
               ),
-              backgroundColor: vibrantPurple,
+              backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              duration: Duration(seconds: 4),
             ),
           );
         }
@@ -299,93 +544,98 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: ultraLightPurple,
-      body: Stack(
-        children: [
-          // 🎨 خلفية متدرجة مثل الصفحة الرئيسية
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  ultraLightPurple,
-                  palePurple.withOpacity(0.3),
-                  Colors.white,
-                ],
-                stops: const [0.0, 0.5, 1.0],
+    return WillPopScope(
+      onWillPop: () async {
+        await _stopSpeech(); // يوقف الكلام عند رجوع النظام
+        if (mounted) {
+          _showErrorBanner = false;
+          _currentErrorMessage = null;
+        }
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: ultraLightPurple,
+        body: Stack(
+          children: [
+            // الخلفية
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ultraLightPurple,
+                    palePurple.withOpacity(0.3),
+                    Colors.white,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
               ),
             ),
-          ),
 
-          SingleChildScrollView(
-            child: Column(
-              children: [
-                // 🎯 الهيدر الجديد - زر الرجوع والعنوان منزلين
-                _buildModernHeader(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 15),
-
-                      // 📝 Personal Details Section
-                      _buildSectionCard(
-                        title: "Personal Details",
-                        icon: Icons.person_outline,
-                        children: [
-                          _buildTextField(
-                            "Name",
-                            _nameController,
-                            _nameFocus,
-                            _emailFocus,
-                            Icons.badge_outlined,
-                          ),
-                          _buildTextField(
-                            "Email Address",
-                            _emailController,
-                            _emailFocus,
-                            _phoneFocus,
-                            Icons.email_outlined,
-                          ),
-                          _buildTextField(
-                            "Phone Number",
-                            _phoneController,
-                            _phoneFocus,
-                            _saveFocus,
-                            Icons.phone_outlined,
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // 💾 Save Button
-                      _buildSaveButton(),
-
-                      const SizedBox(height: 30),
-                    ],
+            SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildModernHeader(),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 15),
+                        _buildSectionCard(
+                          title: "Personal Details",
+                          icon: Icons.person_outline,
+                          children: [
+                            _buildTextField(
+                              "Name",
+                              _nameController,
+                              _nameFocus,
+                              _emailFocus,
+                              Icons.badge_outlined,
+                            ),
+                            _buildTextField(
+                              "Email Address",
+                              _emailController,
+                              _emailFocus,
+                              _phoneFocus,
+                              Icons.email_outlined,
+                            ),
+                            _buildTextField(
+                              "Phone Number",
+                              _phoneController,
+                              _phoneFocus,
+                              _saveFocus,
+                              Icons.phone_outlined,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 30),
+                        _buildSaveButton(),
+                        const SizedBox(height: 30),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+
+            // شريط الخطأ
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _buildErrorBanner(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  // 🎯 الهيدر الجديد - زر الرجوع والعنوان منزلين
   Widget _buildModernHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(
-        25,
-        100,
-        25,
-        60,
-      ), // زيادة الـ top إلى 100 لتنزيل المحتوى
+      padding: const EdgeInsets.fromLTRB(25, 100, 25, 60),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -400,17 +650,16 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
       child: Row(
         children: [
-          // 🔙 زر الرجوع على اليسار - بنفسجي
+          // Back button: صامت + يوقف الكلام ويغلق الشريط
           Semantics(
             label: 'Go back to previous page',
             button: true,
             child: GestureDetector(
-              onTap: () async {
-                await _speak("Going back");
-                await Future.delayed(const Duration(milliseconds: 800));
-                if (mounted) {
+              onTap: () {
+                _speak('Going back');
+                Future.delayed(const Duration(milliseconds: 800), () {
                   Navigator.pop(context);
-                }
+                });
               },
               child: Container(
                 width: 52,
@@ -428,20 +677,17 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ],
                 ),
-                child: Center(
+                child: const Center(
                   child: Icon(
                     Icons.arrow_back_ios_new,
                     color: Colors.white,
-                    size: 21,
+                    size: 20,
                   ),
                 ),
               ),
             ),
           ),
-
           const SizedBox(width: 16),
-
-          // النص في المنتصف
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -476,7 +722,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // 📦 Section Card
   Widget _buildSectionCard({
     required String title,
     required IconData icon,
@@ -505,7 +750,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // 📝 Text Field
   Widget _buildTextField(
     String label,
     TextEditingController controller,
@@ -537,7 +781,9 @@ class _ProfilePageState extends State<ProfilePage> {
           label: isEmail ? '$label (not editable)' : '$label input field',
           textField: !isEmail,
           child: GestureDetector(
-            onTap: isEmail ? () => _speak("Email cannot be edited.") : null,
+            onTap: isEmail
+                ? () async => _speak("Email cannot be edited.")
+                : null,
             child: TextField(
               controller: controller,
               focusNode: currentFocus,
@@ -549,6 +795,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 if (!isEmail) {
                   _speak("Editing $label");
                 }
+              },
+              onChanged: (v) {
+                if (label == "Name") _onFieldChanged('name', v);
+                if (label == "Phone Number") _onFieldChanged('phone', v);
               },
               keyboardType: label == "Email Address"
                   ? TextInputType.emailAddress
@@ -569,7 +819,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // 💾 Save Button
   Widget _buildSaveButton() {
     return Semantics(
       label: _isUploading
@@ -630,6 +879,57 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    if (!_showErrorBanner || _currentErrorMessage == null) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: const BoxDecoration(
+        color: Color(0xFFD32F2F),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 10,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: Colors.white, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                _currentErrorMessage!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  height: 1.4,
+                ),
+                softWrap: true,
+              ),
+            ),
+          ),
+          Semantics(
+            label: 'Close error message',
+            button: true,
+            hint: 'Double tap to close error message',
+            child: IconButton(
+              onPressed: _hideErrorBanner,
+              icon: const Icon(Icons.close, color: Colors.white, size: 24),
+            ),
+          ),
+        ],
       ),
     );
   }

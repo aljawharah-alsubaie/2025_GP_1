@@ -8,6 +8,7 @@ import 'signup_screen.dart';
 import 'set_password_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -26,10 +27,11 @@ class _LoginScreenState extends State<LoginScreen>
   bool _obscurePassword = true;
   bool _rememberMe = false;
 
-  // ✅ إضافة متغيرات للشريط الأحمر
+  // Error banner state
   String? _currentErrorMessage;
   bool _showErrorBanner = false;
 
+  // Animations
   late AnimationController _animationController;
   late AnimationController _buttonAnimationController;
   late Animation<double> _fadeAnimation;
@@ -37,11 +39,16 @@ class _LoginScreenState extends State<LoginScreen>
   late Animation<double> _scaleAnimation;
   late Animation<double> _buttonScaleAnimation;
 
+  // TTS
+  late final FlutterTts _tts;
+  bool _ttsReady = false;
+
   @override
   void initState() {
     super.initState();
     _setupAnimations();
     _checkRememberedUser();
+    _initTts(); // init TTS (we will speak after first frame inside this)
     _animationController.forward();
   }
 
@@ -86,6 +93,62 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  Future<void> _initTts() async {
+    _tts = FlutterTts();
+
+    // Basic settings
+    await _tts.setLanguage("en-US"); // Use "ar-SA" for Arabic if you prefer
+    await _tts.setSpeechRate(0.5);
+    await _tts.setPitch(1.0);
+    await _tts.setVolume(1.0);
+
+    // Ensure we await completion to avoid overlapping speech
+    await _tts.awaitSpeakCompletion(true);
+
+    // Optional handlers
+    _tts.setStartHandler(() {});
+    _tts.setCompletionHandler(() {});
+    _tts.setErrorHandler((msg) {});
+
+    setState(() => _ttsReady = true);
+
+    // Speak after first frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _speak(
+        "Welcome back. Please enter your email and password to continue",
+        interrupt: true,
+      );
+    });
+  }
+
+  Future<void> _speak(String text, {bool interrupt = true}) async {
+    if (!_ttsReady) return;
+    if (interrupt) {
+      try {
+        await _tts.stop();
+      } catch (_) {}
+    }
+    if (text.trim().isEmpty) return;
+    await _tts.speak(text);
+  }
+
+  // ⬇️ يوقف أي كلام جاري، ينتظر 60ms، بعدها ينطق — يفيد جداً لرسائل الأخطاء
+  Future<void> _speakForce(String text) async {
+    if (!_ttsReady || text.trim().isEmpty) return;
+    try {
+      await _tts.stop();
+    } catch (_) {}
+    await Future.delayed(const Duration(milliseconds: 60));
+    await _tts.speak(text);
+  }
+
+  Future<void> _stopSpeak() async {
+    if (!_ttsReady) return;
+    try {
+      await _tts.stop();
+    } catch (_) {}
+  }
+
   Future<void> _checkRememberedUser() async {
     const storage = FlutterSecureStorage();
     final rememberMe = await storage.read(key: 'rememberMe');
@@ -101,6 +164,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
+    _stopSpeak();
+    _tts.stop();
     _animationController.dispose();
     _buttonAnimationController.dispose();
     _emailController.dispose();
@@ -109,19 +174,73 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) {
-      _showErrorWithSoundAndBanner("Please check your email and password");
-      return;
-    }
-
     setState(() => _isLoading = true);
     _buttonAnimationController.forward().then((_) {
       _buttonAnimationController.reverse();
     });
 
+    // Announce action
+    _speak("Logging in, please wait.", interrupt: true);
+
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
+
+      if (email.isEmpty) {
+        await _showErrorWithSoundAndBanner("Email is required to continue");
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      if (password.isEmpty) {
+        await _showErrorWithSoundAndBanner("Password is required to continue");
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      if (!email.contains('@')) {
+        await _showErrorWithSoundAndBanner(
+          "Please enter a valid email, such as example@domain.com",
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+      if (!email.contains('.')) {
+        await _showErrorWithSoundAndBanner(
+          "Please enter a valid email, such as example@domain.com",
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final allowedDomains = {
+        'gmail.com': 'Gmail',
+        'outlook.com': 'Outlook',
+        'hotmail.com': 'Hotmail',
+        'yahoo.com': 'Yahoo',
+      };
+
+      final domain = email.split('@').last.toLowerCase();
+      if (!allowedDomains.containsKey(domain)) {
+        await _showErrorWithSoundAndBanner("Invalid email or password");
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Check user existence
+      final usersQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (usersQuery.docs.isEmpty) {
+        await _showErrorWithSoundAndBanner(
+          "We couldn’t find an account with this email. Please sign up to continue",
+        );
+        setState(() => _isLoading = false);
+        return;
+      }
 
       UserCredential userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
@@ -130,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen>
       await storage.write(key: 'isLoggedIn', value: 'true');
       await storage.write(key: 'userEmail', value: email);
 
-      // حفظ حالة Remember Me
+      // Remember Me
       if (_rememberMe) {
         await storage.write(key: 'rememberMe', value: 'true');
         await storage.write(key: 'savedEmail', value: email);
@@ -155,10 +274,11 @@ class _LoginScreenState extends State<LoginScreen>
         }
 
         _showSnackBar("Welcome back, $fullName!", Colors.green);
+        await _speakForce("Welcome back, $fullName!");
 
         if (!mounted) return;
 
-        // Smooth navigation with delay for better UX
+        // Smooth navigation
         await Future.delayed(const Duration(milliseconds: 500));
 
         Navigator.pushReplacement(
@@ -176,14 +296,9 @@ class _LoginScreenState extends State<LoginScreen>
     } on FirebaseAuthException catch (e) {
       String errorMessage = "Login failed";
       switch (e.code) {
-        case 'user-not-found':
-          errorMessage = "No account found with this email";
-          break;
         case 'wrong-password':
-          errorMessage = "Incorrect password";
-          break;
-        case 'invalid-email':
-          errorMessage = "Invalid email address";
+        case 'invalid-credential':
+          errorMessage = "Invalid email or password";
           break;
         case 'user-disabled':
           errorMessage = "This account has been disabled";
@@ -191,17 +306,12 @@ class _LoginScreenState extends State<LoginScreen>
         case 'too-many-requests':
           errorMessage = "Too many failed attempts. Please try again later";
           break;
-        case 'invalid-credential':
-          errorMessage = "Invalid email or password";
-          break;
         default:
           errorMessage = e.message ?? "An error occurred";
       }
-      // ✅ استبدال _showSnackBar بـ _showErrorWithSoundAndBanner
-      _showErrorWithSoundAndBanner(errorMessage);
+      await _showErrorWithSoundAndBanner(errorMessage);
     } catch (e) {
-      // ✅ استبدال _showSnackBar بـ _showErrorWithSoundAndBanner
-      _showErrorWithSoundAndBanner("An unexpected error occurred");
+      await _showErrorWithSoundAndBanner("An unexpected error occurred");
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -212,10 +322,10 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> _loginWithGoogle() async {
     try {
       setState(() => _isLoading = true);
+      _speak("Continuing with Google", interrupt: true);
       await GoogleSignInHandler.signInWithGoogle(context);
     } catch (e) {
-      // ✅ استبدال _showSnackBar بـ _showErrorWithSoundAndBanner
-      _showErrorWithSoundAndBanner("Google sign-in failed");
+      await _showErrorWithSoundAndBanner("Google sign-in failed");
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -250,22 +360,26 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  // ✅ دالة عرض الشريط الأحمر مع الصوت
-  void _showErrorWithSoundAndBanner(String errorMessage) {
+  // ⬇️ صار async وينطق الخطأ بقوة + يعلن لسكريـن ريدر بعد رسم الرسالة
+  Future<void> _showErrorWithSoundAndBanner(String errorMessage) async {
     setState(() {
       _currentErrorMessage = errorMessage;
       _showErrorBanner = true;
     });
 
-    // استخدام WidgetsBinding بدلاً من SemanticsService المباشر
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      SemanticsService.announce(errorMessage, TextDirection.ltr);
-    });
+    // انتظر فريم واحد لضمان ظهور اللافتة قبل الإعلان/النطق
+    await Future.delayed(const Duration(milliseconds: 50));
 
-    // اهتزاز للإشارة إلى الخطأ
+    // Screen reader live announcement
+    SemanticsService.announce(errorMessage, TextDirection.ltr);
+
+    // TTS — يوقف أي كلام جارٍ ثم ينطق الخطأ مباشرة
+    await _speakForce("Error: $errorMessage");
+
+    // Haptics
     HapticFeedback.heavyImpact();
 
-    // إخفاء الشريط بعد 8 ثواني
+    // Auto-hide بعد 8 ثواني (عدلي الرقم إذا تبين)
     Future.delayed(const Duration(seconds: 8), () {
       if (mounted) {
         setState(() {
@@ -276,7 +390,6 @@ class _LoginScreenState extends State<LoginScreen>
     });
   }
 
-  // ✅ دالة إخفاء الشريط الأحمر
   void _hideErrorBanner() {
     setState(() {
       _showErrorBanner = false;
@@ -284,7 +397,6 @@ class _LoginScreenState extends State<LoginScreen>
     });
   }
 
-  // ✅ Widget للشريط الأحمر في الأسفل
   Widget _buildErrorBanner() {
     if (!_showErrorBanner || _currentErrorMessage == null) {
       return const SizedBox.shrink();
@@ -294,7 +406,7 @@ class _LoginScreenState extends State<LoginScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFD32F2F), // نفس اللون الأحمر
+        color: const Color(0xFFD32F2F),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.3),
@@ -305,13 +417,10 @@ class _LoginScreenState extends State<LoginScreen>
       ),
       child: Row(
         children: [
-          // أيقونة الخطأ
           ExcludeSemantics(
             child: Icon(Icons.error_outline, color: Colors.white, size: 28),
           ),
           const SizedBox(width: 12),
-
-          // نص الخطأ
           Expanded(
             child: Semantics(
               liveRegion: true,
@@ -327,15 +436,13 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
           ),
-
-          // زر الإغلاق
           Semantics(
             label: 'Close error message',
             button: true,
             hint: 'Double tap to close error message',
             child: IconButton(
               onPressed: _hideErrorBanner,
-              icon: Icon(Icons.close, color: Colors.white, size: 24),
+              icon: const Icon(Icons.close, color: Colors.white, size: 24),
             ),
           ),
         ],
@@ -349,7 +456,7 @@ class _LoginScreenState extends State<LoginScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Enhanced background with gradient overlay
+          // Background with gradient overlay
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
@@ -386,7 +493,7 @@ class _LoginScreenState extends State<LoginScreen>
                       children: [
                         const SizedBox(height: 40),
 
-                        // Header section with animation
+                        // Header
                         ScaleTransition(
                           scale: _scaleAnimation,
                           child: Container(
@@ -437,9 +544,10 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  "log in to continue your journey",
+                                  "Log in to continue your journey",
                                   style: TextStyle(
                                     fontSize: 16,
+                                    fontWeight: FontWeight.w700,
                                     color: Colors.white.withOpacity(0.8),
                                   ),
                                   textAlign: TextAlign.center,
@@ -462,7 +570,7 @@ class _LoginScreenState extends State<LoginScreen>
                               return "Email is required";
                             }
                             final emailRegex = RegExp(
-                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                              r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                             );
                             if (!emailRegex.hasMatch(value.trim())) {
                               return "Please enter a valid email address";
@@ -485,16 +593,12 @@ class _LoginScreenState extends State<LoginScreen>
                             if (value == null || value.trim().isEmpty) {
                               return "Password is required";
                             }
-                            if (value.trim().length < 6) {
-                              return "Password must be at least 6 characters";
-                            }
                             return null;
                           },
                         ),
 
                         const SizedBox(height: 16),
 
-                        // Remember me and Forgot password row
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -509,13 +613,8 @@ class _LoginScreenState extends State<LoginScreen>
                                     onChanged: (value) => setState(
                                       () => _rememberMe = value ?? false,
                                     ),
-                                    activeColor: const Color.fromARGB(
-                                      255,
-                                      255,
-                                      255,
-                                      255,
-                                    ),
-                                    checkColor: Color(0xFF6B1D73),
+                                    activeColor: Colors.white,
+                                    checkColor: const Color(0xFF6B1D73),
                                     side: const BorderSide(
                                       color: Colors.white,
                                       width: 2,
@@ -543,6 +642,10 @@ class _LoginScreenState extends State<LoginScreen>
                               hint: 'Double tap to reset your password',
                               child: TextButton(
                                 onPressed: () {
+                                  _speak(
+                                    "Forgot Password page. Please enter your email to reset your password",
+                                    interrupt: true,
+                                  );
                                   Navigator.push(
                                     context,
                                     PageRouteBuilder(
@@ -585,7 +688,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                         const SizedBox(height: 30),
 
-                        // Login button with animation
+                        // Login button
                         ScaleTransition(
                           scale: _buttonScaleAnimation,
                           child: Semantics(
@@ -666,7 +769,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                         const SizedBox(height: 30),
 
-                        // Social login buttons - Full width style
+                        // Google login
                         _buildFullWidthSocialButton(
                           icon: Icons.g_mobiledata,
                           onTap: _loginWithGoogle,
@@ -681,23 +784,17 @@ class _LoginScreenState extends State<LoginScreen>
                           label: 'Sign up button',
                           hint: 'Double tap to create a new account',
                           child: GestureDetector(
-                            onTap: () {
+                            onTap: () async {
+                              HapticFeedback.selectionClick();
+                              await _speakForce("Sign up");
+                              if (!mounted) return;
                               Navigator.push(
                                 context,
                                 PageRouteBuilder(
-                                  pageBuilder:
-                                      (
-                                        context,
-                                        animation,
-                                        secondaryAnimation,
-                                      ) => const SignupScreen(),
+                                  pageBuilder: (_, __, ___) =>
+                                      const SignupScreen(),
                                   transitionsBuilder:
-                                      (
-                                        context,
-                                        animation,
-                                        secondaryAnimation,
-                                        child,
-                                      ) {
+                                      (_, animation, __, child) {
                                         return SlideTransition(
                                           position: Tween<Offset>(
                                             begin: const Offset(1.0, 0.0),
@@ -756,7 +853,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
 
-          // ✅ الشريط الأحمر في الأسفل
+          // Error banner
           Positioned(bottom: 0, left: 0, right: 0, child: _buildErrorBanner()),
         ],
       ),

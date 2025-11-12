@@ -27,6 +27,10 @@ class _SecurityDataPageState extends State<SecurityDataPage>
   bool _newPasswordVisible = false;
   bool _confirmPasswordVisible = false;
 
+  // نظام البانر للأخطاء
+  bool _showErrorBanner = false;
+  String? _currentErrorMessage;
+
   late AnimationController _fadeController;
   late AnimationController _slideController;
 
@@ -78,6 +82,29 @@ class _SecurityDataPageState extends State<SecurityDataPage>
     super.dispose();
   }
 
+  // عرض بانر الخطأ
+  void _showErrorBannerMessage(String message) {
+    setState(() {
+      _currentErrorMessage = message;
+      _showErrorBanner = true;
+    });
+
+    // إخفاء البانر تلقائياً بعد 5 ثواني
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) {
+        _hideErrorBanner();
+      }
+    });
+  }
+
+  // إخفاء بانر الخطأ
+  void _hideErrorBanner() {
+    setState(() {
+      _showErrorBanner = false;
+      _currentErrorMessage = null;
+    });
+  }
+
   // ✅ التحقق من قوة كلمة المرور
   String? _validatePassword(String password) {
     if (password.length < 8) {
@@ -105,14 +132,14 @@ class _SecurityDataPageState extends State<SecurityDataPage>
 
   Future<void> _updatePassword() async {
     if (_newPasswordController.text != _confirmPasswordController.text) {
-      _showErrorSnackBar('New passwords do not match');
+      _showErrorBannerMessage('New passwords do not match');
       _speak('New passwords do not match');
       return;
     }
 
     // التحقق من أن كلمة المرور الجديدة مختلفة عن القديمة
     if (_currentPasswordController.text == _newPasswordController.text) {
-      _showErrorSnackBar(
+      _showErrorBannerMessage(
         'New password must be different from current password',
       );
       _speak('New password must be different from current password');
@@ -122,7 +149,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
     // التحقق من قوة كلمة المرور الجديدة
     String? passwordError = _validatePassword(_newPasswordController.text);
     if (passwordError != null) {
-      _showErrorSnackBar(passwordError);
+      _showErrorBannerMessage(passwordError);
       _speak(passwordError);
       return;
     }
@@ -167,11 +194,11 @@ class _SecurityDataPageState extends State<SecurityDataPage>
         errorMessage = 'Current password is incorrect. Please try again.';
       }
 
-      _showErrorSnackBar(errorMessage);
+      _showErrorBannerMessage(errorMessage);
       _speak(errorMessage);
     } catch (e) {
       print('Error updating password: $e');
-      _showErrorSnackBar('An unexpected error occurred');
+      _showErrorBannerMessage('An unexpected error occurred');
       _speak('An unexpected error occurred');
     } finally {
       setState(() {
@@ -198,18 +225,6 @@ class _SecurityDataPageState extends State<SecurityDataPage>
     );
   }
 
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFFF44336),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -223,6 +238,65 @@ class _SecurityDataPageState extends State<SecurityDataPage>
                 _buildModernHeader(),
                 Expanded(child: _buildContent()),
               ],
+            ),
+          ),
+          // بانر الخطأ في الأسفل
+          Positioned(left: 0, right: 0, bottom: 0, child: _buildErrorBanner()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    if (!_showErrorBanner || _currentErrorMessage == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD32F2F),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          ExcludeSemantics(
+            child: const Icon(
+              Icons.error_outline,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Semantics(
+              liveRegion: true,
+              child: Text(
+                _currentErrorMessage!,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 8,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          Semantics(
+            label: 'Close error message',
+            button: true,
+            hint: 'Double tap to close error message',
+            child: IconButton(
+              onPressed: _hideErrorBanner,
+              icon: const Icon(Icons.close, color: Colors.white, size: 24),
             ),
           ),
         ],
@@ -303,7 +377,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Security & Data',
+                    'Change Password',
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.w900,
@@ -316,7 +390,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Manage your account security',
+                    'Update your password securely',
                     style: TextStyle(
                       fontSize: 14,
                       color: deepPurple.withOpacity(0.6),
@@ -739,10 +813,8 @@ class _SecurityDataPageState extends State<SecurityDataPage>
             margin: const EdgeInsets.only(top: 7),
             width: 6,
             height: 6,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [vibrantPurple, primaryPurple],
-              ),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
               shape: BoxShape.circle,
             ),
           ),

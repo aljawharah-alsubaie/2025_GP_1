@@ -296,7 +296,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 onTap: () {
                   _explainFeature(
                     'Profile',
-                    'Manage your personal information and settings',
+                    'Manage your personal information',
                   );
                   Navigator.push(
                     context,
