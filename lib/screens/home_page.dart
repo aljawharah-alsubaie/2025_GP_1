@@ -64,7 +64,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    await _tts.setLanguage("eUSn-");
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -247,7 +247,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
-                    child: Center(
+                    child: const Center(
                       child: Text('🕶️', style: TextStyle(fontSize: 32)),
                     ),
                   ),
@@ -280,7 +280,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       foreground: Paint()
                         ..shader = LinearGradient(
                           colors: [deepPurple, vibrantPurple],
-                        ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
+                        ).createShader(const Rect.fromLTWH(0, 0, 200, 70)),
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -349,29 +349,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           ),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 35, 16, 20),
+        // كان: EdgeInsets.fromLTRB(16, 35, 16, 20)
+        padding: const EdgeInsets.fromLTRB(20, 40, 20, 36),
         children: [
-          _buildNeumorphicCard(
-            title: 'Face Recognition',
-            subtitle: 'Identify people instantly',
-            icon: Icons.face_retouching_natural,
-            gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
-            description:
-                'This feature helps you recognize faces and identify people around you using camera',
-            onTap: () {
-              _explainFeature('Face Recognition', '');
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const FaceListPage()),
-              );
-            },
-          ),
-
           _buildNeumorphicCard(
             title: 'Text Reading',
             subtitle: 'Read any text aloud',
             icon: Icons.record_voice_over,
-            gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
+            gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
             description:
                 'This feature reads text from documents, signs, or any written material using your camera',
             onTap: () {
@@ -387,12 +372,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               );
             },
           ),
-
           _buildNeumorphicCard(
             title: 'Currency Scanner',
             subtitle: 'Identify money instantly',
             icon: Icons.monetization_on,
-            gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
+            gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
             description:
                 'This feature helps you identify different currency notes and their values',
             onTap: () {
@@ -408,12 +392,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               );
             },
           ),
-
           _buildNeumorphicCard(
             title: 'Color Detector',
             subtitle: 'Identify colors around you',
             icon: Icons.palette,
-            gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
+            gradient: const LinearGradient(
+              colors: [vibrantPurple, primaryPurple],
+            ),
             description:
                 'This feature detects and announces colors of objects around you using your camera',
             onTap: () {
@@ -434,7 +419,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 🎯 كارت Neumorphic مع مسافات أكبر ونص أكبر وسهم على اليمين
+  // 🎯 كارت Neumorphic أكبر + مسافات أوسع
   Widget _buildNeumorphicCard({
     required String title,
     required String subtitle,
@@ -447,93 +432,108 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       label: '$title. $subtitle. Double tap to open',
       button: true,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 30),
+        // كان: EdgeInsets.only(bottom: 30)
+        margin: const EdgeInsets.only(bottom: 36),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
             child: Container(
-              padding: const EdgeInsets.all(18),
+              // كان: EdgeInsets.all(18)
+              padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
                     color: palePurple.withOpacity(0.35),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
                   ),
                   BoxShadow(
-                    color: Colors.white.withOpacity(0.8),
-                    blurRadius: 12,
+                    color: Colors.white.withOpacity(0.85),
+                    blurRadius: 14,
                     offset: const Offset(-2, -2),
                   ),
                 ],
               ),
+              // ✅ أقل ارتفاع للكرت عشان يكبر بصريًا
+              constraints: const BoxConstraints(minHeight: 112),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // الأيقونة المتدرجة
+                  // الأيقونة المتدرجة (أكبر)
                   Container(
-                    width: 58,
-                    height: 58,
+                    // كان: 58x58
+                    width: 70,
+                    height: 70,
                     decoration: BoxDecoration(
                       gradient: gradient,
-                      borderRadius: BorderRadius.circular(15),
+                      borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
                           color: gradient.colors.first.withOpacity(0.35),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
+                          blurRadius: 14,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
-                    child: Icon(icon, color: Colors.white, size: 30),
+                    // كان: size 30
+                    child: Icon(icon, color: Colors.white, size: 34),
                   ),
 
-                  const SizedBox(width: 15),
-                  // النص - أكبر حجماً
+                  const SizedBox(width: 18),
+
+                  // النصوص أكبر
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           title,
-                          style: TextStyle(
-                            fontSize: 17.5,
-                            fontWeight: FontWeight.w700,
+                          style: const TextStyle(
+                            // كان: 17.5
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
                             color: deepPurple,
+                            height: 1.15,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Text(
                           subtitle,
                           style: TextStyle(
-                            fontSize: 13,
-                            color: deepPurple.withOpacity(0.5),
+                            // كان: 13
+                            fontSize: 14.5,
+                            color: deepPurple.withOpacity(0.55),
                             fontWeight: FontWeight.w500,
+                            height: 1.2,
                           ),
                         ),
                       ],
                     ),
                   ),
 
-                  const SizedBox(width: 10),
-                  // سهم متدرج على اليمين
+                  const SizedBox(width: 12),
+
+                  // سهم أكبر ومساحة لمس أوسع
                   Container(
-                    padding: const EdgeInsets.all(7),
+                    // كان: padding 7
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          gradient.colors.first.withOpacity(0.1),
-                          gradient.colors.last.withOpacity(0.1),
+                          gradient.colors.first.withOpacity(0.12),
+                          gradient.colors.last.withOpacity(0.12),
                         ],
                       ),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
                       Icons.arrow_forward_ios,
-                      size: 15,
+                      // كان: 15
+                      size: 18,
                       color: gradient.colors.first,
                     ),
                   ),
@@ -574,7 +574,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 Container(
                   padding: const EdgeInsets.all(30),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
+                    gradient: const LinearGradient(
                       colors: [vibrantPurple, primaryPurple],
                     ),
                     borderRadius: const BorderRadius.only(
@@ -590,10 +590,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           child: Icon(
                             Icons.person_add_alt_1,
                             color: Colors.white,
-                            size: 70, // أكبر قليلاً
+                            size: 70,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: 16),
                         Text(
                           'Complete Your Profile',
                           style: TextStyle(
@@ -627,7 +627,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
                       Column(
                         children: [
-                          // الزر الأساسي أولاً
+                          // الزر الأساسي
                           Semantics(
                             label: 'Complete now button. Go to profile page',
                             hint: 'Double tap to open profile',
@@ -635,7 +635,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             child: Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(
+                                gradient: const LinearGradient(
                                   colors: [vibrantPurple, primaryPurple],
                                 ),
                                 borderRadius: BorderRadius.circular(15),
@@ -674,7 +674,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                 ),
-                                child: Text(
+                                child: const Text(
                                   'Complete Now',
                                   style: TextStyle(
                                     fontSize: 18,
@@ -686,7 +686,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          // زر Later ثانياً
+                          // زر Later
                           Semantics(
                             label: 'Later button. Dismiss this alert',
                             hint: 'Double tap to dismiss',
@@ -711,7 +711,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                 ),
-                                child: Text(
+                                child: const Text(
                                   'Later',
                                   style: TextStyle(
                                     fontSize: 12,
@@ -893,7 +893,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.emergency_outlined,
                 color: Colors.white,
                 size: 36,
