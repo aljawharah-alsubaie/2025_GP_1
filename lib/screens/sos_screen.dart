@@ -442,7 +442,6 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
 
   void _showSuccessDialog(BuildContext context) async {
     _hapticFeedback();
-    await _speak('Emergency alert sent to all contacts');
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
