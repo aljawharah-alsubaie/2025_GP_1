@@ -19,6 +19,9 @@ class SosScreen extends StatefulWidget {
 }
 
 class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
+  // DEMO toggle (true = no real sending, just shows success)
+  static const bool kDemoMode = true;
+
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FlutterTts _tts = FlutterTts();
@@ -30,7 +33,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late AnimationController _slideController;
 
-  // 🎨 نظام ألوان موحد
+  // Colors
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -41,22 +44,17 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
 
-    // ✅ تهيئة الـ controllers أولاً
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
-
     _slideController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-
-    // ثم نبدأ الـ animations
     _fadeController.forward();
     _slideController.forward();
 
-    // بعدين نبدأ باقي الإعدادات
     _initTts();
     _loadUserData();
   }
@@ -65,10 +63,14 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     await _tts.setLanguage("en-US");
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
+    await _tts.awaitSpeakCompletion(true);
   }
 
   Future<void> _speak(String text) async {
-    await _tts.speak(text);
+    try {
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (_) {}
   }
 
   void _hapticFeedback() {
@@ -89,12 +91,10 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     try {
       final User? user = _auth.currentUser;
       if (user == null) {
-        if (mounted) {
-          setState(() {
-            _userName = 'Guest';
-            _isLoadingUserData = false;
-          });
-        }
+        setState(() {
+          _userName = 'Guest';
+          _isLoadingUserData = false;
+        });
         return;
       }
 
@@ -104,47 +104,39 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
           .snapshots()
           .listen(
             (DocumentSnapshot userDoc) {
-              if (mounted) {
-                if (userDoc.exists) {
-                  final Map<String, dynamic>? userData =
-                      userDoc.data() as Map<String, dynamic>?;
-                  setState(() {
-                    _userName =
-                        userData?['full_name'] as String? ??
-                        userData?['displayName'] as String? ??
-                        userData?['name'] as String? ??
-                        user.displayName ??
-                        user.email?.split('@')[0] ??
-                        'User';
-                    _isLoadingUserData = false;
-                  });
-                } else {
-                  _setUserNameFromAuth(user);
-                }
+              if (!mounted) return;
+              if (userDoc.exists) {
+                final Map<String, dynamic>? userData =
+                    userDoc.data() as Map<String, dynamic>?;
+                setState(() {
+                  _userName =
+                      userData?['full_name'] as String? ??
+                      userData?['displayName'] as String? ??
+                      userData?['name'] as String? ??
+                      user.displayName ??
+                      user.email?.split('@')[0] ??
+                      'User';
+                  _isLoadingUserData = false;
+                });
+              } else {
+                _setUserNameFromAuth(user);
               }
             },
             onError: (error) {
-              debugPrint('Firestore user data listener error: $error');
-              if (mounted) {
-                final User? currentUser = _auth.currentUser;
-                if (currentUser != null) {
-                  _setUserNameFromAuth(currentUser);
-                }
-              }
+              if (!mounted) return;
+              final User? currentUser = _auth.currentUser;
+              if (currentUser != null) _setUserNameFromAuth(currentUser);
             },
           );
-    } catch (e) {
-      debugPrint('Load user data error: $e');
-    }
+    } catch (_) {}
   }
 
   void _setUserNameFromAuth(User user) {
-    if (mounted) {
-      setState(() {
-        _userName = user.displayName ?? user.email?.split('@')[0] ?? 'User';
-        _isLoadingUserData = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _userName = user.displayName ?? user.email?.split('@')[0] ?? 'User';
+      _isLoadingUserData = false;
+    });
   }
 
   void _onNavTap(BuildContext context, int index) {
@@ -163,7 +155,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
       );
     } else if (index == 2) {
       _speak('Emergency');
-      // Already on SOS screen
+      // Already here
     } else if (index == 3) {
       _speak('Settings');
       Navigator.pushReplacement(
@@ -276,8 +268,6 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
       child: Column(
         children: [
           const SizedBox(height: 40),
-
-          // Info Text - بدون بوكس، مباشر على الخلفية
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
@@ -300,7 +290,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Click SOS button to call the help',
+                  'Tap the SOS button to call for help.',
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
@@ -320,10 +310,8 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 60),
           const Spacer(),
-
-          // SOS Button
-          SosButton(onLocationSent: _showSuccessDialog),
-
+          // SOS Button (demo mode shows success immediately)
+          SosButton(onSuccess: _showSuccessDialog),
           const Spacer(),
         ],
       ),
@@ -452,18 +440,26 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _showSuccessDialog(BuildContext context) {
+  void _showSuccessDialog(BuildContext context) async {
     _hapticFeedback();
-    _speak('Help is on the way');
+    await _speak('Emergency alert sent to all contacts');
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Emergency alert sent to all contacts'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 3),
+      ),
+    );
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (BuildContext context) {
-        Timer(const Duration(seconds: 5), () {
-          if (Navigator.canPop(context)) {
-            Navigator.of(context).pop();
-          }
+      builder: (BuildContext ctx) {
+        Timer(const Duration(seconds: 4), () {
+          if (Navigator.canPop(ctx)) Navigator.of(ctx).pop();
         });
 
         return Dialog(
@@ -508,12 +504,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  'Emergency contacts have been notified',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: deepPurple.withOpacity(0.6),
-                  ),
+                const Text(
+                  'Emergency alert sent to all contacts',
+                  style: TextStyle(fontSize: 14, color: Color(0xFF5E275F)),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -526,9 +519,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
 }
 
 class SosButton extends StatefulWidget {
-  final Function(BuildContext) onLocationSent;
+  final Function(BuildContext) onSuccess; // callback to show dialog
 
-  const SosButton({super.key, required this.onLocationSent});
+  const SosButton({super.key, required this.onSuccess});
 
   @override
   State<SosButton> createState() => _SosButtonState();
@@ -549,7 +542,6 @@ class _SosButtonState extends State<SosButton>
       duration: const Duration(seconds: 2),
       vsync: this,
     )..repeat(reverse: true);
-
     _pulseAnimation = Tween<double>(
       begin: 1.0,
       end: 1.4,
@@ -560,10 +552,14 @@ class _SosButtonState extends State<SosButton>
     await _tts.setLanguage("en-US");
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
+    await _tts.awaitSpeakCompletion(true);
   }
 
   Future<void> _speak(String text) async {
-    await _tts.speak(text);
+    try {
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (_) {}
   }
 
   void _hapticFeedback() {
@@ -594,84 +590,46 @@ class _SosButtonState extends State<SosButton>
   Future<void> _handleSosPress() async {
     if (_isProcessing) return;
 
-    // ✅ 3 اهتزازات قوية للتأكيد
+    // Triple haptic
     _hapticFeedback();
     await Future.delayed(const Duration(milliseconds: 100));
     _hapticFeedback();
     await Future.delayed(const Duration(milliseconds: 100));
     _hapticFeedback();
 
-    setState(() {
-      _isProcessing = true;
-    });
+    setState(() => _isProcessing = true);
 
     try {
-      // ✅ أولاً: نشيك إذا عنده contacts
+      // ===================== DEMO MODE =====================
+      // NO real sending, NO navigation. Just success UI + TTS.
+      await _speak('Emergency alert sent to all contacts');
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (mounted) widget.onSuccess(context);
+      // =================== END DEMO MODE ===================
+
+      // (Keep real logic commented for later)
+      /*
       final User? user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        _speak('Please sign in first');
-        setState(() {
-          _isProcessing = false;
-        });
+        await _speak('Please sign in first');
+        setState(() => _isProcessing = false);
         return;
       }
-
-      // نجيب الـ contacts من Firebase
-      final contactsSnapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('contacts')
-          .get();
-
-      // ✅ إذا ما عنده contacts → نحوله لصفحة الـ contacts
-      if (contactsSnapshot.docs.isEmpty) {
-        _speak('Please add emergency contacts first');
-
-        setState(() {
-          _isProcessing = false;
-        });
-
-        // نحوله لصفحة الـ contacts
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ContactInfoPage()),
-        );
-
-        return;
-      }
-
-      // ✅ إذا عنده contacts → نرسل اللوكيشن مباشرة!
-      _speak('Emergency SOS activated. Sending location to all contacts');
-
-      // نفتح صفحة اختيار اللوكيشن
-      final result = await Navigator.push<bool>(
-        context,
-        MaterialPageRoute(builder: (_) => const LocationSelectionPage()),
-      );
-
-      if (result == true && mounted) {
-        // ✅ تم إرسال اللوكيشن بنجاح
-        await _speak('Emergency alert sent successfully to all contacts');
-        widget.onLocationSent(context);
-      }
+      // ... fetch contacts, open LocationSelectionPage, send, etc.
+      */
     } catch (e) {
-      if (mounted) {
-        _speak('Failed to send emergency alert');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to process request. Please try again.'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.all(16),
-          ),
-        );
-      }
+      if (!mounted) return;
+      await _speak('Failed to send emergency alert');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Failed to process request. Please try again.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+        ),
+      );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-        });
-      }
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
