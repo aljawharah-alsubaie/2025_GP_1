@@ -579,11 +579,28 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     }
   }
 
-  Future<void> _deleteContact(String contactId, String contactName) async {
+  Future<void> _deleteContact(String contactId) async {
     final User? user = _auth.currentUser;
     if (user == null) return;
 
     try {
+      // 1) نجيب بيانات الكونتاكت قبل نحذفه
+      final doc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('contacts')
+          .doc(contactId)
+          .get();
+
+      if (!doc.exists) {
+        _showSnackBar('Contact not found', Colors.red);
+        return;
+      }
+
+      // ناخذ الاسم من الدوكمنت
+      final contactName = doc.data()?['name'] ?? 'This contact';
+
+      // 2) نحذف الكونتاكت
       await _firestore
           .collection('users')
           .doc(user.uid)
@@ -591,8 +608,10 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           .doc(contactId)
           .delete();
 
+      // 3) نعيد تحميل الليستة
       await _loadContacts();
 
+      // 4) نطلع المسج
       if (mounted) {
         _showSnackBar('$contactName deleted successfully!', Colors.green);
       }
@@ -720,7 +739,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                         onPressed: () async {
                           _hapticFeedback();
                           Navigator.pop(context);
-                          await _deleteContact(contactId, contactName);
+                          await _deleteContact(contactId);
                         },
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 20),
@@ -832,27 +851,28 @@ class _ContactInfoPageState extends State<ContactInfoPage>
             Row(
               children: [
                 Semantics(
-                  label: 'Back to home',
+                  label: 'Go back to previous page',
                   button: true,
                   child: GestureDetector(
                     onTap: () {
-                      _hapticFeedback();
                       _speak('Going back');
-                      Navigator.pop(context);
+                      Future.delayed(const Duration(milliseconds: 800), () {
+                        Navigator.pop(context);
+                      });
                     },
                     child: Container(
                       width: 52,
                       height: 52,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [vibrantPurple, primaryPurple],
                         ),
-                        borderRadius: BorderRadius.all(Radius.circular(18)),
+                        borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(
-                            color: Color.fromARGB(76, 142, 58, 149),
+                            color: vibrantPurple.withOpacity(0.3),
                             blurRadius: 12,
-                            offset: Offset(0, 4),
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),
@@ -1376,7 +1396,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
 
   Widget _buildVoiceAddButton() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 25),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 55),
       child: Semantics(
         label: 'Add new contact with voice',
         button: true,
@@ -1388,7 +1408,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           },
           child: Container(
             width: double.infinity,
-            height: 58,
+            height: 70,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [deepPurple, vibrantPurple],
@@ -1411,7 +1431,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.mic, color: Colors.white, size: 24),
+                  child: const Icon(Icons.mic, color: Colors.white, size: 26),
                 ),
                 const SizedBox(width: 12),
                 const Text(
@@ -1419,7 +1439,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 18,
+                    fontSize: 20,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -1430,7 +1450,6 @@ class _ContactInfoPageState extends State<ContactInfoPage>
       ),
     );
   }
-  // ✅ استبدل _buildFloatingBottomNav في home_page.dart بهذا الكود
 
   Widget _buildFloatingBottomNav() {
     return Stack(
@@ -1444,7 +1463,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
             topRight: Radius.circular(24),
           ),
           child: Container(
-            height: 90,
+            height: 95,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -1466,10 +1485,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1480,7 +1496,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Homepage');
+                        _speak('Navigating to Home page');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1495,7 +1511,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Reminders');
+                        _speak(
+                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                        );
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1511,7 +1529,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       isActive: true,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Emergency Contacts');
+                        _speak('You are already on Emergency Contacts page');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1526,7 +1544,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Settings');
+                        _speak(
+                          'Settings, Manage your settings and preferences',
+                        );
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1542,53 +1562,55 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           ),
         ),
 
-        // 🔴 الدائرة الكبيرة للطوارئ
         Positioned(
-          bottom: 35,
-          child: Semantics(
-            label: 'Emergency SOS button',
-            button: true,
-            hint: 'Double tap for emergency',
-            child: GestureDetector(
-              onTap: () {
-                _hapticFeedback();
-                _speak('Emergency SOS');
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SosScreen()),
-                );
-              },
-              child: Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.red.shade400, Colors.red.shade700],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.6),
-                      blurRadius: 25,
-                      spreadRadius: 3,
+          bottom: 40,
+          child: Transform.translate(
+            offset: const Offset(-6, 0),
+            child: Semantics(
+              label: 'Emergency SOS button',
+              button: true,
+              hint: 'Double tap for emergency',
+              child: GestureDetector(
+                onTap: () {
+                  _hapticFeedback();
+                  _speak('Emergency SOS');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SosScreen()),
+                  );
+                },
+                child: Container(
+                  width: 75,
+                  height: 75,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Colors.red.shade400, Colors.red.shade700],
                     ),
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.3),
-                      blurRadius: 40,
-                      spreadRadius: 5,
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 3,
                     ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.emergency_outlined,
-                  color: Colors.white,
-                  size: 36,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.6),
+                        blurRadius: 25,
+                        spreadRadius: 5,
+                      ),
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.3),
+                        blurRadius: 40,
+                        spreadRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.emergency_outlined,
+                    color: Colors.white,
+                    size: 40,
+                  ),
                 ),
               ),
             ),
@@ -1613,12 +1635,12 @@ class _ContactInfoPageState extends State<ContactInfoPage>
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: isActive
                 ? Colors.white.withOpacity(0.25)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             border: isActive
                 ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
                 : null,
@@ -1629,7 +1651,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               Icon(
                 icon,
                 color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                size: 22,
+                size: 25,
               ),
               const SizedBox(height: 3),
               Text(

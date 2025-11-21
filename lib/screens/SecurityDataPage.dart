@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'home_page.dart';
+import 'reminders.dart';
+import 'contact_info_page.dart';
+import 'settings.dart';
+import './sos_screen.dart';
 
 class SecurityDataPage extends StatefulWidget {
   const SecurityDataPage({super.key});
@@ -20,6 +25,10 @@ class _SecurityDataPageState extends State<SecurityDataPage>
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
+
+  // Listeners flags
+  late VoidCallback _newPwdListener;
+  late VoidCallback _confirmPwdListener;
 
   bool isChangingPassword = false;
   bool isLoading = false;
@@ -40,6 +49,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
   static const Color primaryPurple = Color(0xFF9C4A9E);
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
+  static const Color cancelUltraPale = Color(0xFFFBF7FF);
 
   @override
   void initState() {
@@ -55,6 +65,12 @@ class _SecurityDataPageState extends State<SecurityDataPage>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
+
+    // live checklist refresh
+    _newPwdListener = () => setState(() {});
+    _confirmPwdListener = () => setState(() {});
+    _newPasswordController.addListener(_newPwdListener);
+    _confirmPasswordController.addListener(_confirmPwdListener);
   }
 
   Future<void> _initTts() async {
@@ -77,6 +93,8 @@ class _SecurityDataPageState extends State<SecurityDataPage>
     _fadeController.dispose();
     _slideController.dispose();
     _currentPasswordController.dispose();
+    _newPasswordController.removeListener(_newPwdListener);
+    _confirmPasswordController.removeListener(_confirmPwdListener);
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -88,12 +106,8 @@ class _SecurityDataPageState extends State<SecurityDataPage>
       _currentErrorMessage = message;
       _showErrorBanner = true;
     });
-
-    // إخفاء البانر تلقائياً بعد 5 ثواني
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) {
-        _hideErrorBanner();
-      }
+    Future.delayed(const Duration(seconds: 6), () {
+      if (mounted) _hideErrorBanner();
     });
   }
 
@@ -105,52 +119,65 @@ class _SecurityDataPageState extends State<SecurityDataPage>
     });
   }
 
-  // ✅ التحقق من قوة كلمة المرور
-  String? _validatePassword(String password) {
+  // ✅ التحقق من قوة كلمة المرور — يُرجع "كل" المخالفات دفعة واحدة
+  List<String> _validatePasswordAll(String password) {
+    final List<String> errors = [];
+
     if (password.length < 8) {
-      return 'Password must be at least 8 characters';
+      errors.add('Must be at least 8 characters');
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      errors.add('Must contain at least one uppercase letter (A-Z)');
+    }
+    if (!RegExp(r'[a-z]').hasMatch(password)) {
+      errors.add('Must contain at least one lowercase letter (a-z)');
+    }
+    if (!RegExp(r'[0-9]').hasMatch(password)) {
+      errors.add('Must contain at least one number (0-9)');
+    }
+    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) {
+      errors.add('Must contain at least one special character');
     }
 
-    if (!password.contains(RegExp(r'[A-Z]'))) {
-      return 'Password must contain uppercase letters';
-    }
-
-    if (!password.contains(RegExp(r'[a-z]'))) {
-      return 'Password must contain lowercase letters';
-    }
-
-    if (!password.contains(RegExp(r'[0-9]'))) {
-      return 'Password must contain numbers';
-    }
-
-    if (!password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
-      return 'Password must contain special characters';
-    }
-
-    return null;
+    return errors;
   }
 
   Future<void> _updatePassword() async {
-    if (_newPasswordController.text != _confirmPasswordController.text) {
-      _showErrorBannerMessage('New passwords do not match');
-      _speak('New passwords do not match');
+    // ✅ تحقق الحقول المطلوبة (كلها)
+    final current = _currentPasswordController.text.trim();
+    final newer = _newPasswordController.text.trim();
+    final confirm = _confirmPasswordController.text.trim();
+    if (current.isEmpty || newer.isEmpty || confirm.isEmpty) {
+      const msg = 'Please fill all required fields';
+      _showErrorBannerMessage(msg);
+      _speak(msg);
       return;
     }
 
-    // التحقق من أن كلمة المرور الجديدة مختلفة عن القديمة
-    if (_currentPasswordController.text == _newPasswordController.text) {
-      _showErrorBannerMessage(
-        'New password must be different from current password',
+    // التحقق من تطابق الجديدة والتأكيد
+    if (newer != confirm) {
+      final msg = 'New passwords do not match';
+      _showErrorBannerMessage(msg);
+      _speak(msg);
+      return;
+    }
+
+    // التحقق من أن الجديدة ليست نفس الحالية
+    if (current == newer) {
+      const msg = 'New password must be different from current password';
+      _showErrorBannerMessage(msg);
+      _speak(msg);
+      return;
+    }
+
+    // ✅ التحقق الشامل
+    final allErrors = _validatePasswordAll(newer);
+    if (allErrors.isNotEmpty) {
+      final pretty = 'Please fix the following:\n• ${allErrors.join('\n• ')}';
+      _showErrorBannerMessage(pretty);
+      _speak(
+        'Password does not meet the requirements. ${allErrors.join('. ')}.',
       );
-      _speak('New password must be different from current password');
-      return;
-    }
-
-    // التحقق من قوة كلمة المرور الجديدة
-    String? passwordError = _validatePassword(_newPasswordController.text);
-    if (passwordError != null) {
-      _showErrorBannerMessage(passwordError);
-      _speak(passwordError);
       return;
     }
 
@@ -163,11 +190,11 @@ class _SecurityDataPageState extends State<SecurityDataPage>
       if (user != null && user.email != null) {
         final credential = EmailAuthProvider.credential(
           email: user.email!,
-          password: _currentPasswordController.text,
+          password: current,
         );
 
         await user.reauthenticateWithCredential(credential);
-        await user.updatePassword(_newPasswordController.text);
+        await user.updatePassword(newer);
 
         _showSuccessSnackBar('Password updated successfully');
         _speak('Password updated successfully');
@@ -181,7 +208,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
       String errorMessage = 'Failed to update password';
 
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        errorMessage = 'Current password is incorrect';
+        errorMessage = 'Invalid password. Please try again';
       } else if (e.code == 'weak-password') {
         errorMessage = 'New password is too weak';
       } else if (e.code == 'requires-recent-login') {
@@ -197,7 +224,6 @@ class _SecurityDataPageState extends State<SecurityDataPage>
       _showErrorBannerMessage(errorMessage);
       _speak(errorMessage);
     } catch (e) {
-      print('Error updating password: $e');
       _showErrorBannerMessage('An unexpected error occurred');
       _speak('An unexpected error occurred');
     } finally {
@@ -214,15 +240,50 @@ class _SecurityDataPageState extends State<SecurityDataPage>
   }
 
   void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFF4CAF50),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green,
+          elevation: 14,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          duration: const Duration(seconds: 2),
+          content: Container(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    message,
+                    softWrap: true,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.25,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
   }
 
   @override
@@ -240,9 +301,12 @@ class _SecurityDataPageState extends State<SecurityDataPage>
               ],
             ),
           ),
-          // بانر الخطأ في الأسفل
           Positioned(left: 0, right: 0, bottom: 0, child: _buildErrorBanner()),
         ],
+      ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [_buildFloatingBottomNav()],
       ),
     );
   }
@@ -266,27 +330,29 @@ class _SecurityDataPageState extends State<SecurityDataPage>
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ExcludeSemantics(
-            child: const Icon(
-              Icons.error_outline,
-              color: Colors.white,
-              size: 28,
-            ),
+          const ExcludeSemantics(
+            child: Icon(Icons.error_outline, color: Colors.white, size: 28),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Semantics(
               liveRegion: true,
-              child: Text(
-                _currentErrorMessage!,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 180),
+                child: SingleChildScrollView(
+                  child: Text(
+                    _currentErrorMessage!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      height: 1.3,
+                    ),
+                    softWrap: true,
+                  ),
                 ),
-                maxLines: 8,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
@@ -337,27 +403,30 @@ class _SecurityDataPageState extends State<SecurityDataPage>
         child: Row(
           children: [
             Semantics(
-              label: 'Back to settings',
+              label: 'Go back to previous page',
               button: true,
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
+                  _tts.stop();
                   _speak('Going back');
-                  Navigator.pop(context);
+                  Future.delayed(const Duration(milliseconds: 800), () {
+                    Navigator.pop(context);
+                  });
                 },
                 child: Container(
                   width: 52,
                   height: 52,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
                       colors: [vibrantPurple, primaryPurple],
                     ),
-                    borderRadius: BorderRadius.all(Radius.circular(18)),
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: Color.fromARGB(76, 142, 58, 149),
+                        color: vibrantPurple.withOpacity(0.3),
                         blurRadius: 12,
-                        offset: Offset(0, 4),
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
@@ -427,6 +496,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
               const LinearGradient(colors: [deepPurple, vibrantPurple]),
               onTap: () {
                 _hapticFeedback();
+
                 setState(() {
                   isChangingPassword = !isChangingPassword;
                 });
@@ -444,9 +514,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
               const SizedBox(height: 30),
               _buildPasswordForm(),
             ],
-            const SizedBox(height: 30),
-            _buildSecurityTipsCard(),
-            const SizedBox(height: 30),
+            const SizedBox(height: 50),
           ],
         ),
       ),
@@ -466,7 +534,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
@@ -486,11 +554,11 @@ class _SecurityDataPageState extends State<SecurityDataPage>
           child: Row(
             children: [
               Container(
-                width: 58,
-                height: 58,
+                width: 62,
+                height: 62,
                 decoration: BoxDecoration(
                   gradient: gradient,
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
                       color: gradient.colors.first.withOpacity(0.35),
@@ -499,9 +567,9 @@ class _SecurityDataPageState extends State<SecurityDataPage>
                     ),
                   ],
                 ),
-                child: Icon(icon, color: Colors.white, size: 30),
+                child: Icon(icon, color: Colors.white, size: 32),
               ),
-              const SizedBox(width: 15),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -509,33 +577,33 @@ class _SecurityDataPageState extends State<SecurityDataPage>
                     Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 17,
                         fontWeight: FontWeight.w700,
                         color: deepPurple,
                       ),
-                      softWrap: false,
+                      softWrap: true,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 5),
                     Text(
                       subtitle,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 14,
                         color: deepPurple.withOpacity(0.7),
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.2,
                       ),
-                      softWrap: false,
+                      softWrap: true,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 6),
               Icon(
                 isChangingPassword
                     ? Icons.keyboard_arrow_up
                     : Icons.keyboard_arrow_down,
                 color: vibrantPurple,
-                size: 28,
+                size: 30,
               ),
             ],
           ),
@@ -545,6 +613,10 @@ class _SecurityDataPageState extends State<SecurityDataPage>
   }
 
   Widget _buildPasswordForm() {
+    final newPwd = _newPasswordController.text;
+    final confirmPwd = _confirmPasswordController.text;
+    final rules = _passwordRulesStatus(newPwd);
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -573,6 +645,11 @@ class _SecurityDataPageState extends State<SecurityDataPage>
             _newPasswordVisible,
             (value) => setState(() => _newPasswordVisible = value),
           ),
+
+          // ✅ قائمة حيّة للمتطلبات
+          const SizedBox(height: 12),
+          _buildLiveChecklist(rules),
+
           const SizedBox(height: 20),
           _buildPasswordField(
             'Confirm New Password',
@@ -580,10 +657,67 @@ class _SecurityDataPageState extends State<SecurityDataPage>
             _confirmPasswordVisible,
             (value) => setState(() => _confirmPasswordVisible = value),
           ),
-          const SizedBox(height: 30),
-          Row(
+          const SizedBox(height: 8),
+          _buildConfirmMatchHint(newPwd, confirmPwd),
+
+          const SizedBox(height: 45),
+          Column(
             children: [
-              Expanded(
+              // زر التحديث
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [vibrantPurple, primaryPurple],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: vibrantPurple.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  onPressed: isLoading
+                      ? null
+                      : () {
+                          _hapticFeedback();
+                          _updatePassword();
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                  ),
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 26,
+                          width: 26,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                      : const Text(
+                          'Update Password',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 28),
+
+              // زر الإلغاء — خلفية فاتحة + حدود ونص كما كانت
+              SizedBox(
+                width: double.infinity,
                 child: OutlinedButton(
                   onPressed: isLoading
                       ? null
@@ -596,70 +730,25 @@ class _SecurityDataPageState extends State<SecurityDataPage>
                           _speak('Password form cancelled');
                         },
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: vibrantPurple.withOpacity(0.5)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
+                    backgroundColor: cancelUltraPale, // يبقى فاتح
+                    foregroundColor: vibrantPurple, // ← رجّعنا لون النص للأصلي
+                    side: BorderSide(
+                      // ← رجّعنا البوردر للأصلي
+                      color: vibrantPurple.withOpacity(0.5),
+                      width: 2,
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    overlayColor: vibrantPurple.withOpacity(0.06),
                   ),
-                  child: Text(
+                  child: const Text(
                     'Cancel',
                     style: TextStyle(
-                      color: vibrantPurple,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
+                      fontWeight: FontWeight.w700, // نفس السماكة الأصلية
+                      fontSize: 20,
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [vibrantPurple, primaryPurple],
-                    ),
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: vibrantPurple.withOpacity(0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    onPressed: isLoading
-                        ? null
-                        : () {
-                            _hapticFeedback();
-                            _updatePassword();
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : const Text(
-                            'Update',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
-                            ),
-                          ),
                   ),
                 ),
               ),
@@ -682,24 +771,25 @@ class _SecurityDataPageState extends State<SecurityDataPage>
         Text(
           label,
           style: const TextStyle(
-            fontSize: 15,
+            fontSize: 17,
             fontWeight: FontWeight.w700,
             color: deepPurple,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         TextField(
           controller: controller,
           obscureText: !isVisible,
           style: const TextStyle(
             color: deepPurple,
             fontWeight: FontWeight.w600,
+            fontSize: 18,
           ),
           decoration: InputDecoration(
-            prefixIcon: Icon(
+            prefixIcon: const Icon(
               Icons.lock_outline,
               color: vibrantPurple,
-              size: 22,
+              size: 26,
             ),
             suffixIcon: IconButton(
               icon: Icon(
@@ -707,7 +797,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
                     ? Icons.visibility_outlined
                     : Icons.visibility_off_outlined,
                 color: deepPurple.withOpacity(0.6),
-                size: 22,
+                size: 26,
               ),
               onPressed: () {
                 _hapticFeedback();
@@ -718,6 +808,7 @@ class _SecurityDataPageState extends State<SecurityDataPage>
             hintStyle: TextStyle(
               color: deepPurple.withOpacity(0.4),
               fontWeight: FontWeight.w500,
+              fontSize: 17,
             ),
             filled: true,
             fillColor: ultraLightPurple,
@@ -731,11 +822,11 @@ class _SecurityDataPageState extends State<SecurityDataPage>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: vibrantPurple, width: 2),
+              borderSide: const BorderSide(color: vibrantPurple, width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 16,
+              horizontal: 18,
+              vertical: 20,
             ),
           ),
         ),
@@ -743,96 +834,301 @@ class _SecurityDataPageState extends State<SecurityDataPage>
     );
   }
 
-  Widget _buildSecurityTipsCard() {
+  Map<String, bool> _passwordRulesStatus(String pwd) {
+    return {
+      'At least 8 characters': pwd.length >= 8,
+      'Uppercase letter (A-Z)': RegExp(r'[A-Z]').hasMatch(pwd),
+      'Lowercase letter (a-z)': RegExp(r'[a-z]').hasMatch(pwd),
+      'Number (0-9)': RegExp(r'[0-9]').hasMatch(pwd),
+      'Special character': RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(pwd),
+    };
+  }
+
+  Widget _buildLiveChecklist(Map<String, bool> rules) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [palePurple.withOpacity(0.3), ultraLightPurple],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: deepPurple.withOpacity(0.5), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: palePurple.withOpacity(0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        color: ultraLightPurple,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palePurple.withOpacity(0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [vibrantPurple, primaryPurple],
+        children: rules.entries.map((e) {
+          final ok = e.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Icon(
+                  ok ? Icons.check_circle : Icons.cancel,
+                  size: 18,
+                  color: ok ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    e.key,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: ok ? const Color(0xFF2E7D32) : deepPurple,
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(
-                  Icons.security,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Text(
-                'Password Requirements',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: deepPurple,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 15),
-          _buildSecurityTip('At least 8 characters long'),
-          _buildSecurityTip('Contains uppercase letters (A-Z)'),
-          _buildSecurityTip('Contains lowercase letters (a-z)'),
-          _buildSecurityTip('Contains numbers (0-9)'),
-          _buildSecurityTip('Contains special characters (!@#\$%^&*)'),
-        ],
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
 
-  Widget _buildSecurityTip(String tip) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 7),
-            width: 6,
-            height: 6,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
-              shape: BoxShape.circle,
-            ),
+  Widget _buildConfirmMatchHint(String newPwd, String confirmPwd) {
+    if (confirmPwd.isEmpty && newPwd.isEmpty) return const SizedBox.shrink();
+    final matches = newPwd == confirmPwd && confirmPwd.isNotEmpty;
+    return Row(
+      children: [
+        Icon(
+          matches ? Icons.check_circle : Icons.error_outline,
+          size: 18,
+          color: matches ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          matches ? 'Passwords match' : 'Passwords do not match yet',
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            color: matches ? const Color(0xFF2E7D32) : const Color(0xFFB26A00),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              tip,
-              style: TextStyle(
-                fontSize: 14,
-                color: deepPurple.withOpacity(0.8),
-                fontWeight: FontWeight.w500,
-                height: 1.5,
-                letterSpacing: 0.2,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFloatingBottomNav() {
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
+      children: [
+        // الفوتر الأساسي
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+          child: Container(
+            height: 95,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  deepPurple.withOpacity(0.95),
+                  vibrantPurple.withOpacity(0.98),
+                  primaryPurple,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: deepPurple.withOpacity(0.3),
+                  blurRadius: 25,
+                  offset: const Offset(0, -8),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildNavButton(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      isActive: false,
+                      description: 'Navigate to Homepage',
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Navigate to Homepage');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.notifications_rounded,
+                      label: 'Reminders',
+                      description: 'Manage your reminders and notifications',
+                      onTap: () {
+                        _speak(
+                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                        );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RemindersPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 60), // مساحة للدائرة
+                    _buildNavButton(
+                      icon: Icons.contacts_rounded,
+                      label: 'Contacts',
+                      description:
+                          'Manage your emergency contacts and important people',
+                      onTap: () {
+                        _speak('Contact, Store and manage emergency contacts');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ContactInfoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      description: 'Adjust app settings and preferences',
+                      onTap: () {
+                        _speak(
+                          'Settings, Manage your settings and preferences',
+                        );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ],
+        ),
+
+        Positioned(
+          bottom: 40,
+          child: GestureDetector(
+            onTap: () {
+              _hapticFeedback();
+              _speak(
+                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+              );
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SosScreen()),
+              );
+            },
+            child: Container(
+              width: 75,
+              height: 75,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.red.shade400, Colors.red.shade700],
+                ),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 3,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.6),
+                    blurRadius: 25,
+                    spreadRadius: 5,
+                  ),
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 40,
+                    spreadRadius: 8,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.emergency_outlined,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
+  Widget _buildNavButton({
+    required IconData icon,
+    required String label,
+    required String description,
+    bool isActive = false,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      label: '$label button',
+      button: true,
+      selected: isActive,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.white.withOpacity(0.25)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: isActive
+                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isActive
+                    ? Colors.white
+                    : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
+                size: 25,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.9),
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+// helper classes to access color constants in const widgets
+class SecurityDataPageStateColors {
+  static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
+  static const Color vibrantPurple = Color(0xFF8E3A95);
+  static const Color primaryPurple = Color(0xFF9C4A9E);
+  static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
 }

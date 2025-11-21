@@ -22,6 +22,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   @override
   void initState() {
     super.initState();
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
@@ -40,8 +41,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         );
 
     _animationController.forward();
-    _initTts();
-    _speakWelcomeMessage();
+
+    // ✅ تهيئة الـ TTS ثم نطق رسالة الترحيب بعد ما يجهز (تشتغل حتى أول مرة)
+    _setupTtsAndSpeak();
   }
 
   @override
@@ -52,18 +54,31 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.dispose();
   }
 
-  void _initTts() async {
+  // ✅ خلتها Future عشان نقدر نعمل await لها
+  Future<void> _initTts() async {
     await _flutterTts.setLanguage("en-US");
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setVolume(1.0);
+
+    // يخلي speak ينتظر لين يخلص قبل ما يكمل (مفيد لاحقًا)
+    await _flutterTts.awaitSpeakCompletion(true);
   }
 
-  // دالة جديدة لنطق رسالة الترحيب
+  // ✅ دالة تجمع التهيئة + الترحيب
+  Future<void> _setupTtsAndSpeak() async {
+    // نهيء TTS أول
+    await _initTts();
+
+    // ننتظر شوي بسيط بعد التهيئة (خصوصًا أول تشغيل)
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    // ثم نطق رسالة الترحيب
+    await _speakWelcomeMessage();
+  }
+
+  // رسالة الترحيب
   Future<void> _speakWelcomeMessage() async {
-    await Future.delayed(
-      const Duration(milliseconds: 200),
-    ); // انتظار بسيط قبل البدء
     await _flutterTts.speak(
       "Welcome to your new journey. Please choose Create Account or Login",
     );
@@ -146,14 +161,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         child: Column(
                           children: [
                             // Logo
-                            Container(
+                            SizedBox(
                               width: 325,
                               height: 325,
                               child: Image.asset(
                                 'assets/images/logo.png',
                                 color: Colors.white,
                                 errorBuilder: (context, error, stackTrace) {
-                                  // Show default icon if image not found
                                   return const Icon(
                                     Icons.diamond_outlined,
                                     size: 50,
@@ -204,6 +218,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         ],
                       ),
                       const SizedBox(height: 30),
+
                       // Login button
                       _buildButton(
                         title: 'Login',

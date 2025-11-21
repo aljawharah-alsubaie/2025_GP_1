@@ -522,11 +522,9 @@ class _SignupScreenState extends State<SignupScreen>
     }
 
     await _speak("Please fix these errors and try again.");
-    // بعد انتهاء القراءة: نترك الشريط ظاهرًا لراحة المستخدم، أو أغلقيه يدويًا من X
-    // لو حابة إغلاق تلقائي بعد القراءة، فعّلي السطرين التاليين:
-    // if (mounted && gen == _speechGen) {
-    //   _autoHideBannerAfter(const Duration(seconds: 1));
-    // }
+    if (mounted && gen == _speechGen) {
+      _autoHideBannerAfter(const Duration(seconds: 4));
+    }
   }
 
   void _registerUser() async {
@@ -551,7 +549,7 @@ class _SignupScreenState extends State<SignupScreen>
       var emailSent = false;
       try {
         final callable = FirebaseFunctions.instance.httpsCallable(
-          'sendWelcomeEmail',
+          'sendVerificationEmail',
         );
         await callable.call({
           'email': emailController.text.trim(),
@@ -579,8 +577,6 @@ class _SignupScreenState extends State<SignupScreen>
         'full_name': nameController.text.trim(),
         'email': emailController.text.trim(),
         'phone': phoneController.text.trim(),
-        'created_at': Timestamp.now(),
-        'profile_completed': false,
         'email_verified': false,
       });
 
@@ -661,10 +657,11 @@ class _SignupScreenState extends State<SignupScreen>
         setState(() => _emailVerified = true);
         _checkTimer?.cancel();
 
+        // ✅ هنا التعديل المهم: تحديث email_verified في Firestore
         await FirebaseFirestore.instance
             .collection('users')
-            .doc(user.uid)
-            .update({'email_verified': true, 'verified_at': Timestamp.now()});
+            .doc(updated!.uid)
+            .update({'email_verified': true});
 
         const storage = FlutterSecureStorage();
         await storage.write(key: 'isLoggedIn', value: 'true');
@@ -687,7 +684,9 @@ class _SignupScreenState extends State<SignupScreen>
           MaterialPageRoute(builder: (_) => const HomePage()),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      print('Error: $e');
+    }
   }
 
   void _startResendCooldown() {
@@ -722,13 +721,13 @@ class _SignupScreenState extends State<SignupScreen>
 
       _startResendCooldown();
       _showSuccessWithSpeech(
-        "New verification email sent successfully! Please check your inbox and spam folder.",
+        "New verification email sent successfully! Please check your inbox and spam folder",
       );
       HapticFeedback.mediumImpact();
     } catch (e) {
       var msg = "Failed to resend email";
       if (e is FirebaseAuthException && e.code == 'too-many-requests') {
-        msg = "Too many requests. Please wait and try again.";
+        msg = "Too many requests. Please wait and try again";
       }
       _showErrorWithSoundAndBanner(msg);
     } finally {
@@ -737,25 +736,77 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   Future<void> _signUpWithGoogle() async {
+    if (_isLoading) return;
+
     try {
       _speak("Starting Google sign up process. Please wait.");
       setState(() => _isLoading = true);
 
-      try {
-        await GoogleSignInHandler.signInWithGoogle(context);
-        await Future.delayed(const Duration(seconds: 2));
-        final user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          _showSuccessWithSpeech("Google sign up completed successfully!");
-        } else {
-          throw Exception("User not created");
-        }
-      } catch (_) {
+      // 🟣 استخدام ميثود خاصة بالـ Sign up
+      final cred = await GoogleSignInHandler.signInWithGoogleForSignup(context);
+
+      // المستخدم لغى
+      if (cred == null) {
         _showErrorWithSoundAndBanner(
           "Google sign-up canceled. Please try again.",
         );
         return;
       }
+
+      final user = cred.user;
+      if (user == null) {
+        _showErrorWithSoundAndBanner(
+          "Google sign-up failed. Please try again.",
+        );
+        return;
+      }
+
+      // 🔎 نتأكد أن له doc في Firestore (الميثود نفسها تحاول تنشئه، بس نضمن)
+      final userDocRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid);
+      final snap = await userDocRef.get();
+
+      if (!snap.exists) {
+        await userDocRef.set({
+          'full_name': user.displayName ?? 'User',
+          'email': user.email ?? '',
+          'phone': '',
+          'signInProvider': 'google',
+          'email_verified': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // 🧾 نخزن حالة الدخول
+      const storage = FlutterSecureStorage();
+      await storage.write(key: 'isLoggedIn', value: 'true');
+      await storage.write(key: 'userEmail', value: user.email ?? '');
+
+      final name = user.displayName ?? user.email ?? 'User';
+
+      _showSuccessWithSpeech(
+        "Google sign up completed successfully! Welcome $name.",
+      );
+
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
+      );
+    } on FirebaseAuthException catch (e) {
+      // لو الإيميل مرتبط بمزود ثاني مثلاً
+      if (e.code == 'account-exists-with-different-credential') {
+        _showErrorWithSoundAndBanner(
+          "An account already exists with this email using a different sign-in method. Please try logging in using that method.",
+        );
+        return;
+      }
+
+      _showErrorWithSoundAndBanner("Google sign-up failed. Please try again.");
     } catch (_) {
       _showErrorWithSoundAndBanner("Google sign-up failed. Please try again.");
     } finally {

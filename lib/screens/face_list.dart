@@ -389,12 +389,10 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // ✅ استبدل _buildFloatingBottomNav في home_page.dart بهذا الكود
-
   Widget _buildFloatingBottomNav() {
     return Stack(
       alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.none,
+      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
       children: [
         // الفوتر الأساسي
         ClipRRect(
@@ -403,7 +401,7 @@ class _FaceListPageState extends State<FaceListPage>
             topRight: Radius.circular(24),
           ),
           child: Container(
-            height: 90,
+            height: 95,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -425,10 +423,7 @@ class _FaceListPageState extends State<FaceListPage>
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -436,10 +431,11 @@ class _FaceListPageState extends State<FaceListPage>
                     _buildNavButton(
                       icon: Icons.home_rounded,
                       label: 'Home',
-                      isActive: true,
+                      isActive: false,
+                      description: 'Navigate to Homepage',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Homepage');
+                        _speak('Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -451,10 +447,11 @@ class _FaceListPageState extends State<FaceListPage>
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
                       label: 'Reminders',
-                      isActive: false,
+                      description: 'Manage your reminders and notifications',
                       onTap: () {
-                        _hapticFeedback();
-                        _speak('Reminders');
+                        _speak(
+                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                        );
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -467,10 +464,10 @@ class _FaceListPageState extends State<FaceListPage>
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
                       label: 'Contacts',
-                      isActive: false,
+                      description:
+                          'Manage your emergency contacts and important people',
                       onTap: () {
-                        _hapticFeedback();
-                        _speak('Emergency Contacts');
+                        _speak('Contact, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -482,10 +479,11 @@ class _FaceListPageState extends State<FaceListPage>
                     _buildNavButton(
                       icon: Icons.settings_rounded,
                       label: 'Settings',
-                      isActive: false,
+                      description: 'Adjust app settings and preferences',
                       onTap: () {
-                        _hapticFeedback();
-                        _speak('Settings');
+                        _speak(
+                          'Settings, Manage your settings and preferences',
+                        );
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -501,54 +499,50 @@ class _FaceListPageState extends State<FaceListPage>
           ),
         ),
 
-        // 🔴 الدائرة الكبيرة للطوارئ
         Positioned(
-          bottom: 35,
-          child: Semantics(
-            label: 'Emergency SOS button',
-            button: true,
-            hint: 'Double tap for emergency',
-            child: GestureDetector(
-              onTap: () {
-                _hapticFeedback();
-                _speak('Emergency SOS');
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SosScreen()),
-                );
-              },
-              child: Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.red.shade400, Colors.red.shade700],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.6),
-                      blurRadius: 25,
-                      spreadRadius: 3,
-                    ),
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.3),
-                      blurRadius: 40,
-                      spreadRadius: 5,
-                    ),
-                  ],
+          bottom: 40,
+          child: GestureDetector(
+            onTap: () {
+              _hapticFeedback();
+              _speak(
+                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+              );
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SosScreen()),
+              );
+            },
+            child: Container(
+              width: 75,
+              height: 75,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.red.shade400, Colors.red.shade700],
                 ),
-                child: const Icon(
-                  Icons.emergency_outlined,
-                  color: Colors.white,
-                  size: 36,
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 3,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.6),
+                    blurRadius: 25,
+                    spreadRadius: 5,
+                  ),
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 40,
+                    spreadRadius: 8,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.emergency_outlined,
+                color: Colors.white,
+                size: 40,
               ),
             ),
           ),
@@ -557,10 +551,11 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // ✅ _buildNavButton (بالأحجام الأصلية)
+  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
   Widget _buildNavButton({
     required IconData icon,
     required String label,
+    required String description,
     bool isActive = false,
     required VoidCallback onTap,
   }) {
@@ -572,7 +567,7 @@ class _FaceListPageState extends State<FaceListPage>
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: isActive
                 ? Colors.white.withOpacity(0.25)
@@ -587,8 +582,10 @@ class _FaceListPageState extends State<FaceListPage>
             children: [
               Icon(
                 icon,
-                color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                size: 22,
+                color: isActive
+                    ? Colors.white
+                    : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
+                size: 25,
               ),
               const SizedBox(height: 3),
               Text(

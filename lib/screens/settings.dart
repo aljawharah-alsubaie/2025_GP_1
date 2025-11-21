@@ -32,6 +32,10 @@ class _SettingsPageState extends State<SettingsPage>
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
+  // ✅ تحكم في ظهور خيار تغيير الباسوورد
+  bool _canChangePassword = false;
+  bool _providerLoaded = false;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +50,9 @@ class _SettingsPageState extends State<SettingsPage>
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..forward();
+
+    // ✅ تحديد ما إذا كان المستخدم يستخدم Email/Password أو لا
+    _checkUserProvider();
   }
 
   Future<void> _initTts() async {
@@ -62,6 +69,40 @@ class _SettingsPageState extends State<SettingsPage>
     HapticFeedback.mediumImpact();
   }
 
+  // ✅ فحص مزوّد تسجيل الدخول (Google ولا Email/Password)
+  Future<void> _checkUserProvider() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      setState(() {
+        _canChangePassword = false;
+        _providerLoaded = true;
+      });
+      return;
+    }
+
+    try {
+      await user.reload();
+      final refreshedUser = FirebaseAuth.instance.currentUser;
+      final providers = refreshedUser?.providerData ?? [];
+
+      final hasPasswordProvider = providers.any(
+        (p) => p.providerId == 'password',
+      ); // Email/Password
+
+      setState(() {
+        _canChangePassword = hasPasswordProvider;
+        _providerLoaded = true;
+      });
+    } catch (e) {
+      // لو صار خطأ نخفي الخيار احتياطياً
+      setState(() {
+        _canChangePassword = false;
+        _providerLoaded = true;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _tts.stop();
@@ -71,177 +112,214 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Future<void> _logout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
+    final outerContext = context; // نستخدمه لإظهار SnackBar فوق كل شيء
+
+    await showDialog<bool>(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            width: double.infinity,
-            constraints: const BoxConstraints(maxWidth: 500),
-            padding: const EdgeInsets.all(30),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.55),
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFFD32F2F),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.all(35),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        title: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
               ),
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFE53935).withOpacity(0.5),
-                  blurRadius: 25,
-                  offset: const Offset(0, 10),
-                ),
-              ],
+              child: const Icon(Icons.logout, color: Colors.white, size: 52),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(15),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.logout,
-                        color: Colors.white,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 13),
-                    const Text(
-                      'Logout',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Are you sure you want to logout?',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+            const SizedBox(height: 20),
+            const Text(
+              'Logout',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 26,
+                letterSpacing: 0.3,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to log out from your account?',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 19,
+            height: 1.5,
+            fontWeight: FontWeight.w600,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          Column(
+            children: [
+              // Confirm (أبيض بنص أحمر)
+              SizedBox(
+                width: double.infinity,
+                height: 75,
+                child: Container(
+                  decoration: BoxDecoration(
                     color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 40),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _hapticFeedback();
-                          _speak('Cancelled');
-                          Navigator.pop(context, false);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 20),
-                          backgroundColor: Colors.white.withOpacity(0.3),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: const BorderSide(
-                              color: Colors.white,
-                              width: 1.5,
-                            ),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ElevatedButton(
-                          onPressed: () {
-                            _hapticFeedback();
-                            _speak('Logging out');
-                            Navigator.pop(context, true);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
+                  child: TextButton(
+                    onPressed: () async {
+                      _hapticFeedback();
+
+                      // 1) سكّر الدايلوج فوراً عشان المسج تطلع فوق الخلفية
+                      Navigator.pop(context, true);
+
+                      // 2) أظهر المسج فوراً على Scaffold الخارجي
+                      ScaffoldMessenger.of(outerContext)
+                        ..clearSnackBars()
+                        ..showSnackBar(
+                          SnackBar(
+                            behavior: SnackBarBehavior.floating,
+                            backgroundColor: Colors.green,
+                            elevation: 14,
+                            margin: const EdgeInsets.all(16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),
-                          ),
-                          child: const Text(
-                            'Logout',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFFD32F2F),
+                            duration: const Duration(seconds: 2),
+                            content: SizedBox(
+                              height: 40,
+                              child: Row(
+                                children: const [
+                                  Icon(
+                                    Icons.check_circle,
+                                    color: Colors.white,
+                                    size: 26,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      'Logout successfully',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
+                        );
+
+                      // 3) يتكلم
+                      try {
+                        await _tts.stop();
+                        await _tts.setLanguage('en-US');
+                        await _tts.setSpeechRate(0.5);
+                        await _tts.speak(
+                          'Logout successfully. Redirecting to login.',
+                        );
+                        await Future.delayed(const Duration(milliseconds: 200));
+                      } catch (_) {}
+
+                      // 4) نفّذ اللوق آوت ثم انتقل
+                      try {
+                        const storage = FlutterSecureStorage();
+                        await storage.deleteAll();
+                        await FirebaseAuth.instance.signOut();
+
+                        if (mounted) {
+                          Navigator.of(outerContext).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (_) => const LoginScreen(),
+                            ),
+                            (route) => false,
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(outerContext).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Failed to logout. Please try again.',
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
                       ),
                     ),
-                  ],
+                    child: const Text(
+                      'Confirm',
+                      style: TextStyle(
+                        color: Color(0xFFD32F2F),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 20,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 25),
+
+              // Cancel
+              SizedBox(
+                width: double.infinity,
+                height: 65,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: TextButton(
+                    onPressed: () {
+                      _hapticFeedback();
+                      () async {
+                        try {
+                          await _tts.stop();
+                          await _tts.setLanguage('en-US');
+                          await _tts.setSpeechRate(0.5);
+                          await _tts.speak('Cancel');
+                        } catch (_) {}
+                      }();
+                      Navigator.pop(context, false);
+                    },
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 19,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        );
-      },
+        ],
+      ),
     );
-
-    if (confirmed == true) {
-      try {
-        final storage = FlutterSecureStorage();
-
-        // ✅ احذف **كل** البيانات المحفوظة
-        await storage.deleteAll();
-
-        await FirebaseAuth.instance.signOut();
-
-        // ✅ انتظر شوي عشان يتم الحذف بشكل صحيح
-        await Future.delayed(Duration(milliseconds: 100));
-
-        // ✅ روح للـ LoginScreen وامسح **كل** الصفحات السابقة
-        if (mounted) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-            (route) => false, // هذا يمسح كل الـ navigation stack
-          );
-        }
-      } catch (e) {
-        print('Logout error: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to logout. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    }
   }
 
   @override
@@ -298,27 +376,30 @@ class _SettingsPageState extends State<SettingsPage>
         child: Row(
           children: [
             Semantics(
-              label: 'Back to home',
+              label: 'Go back to previous page',
               button: true,
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
+                  _tts.stop();
                   _speak('Going back');
-                  Navigator.pop(context);
+                  Future.delayed(const Duration(milliseconds: 800), () {
+                    Navigator.pop(context);
+                  });
                 },
                 child: Container(
                   width: 52,
                   height: 52,
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
                       colors: [vibrantPurple, primaryPurple],
                     ),
-                    borderRadius: BorderRadius.all(Radius.circular(18)),
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: Color.fromARGB(76, 142, 58, 149),
+                        color: vibrantPurple.withOpacity(0.3),
                         blurRadius: 12,
-                        offset: Offset(0, 4),
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
@@ -387,7 +468,9 @@ class _SettingsPageState extends State<SettingsPage>
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
             onTap: () {
               _hapticFeedback();
-              _speak('Account Info');
+              _speak(
+                'Account Info. Edit your personal details, or delete your account permanently',
+              );
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -405,7 +488,9 @@ class _SettingsPageState extends State<SettingsPage>
             ),
             onTap: () {
               _hapticFeedback();
-              _speak('Device and Alerts');
+              _speak(
+                'Device and Alerts. Manage connected devices and customize your notifications',
+              );
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -414,24 +499,29 @@ class _SettingsPageState extends State<SettingsPage>
               );
             },
           ),
-          _buildSettingCard(
-            title: 'Change Password',
-            subtitle: 'Manage your password',
-            icon: Icons.lock_outline,
-            gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
-            onTap: () {
-              _hapticFeedback();
-              _speak('Security and Data');
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const SecurityDataPage(),
-                ),
-              );
-            },
-          ),
 
-          // 🔴 كرت الـ Logout بخلفية حمراء
+          // ✅ يظهر فقط إذا المستخدم مسجل Email/Password
+          if (_providerLoaded && _canChangePassword)
+            _buildSettingCard(
+              title: 'Change Password',
+              subtitle: 'Manage your password',
+              icon: Icons.lock_outline,
+              gradient: const LinearGradient(
+                colors: [deepPurple, vibrantPurple],
+              ),
+              onTap: () {
+                _hapticFeedback();
+                _speak('Change Password. Update your password securely');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SecurityDataPage(),
+                  ),
+                );
+              },
+            ),
+
+          // 🔴 كرت الـ Logout
           _buildSettingCard(
             title: 'Logout',
             subtitle: 'Sign out of your account',
@@ -439,10 +529,12 @@ class _SettingsPageState extends State<SettingsPage>
             gradient: const LinearGradient(
               colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
             ),
-            isDanger: true, // 🔴 المعامل الجديد
+            isDanger: true,
             onTap: () {
               _hapticFeedback();
-              _speak('Logout');
+              _speak(
+                'Logout. Are you sure you want to log out? Buttons: Confirm on the top, Cancel at the bottom',
+              );
               _logout(context);
             },
           ),
@@ -457,7 +549,7 @@ class _SettingsPageState extends State<SettingsPage>
     required IconData icon,
     required Gradient gradient,
     required VoidCallback onTap,
-    bool isDanger = false, // 🔴 معامل جديد
+    bool isDanger = false,
   }) {
     return Semantics(
       label: '$title. $subtitle. Double tap to open',
@@ -472,7 +564,6 @@ class _SettingsPageState extends State<SettingsPage>
             child: Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                // 🔥 كل الكرت أحمر للـ Logout
                 gradient: isDanger
                     ? const LinearGradient(
                         colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
@@ -503,7 +594,6 @@ class _SettingsPageState extends State<SettingsPage>
                     width: 58,
                     height: 58,
                     decoration: BoxDecoration(
-                      // 🔥 الأيقونة بيضاء للـ Logout
                       color: isDanger ? Colors.white.withOpacity(0.25) : null,
                       gradient: isDanger ? null : gradient,
                       borderRadius: BorderRadius.circular(15),
@@ -529,7 +619,6 @@ class _SettingsPageState extends State<SettingsPage>
                           style: TextStyle(
                             fontSize: 17.5,
                             fontWeight: FontWeight.w700,
-                            // 🔥 نص أبيض للـ Logout
                             color: isDanger ? Colors.white : deepPurple,
                           ),
                         ),
@@ -580,21 +669,18 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  // ✅ استبدل _buildFloatingBottomNav في home_page.dart بهذا الكود
-
   Widget _buildFloatingBottomNav() {
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
       children: [
-        // الفوتر الأساسي
         ClipRRect(
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
             topRight: Radius.circular(24),
           ),
           child: Container(
-            height: 90,
+            height: 95,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -616,10 +702,7 @@ class _SettingsPageState extends State<SettingsPage>
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -630,7 +713,7 @@ class _SettingsPageState extends State<SettingsPage>
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Homepage');
+                        _speak('Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -645,7 +728,9 @@ class _SettingsPageState extends State<SettingsPage>
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Reminders');
+                        _speak(
+                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                        );
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -654,14 +739,14 @@ class _SettingsPageState extends State<SettingsPage>
                         );
                       },
                     ),
-                    const SizedBox(width: 60), // مساحة للدائرة
+                    const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
                       label: 'Contacts',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Emergency Contacts');
+                        _speak('Contacts, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -676,7 +761,7 @@ class _SettingsPageState extends State<SettingsPage>
                       isActive: true,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Settings');
+                        _speak('You are already on Settings page');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -691,10 +776,8 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ),
         ),
-
-        // 🔴 الدائرة الكبيرة للطوارئ
         Positioned(
-          bottom: 35,
+          bottom: 40,
           child: Semantics(
             label: 'Emergency SOS button',
             button: true,
@@ -709,8 +792,8 @@ class _SettingsPageState extends State<SettingsPage>
                 );
               },
               child: Container(
-                width: 70,
-                height: 70,
+                width: 75,
+                height: 75,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
@@ -720,25 +803,25 @@ class _SettingsPageState extends State<SettingsPage>
                   ),
                   border: Border.all(
                     color: Colors.white.withOpacity(0.3),
-                    width: 2,
+                    width: 3,
                   ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.red.withOpacity(0.6),
                       blurRadius: 25,
-                      spreadRadius: 3,
+                      spreadRadius: 5,
                     ),
                     BoxShadow(
                       color: Colors.red.withOpacity(0.3),
                       blurRadius: 40,
-                      spreadRadius: 5,
+                      spreadRadius: 8,
                     ),
                   ],
                 ),
                 child: const Icon(
                   Icons.emergency_outlined,
                   color: Colors.white,
-                  size: 36,
+                  size: 40,
                 ),
               ),
             ),
@@ -748,7 +831,6 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  // ✅ _buildNavButton (بالأحجام الأصلية)
   Widget _buildNavButton({
     required IconData icon,
     required String label,
@@ -763,7 +845,7 @@ class _SettingsPageState extends State<SettingsPage>
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: isActive
                 ? Colors.white.withOpacity(0.25)
@@ -779,7 +861,7 @@ class _SettingsPageState extends State<SettingsPage>
               Icon(
                 icon,
                 color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                size: 22,
+                size: 25,
               ),
               const SizedBox(height: 3),
               Text(

@@ -20,6 +20,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   final picker = ImagePicker();
+
   final AudioPlayer _player = AudioPlayer();
   final FlutterTts _tts = FlutterTts();
 
@@ -27,9 +28,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   bool _modelLoaded = false;
   bool _busy = false;
 
-  String _loadingStatus = '📥 Loading model...';
   String _detectedCurrency = "";
-  double _confidence = 0.0;
   String? _selectedImagePath;
 
   static const List<String> CURRENCY_LABELS = [
@@ -50,6 +49,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     _initializeApp();
   }
 
+  // ================== TTS ==================
   Future<void> _initTts() async {
     _tts.setStartHandler(() => print('🔊 TTS start'));
     _tts.setCompletionHandler(() => print('🔊 TTS complete'));
@@ -82,6 +82,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     print('⚠️ Falling back to en-US for TTS');
   }
 
+  // ================== Init model + camera ==================
   Future<void> _initializeApp() async {
     try {
       await _loadModel();
@@ -98,37 +99,30 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
 
   Future<void> _loadModel() async {
     try {
-      setState(() => _loadingStatus = '📥 Loading model...');
       _interpreter = await Interpreter.fromAsset(
         'assets/models/banknote_model.tflite',
       );
       setState(() {
         _modelLoaded = true;
-        _loadingStatus = '✅ Model loaded!';
       });
+      print('✅ Currency model loaded');
     } catch (e) {
       print('❌ Model load error: $e');
-      setState(() => _loadingStatus = '❌ Failed to load model');
       rethrow;
     }
   }
 
   Future<void> _initCamera() async {
-    try {
-      setState(() => _loadingStatus = '📷 Initializing camera...');
-      _cameras = await availableCameras();
-
-      if (_cameras != null && _cameras!.isNotEmpty) {
-        _controller = CameraController(
-          _cameras![0],
-          ResolutionPreset.high,
-          enableAudio: false,
-        );
-        await _controller!.initialize();
-        setState(() => _loadingStatus = '✅ Camera ready!');
-      }
-    } catch (e) {
-      print('❌ Camera error: $e');
+    _cameras = await availableCameras();
+    if (_cameras != null && _cameras!.isNotEmpty) {
+      // نستخدم الكاميرا الخلفية للعملة
+      _controller = CameraController(
+        _cameras![0],
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      await _controller!.initialize();
+      if (mounted) setState(() {});
     }
   }
 
@@ -141,10 +135,10 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
       enableAudio: false,
     );
     await _controller!.initialize();
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
-  // ============ Preprocess ============
+  // ================== Preprocess & Predict ==================
   Future<List<List<List<List<double>>>>> _preprocessImage(
     String imagePath,
   ) async {
@@ -177,7 +171,6 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     return input;
   }
 
-  // ============ Predict ============
   Future<Map<String, dynamic>> _predictCurrency(String imagePath) async {
     if (_interpreter == null) throw Exception('Model is not ready!');
     final input = await _preprocessImage(imagePath);
@@ -197,7 +190,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     return {'currency': CURRENCY_LABELS[maxIndex], 'confidence': maxVal};
   }
 
-  // ============ Speak result ============
+  // ================== TTS for result (بدون نسبة) ==================
   Future<void> _announceResult(String currency, double confidence) async {
     final number = currency.split(' ').first.trim();
 
@@ -211,16 +204,9 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     };
 
     final spoken = enNames[number] ?? '$number riyals';
-    final pct = (confidence * 100).round();
 
-    String phrase;
-    if (confidence >= 0.85) {
-      phrase = 'Detected: $spoken.';
-    } else if (confidence >= 0.65) {
-      phrase = 'Likely $spoken, confidence $pct percent.';
-    } else {
-      phrase = 'Not sure. Maybe $spoken, confidence $pct percent.';
-    }
+    // 👇 لا نذكر النسبة ولا نقول "maybe" أو "likely"
+    final phrase = 'This is $spoken.';
 
     try {
       await _tts.stop();
@@ -230,10 +216,11 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     }
   }
 
-  // ============ Full recognition flow ============
+  // ================== Full recognition flow ==================
   Future<void> _recognizeCurrency(String path) async {
     if (!_modelLoaded) return;
     setState(() => _busy = true);
+
     try {
       final result = await _predictCurrency(path);
       final currency = result['currency'] as String;
@@ -241,10 +228,8 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
 
       setState(() {
         _detectedCurrency = currency;
-        _confidence = confidence;
       });
 
-      // Beep softly, delay a bit, then speak
       await _playSound(volume: 0.35);
       await Future.delayed(const Duration(milliseconds: 300));
       await _announceResult(currency, confidence);
@@ -252,9 +237,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              '✅ $currency (${(_confidence * 100).toStringAsFixed(1)}%)',
-            ),
+            content: Text('Detected Currency: $currency'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -273,7 +256,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
         );
       }
     } finally {
-      setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -286,11 +269,17 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     }
   }
 
+  // ================== Camera actions ==================
   Future<void> _captureImage() async {
-    if (_controller == null || !_controller!.value.isInitialized) return;
-    final image = await _controller!.takePicture();
-    setState(() => _selectedImagePath = image.path);
-    await _recognizeCurrency(image.path);
+    if (_controller?.value.isInitialized != true) return;
+    final file = await _controller!.takePicture();
+
+    // لو حابة بعد التصوير يعرض الصورة بدل الكاميرا، خلي السطر تحت مفعّل
+    setState(() {
+      _selectedImagePath = file.path;
+    });
+
+    await _recognizeCurrency(file.path);
   }
 
   Future<void> _pickImage() async {
@@ -305,9 +294,13 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     setState(() {
       _selectedImagePath = null;
       _detectedCurrency = '';
-      _confidence = 0.0;
     });
   }
+
+  // ================== Helpers ==================
+  String get _modeDescription => 'Currency Detection Mode';
+
+  IconData get _modeIcon => Icons.payments;
 
   @override
   void dispose() {
@@ -320,171 +313,294 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_controller == null || !_controller!.value.isInitialized) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(
-          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-        ),
-      );
-    }
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: _selectedImagePath != null
-                ? Image.file(File(_selectedImagePath!), fit: BoxFit.cover)
-                : CameraPreview(_controller!),
-          ),
-
-          // Back
-          Positioned(
-            top: 40,
-            left: 16,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.arrow_back,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-            ),
-          ),
-
-          // Result
-          if (_detectedCurrency.isNotEmpty)
-            Positioned(
-              top: 120,
-              left: 16,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.75),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Detected Currency:',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _detectedCurrency,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: _confidence,
-                      backgroundColor: Colors.white24,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _confidence > 0.8
-                            ? Colors.green
-                            : _confidence > 0.6
-                            ? Colors.yellow
-                            : Colors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Confidence: ${(_confidence * 100).toStringAsFixed(1)}%',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // Bottom controls
-          Positioned(
-            bottom: 40,
-            left: 32,
-            right: 32,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      body: _controller == null || !_controller!.value.isInitialized
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
               children: [
-                GestureDetector(
-                  onTap: _busy ? null : _pickImage,
-                  child: const Icon(Icons.photo, color: Colors.white, size: 36),
+                // ======= Camera Preview or Selected Image (نفس ستايل CameraScreen) =======
+                Positioned.fill(
+                  child: _selectedImagePath != null
+                      ? Image.file(File(_selectedImagePath!), fit: BoxFit.cover)
+                      : ClipRect(
+                          child: OverflowBox(
+                            alignment: Alignment.center,
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: size.width,
+                                height:
+                                    size.width * _controller!.value.aspectRatio,
+                                child: CameraPreview(_controller!),
+                              ),
+                            ),
+                          ),
+                        ),
                 ),
-                GestureDetector(
-                  onTap: _busy ? null : _captureImage,
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 4),
-                      color: Colors.white.withOpacity(0.1),
+
+                // ======= Back button =======
+                Positioned(
+                  top: 40,
+                  left: 16,
+                  child: GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.white,
+                        size: 28,
+                      ),
                     ),
-                    child: Center(
-                      child: _busy
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Icon(
+                  ),
+                ),
+
+                // ======= Mode info (زي اللي فوق يمين في CameraScreen) =======
+                Positioned(
+                  top: 40,
+                  right: 16,
+                  left: 80,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(_modeIcon, color: Colors.white, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _modeDescription,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ======= Return to camera when using gallery image =======
+                if (_selectedImagePath != null)
+                  Positioned(
+                    top: 100,
+                    right: 16,
+                    child: GestureDetector(
+                      onTap: _returnToCamera,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
                               Icons.camera_alt,
                               color: Colors.white,
-                              size: 30,
+                              size: 20,
                             ),
+                            SizedBox(width: 4),
+                            Text(
+                              'New Photo',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // ======= Result card (زي الكرت حق اللون/النص) =======
+                if (_detectedCurrency.isNotEmpty)
+                  Positioned(
+                    top: 140,
+                    left: 16,
+                    right: 16,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.8),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Detected Currency:',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          // نعرض العملة نفسها من state
+                        ],
+                      ),
+                    ),
+                  ),
+
+                if (_detectedCurrency.isNotEmpty)
+                  Positioned(
+                    top: 170,
+                    left: 32,
+                    right: 32,
+                    child: Text(
+                      _detectedCurrency,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+
+                // ======= Bottom controls (نفس ستايل CameraScreen) =======
+                Positioned(
+                  bottom: 40,
+                  left: 32,
+                  right: 32,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        // Gallery picker
+                        GestureDetector(
+                          onTap: _busy ? null : _pickImage,
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.photo,
+                              size: 28,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+
+                        // Capture button
+                        GestureDetector(
+                          onTap: _busy ? null : _captureImage,
+                          child: Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 4),
+                              color: Colors.white.withOpacity(0.1),
+                            ),
+                            child: Center(
+                              child: Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  color: _busy ? Colors.orange : Colors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: _busy
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.camera_alt,
+                                        color: Colors.grey[800],
+                                        size: 24,
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // Camera switch
+                        GestureDetector(
+                          onTap: _busy || _selectedImagePath != null
+                              ? null
+                              : _switchCamera,
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(
+                                _selectedImagePath != null ? 0.1 : 0.2,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.cameraswitch,
+                              size: 28,
+                              color: _selectedImagePath != null
+                                  ? Colors.white38
+                                  : Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                GestureDetector(
-                  onTap: _busy ? null : _switchCamera,
-                  child: const Icon(
-                    Icons.cameraswitch,
-                    color: Colors.white,
-                    size: 36,
+
+                // ======= Busy overlay =======
+                if (_busy)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.25),
+                      child: const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(
+                              strokeWidth: 3,
+                              color: Colors.white,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'Recognizing currency...',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
               ],
             ),
-          ),
-
-          // Busy overlay
-          if (_busy)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withOpacity(0.25),
-                child: const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: Colors.white,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        'Recognizing currency...',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

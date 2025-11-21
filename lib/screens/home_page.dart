@@ -24,9 +24,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   final _firestore = FirebaseFirestore.instance;
   final FlutterTts _tts = FlutterTts();
 
-  bool _isProfileIncomplete = false;
-  bool _isLoading = true;
-  bool _isDismissed = false;
   late AnimationController _fadeController;
   late AnimationController _slideController;
   late AnimationController _floatController;
@@ -36,7 +33,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
-  static const Color lightPurple = Color.fromARGB(255, 217, 163, 227);
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
@@ -45,7 +41,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.initState();
     _initTts();
     _loadUserName();
-    _checkProfileCompleteness();
 
     _fadeController = AnimationController(
       vsync: this,
@@ -95,65 +90,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     HapticFeedback.mediumImpact();
   }
 
-  // ✅ دالة جديدة لشرح كل خيار
   Future<void> _explainFeature(String featureName, String description) async {
     _hapticFeedback();
     await _speak('$featureName. $description');
-  }
-
-  Future<void> _checkProfileCompleteness() async {
-    try {
-      final user = _auth.currentUser;
-      if (user != null) {
-        final doc = await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists) {
-          final data = doc.data();
-          final bool isIncomplete =
-              (data?['full_name']?.toString().trim().isEmpty ?? true) ||
-              (data?['phone']?.toString().trim().isEmpty ?? true);
-
-          final lastShown = data?['profile_reminder_last_shown'] as Timestamp?;
-          final now = DateTime.now();
-
-          bool shouldShow = false;
-          if (isIncomplete) {
-            if (lastShown == null) {
-              shouldShow = true;
-            } else {
-              final daysSinceLastShown = now
-                  .difference(lastShown.toDate())
-                  .inDays;
-              shouldShow = daysSinceLastShown >= 3;
-            }
-          }
-
-          setState(() {
-            _isProfileIncomplete = shouldShow;
-            _isLoading = false;
-          });
-
-          if (shouldShow) {
-            await _firestore.collection('users').doc(user.uid).update({
-              'profile_reminder_last_shown': Timestamp.now(),
-            });
-          }
-        } else {
-          setState(() {
-            _isProfileIncomplete = true;
-            _isLoading = false;
-          });
-        }
-      } else {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      print('Error checking profile: $e');
-      setState(() {
-        _isLoading = false;
-      });
-    }
   }
 
   @override
@@ -183,9 +122,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ],
             ),
           ),
-
-          if (!_isLoading && _isProfileIncomplete && !_isDismissed)
-            _buildProfileAlert(),
         ],
       ),
 
@@ -234,8 +170,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 return Transform.translate(
                   offset: Offset(0, -5 * _floatController.value),
                   child: Container(
-                    width: 54,
-                    height: 54,
+                    width: 60,
+                    height: 60,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(18),
@@ -248,7 +184,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       ],
                     ),
                     child: const Center(
-                      child: Text('🕶️', style: TextStyle(fontSize: 32)),
+                      child: Text('🕶️', style: TextStyle(fontSize: 35)),
                     ),
                   ),
                 );
@@ -267,7 +203,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     style: TextStyle(
                       fontSize: 14,
                       color: deepPurple.withOpacity(0.7),
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                       letterSpacing: 1.5,
                     ),
                   ),
@@ -304,13 +240,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       builder: (context) => const ProfilePage(),
                     ),
                   ).then((_) {
-                    _checkProfileCompleteness();
                     _loadUserName();
                   });
                 },
                 child: Container(
-                  width: 53,
-                  height: 53,
+                  width: 64,
+                  height: 64,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [vibrantPurple, primaryPurple],
@@ -327,7 +262,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   child: const Icon(
                     Icons.person_outline,
                     color: Colors.white,
-                    size: 25,
+                    size: 28,
                   ),
                 ),
               ),
@@ -350,11 +285,27 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
       child: ListView(
         // كان: EdgeInsets.fromLTRB(16, 35, 16, 20)
-        padding: const EdgeInsets.fromLTRB(20, 40, 20, 36),
+        padding: const EdgeInsets.fromLTRB(20, 25, 20, 36),
         children: [
           _buildNeumorphicCard(
+            title: 'Face Recognition',
+            subtitle: 'Identify people instantly',
+            icon: Icons.face_retouching_natural,
+            gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
+            description:
+                'This feature helps you recognize faces and identify people around you using camera',
+            onTap: () {
+              _explainFeature('Face Recognition', '');
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const FaceListPage()),
+              );
+            },
+          ),
+
+          _buildNeumorphicCard(
             title: 'Text Reading',
-            subtitle: 'Read any text aloud',
+            subtitle: 'Read text aloud',
             icon: Icons.record_voice_over,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
             description:
@@ -373,8 +324,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             },
           ),
           _buildNeumorphicCard(
-            title: 'Currency Scanner',
-            subtitle: 'Identify money instantly',
+            title: 'Currency Recognition',
+            subtitle: 'Recognize currency instantly',
             icon: Icons.monetization_on,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
             description:
@@ -393,7 +344,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             },
           ),
           _buildNeumorphicCard(
-            title: 'Color Detector',
+            title: 'Color Identification',
             subtitle: 'Identify colors around you',
             icon: Icons.palette,
             gradient: const LinearGradient(
@@ -419,7 +370,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 🎯 كارت Neumorphic أكبر + مسافات أوسع
+  // 🎯 كارت Neumorphic بحجم مطابق للصورة
   Widget _buildNeumorphicCard({
     required String title,
     required String subtitle,
@@ -432,81 +383,79 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       label: '$title. $subtitle. Double tap to open',
       button: true,
       child: Container(
-        // كان: EdgeInsets.only(bottom: 30)
-        margin: const EdgeInsets.only(bottom: 36),
+        margin: const EdgeInsets.only(
+          bottom: 26,
+        ), // قللت المسافة شوي مثل الصورة
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(22),
             child: Container(
-              // كان: EdgeInsets.all(18)
-              padding: const EdgeInsets.all(22),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 23),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(22),
                 boxShadow: [
                   BoxShadow(
-                    color: palePurple.withOpacity(0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
+                    color: palePurple.withOpacity(0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
                   ),
                   BoxShadow(
-                    color: Colors.white.withOpacity(0.85),
-                    blurRadius: 14,
+                    color: Colors.white.withOpacity(0.9),
+                    blurRadius: 8,
                     offset: const Offset(-2, -2),
                   ),
                 ],
               ),
-              // ✅ أقل ارتفاع للكرت عشان يكبر بصريًا
-              constraints: const BoxConstraints(minHeight: 112),
+              constraints: const BoxConstraints(
+                minHeight: 90,
+              ), // نفس ارتفاع الصورة
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // الأيقونة المتدرجة (أكبر)
+                  // 🟣 الأيقونة
                   Container(
-                    // كان: 58x58
-                    width: 70,
-                    height: 70,
+                    width: 55,
+                    height: 55,
                     decoration: BoxDecoration(
                       gradient: gradient,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                       boxShadow: [
                         BoxShadow(
-                          color: gradient.colors.first.withOpacity(0.35),
-                          blurRadius: 14,
-                          offset: const Offset(0, 8),
+                          color: gradient.colors.first.withOpacity(0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
-                    // كان: size 30
-                    child: Icon(icon, color: Colors.white, size: 34),
+                    child: Icon(icon, color: Colors.white, size: 28),
                   ),
 
-                  const SizedBox(width: 18),
+                  const SizedBox(width: 16),
 
-                  // النصوص أكبر
+                  // 🟣 النصوص
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           title,
                           style: const TextStyle(
-                            // كان: 17.5
-                            fontSize: 20,
+                            fontSize: 18,
                             fontWeight: FontWeight.w800,
                             color: deepPurple,
-                            height: 1.15,
+                            height: 1.1,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         Text(
                           subtitle,
                           style: TextStyle(
-                            // كان: 13
-                            fontSize: 14.5,
-                            color: deepPurple.withOpacity(0.55),
+                            fontSize: 13.5,
+                            color: deepPurple.withOpacity(0.6),
                             fontWeight: FontWeight.w500,
                             height: 1.2,
                           ),
@@ -515,219 +464,26 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  const SizedBox(width: 12),
-
-                  // سهم أكبر ومساحة لمس أوسع
+                  // 🟣 السهم
                   Container(
-                    // كان: padding 7
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          gradient.colors.first.withOpacity(0.12),
-                          gradient.colors.last.withOpacity(0.12),
+                          gradient.colors.first.withOpacity(0.1),
+                          gradient.colors.last.withOpacity(0.1),
                         ],
                       ),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       Icons.arrow_forward_ios,
-                      // كان: 15
-                      size: 18,
+                      size: 16,
                       color: gradient.colors.first,
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfileAlert() {
-    return Container(
-      color: Colors.black.withOpacity(0.85),
-      child: Center(
-        child: Semantics(
-          label: 'Profile incomplete. Complete your profile to unlock features',
-          hint: 'Double tap to hear details',
-          liveRegion: true,
-          child: Container(
-            margin: const EdgeInsets.all(31),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: vibrantPurple, width: 2),
-              boxShadow: [
-                BoxShadow(
-                  color: vibrantPurple.withOpacity(0.3),
-                  blurRadius: 30,
-                  offset: const Offset(0, 15),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(30),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [vibrantPurple, primaryPurple],
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(30),
-                      topRight: Radius.circular(30),
-                    ),
-                  ),
-                  child: Semantics(
-                    header: true,
-                    child: Column(
-                      children: [
-                        ExcludeSemantics(
-                          child: Icon(
-                            Icons.person_add_alt_1,
-                            color: Colors.white,
-                            size: 70,
-                          ),
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          'Complete Your Profile',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            height: 1.2,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                Padding(
-                  padding: const EdgeInsets.all(30),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Add your personal details to unlock all features',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: deepPurple.withOpacity(0.7),
-                          height: 1.5,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 32),
-
-                      Column(
-                        children: [
-                          // الزر الأساسي
-                          Semantics(
-                            label: 'Complete now button. Go to profile page',
-                            hint: 'Double tap to open profile',
-                            button: true,
-                            child: Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [vibrantPurple, primaryPurple],
-                                ),
-                                borderRadius: BorderRadius.circular(15),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: vibrantPurple.withOpacity(0.4),
-                                    blurRadius: 15,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  _hapticFeedback();
-                                  _explainFeature(
-                                    'Profile',
-                                    'Opening profile page to complete your information',
-                                  );
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => const ProfilePage(),
-                                    ),
-                                  ).then((_) {
-                                    _checkProfileCompleteness();
-                                    _loadUserName();
-                                  });
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 22,
-                                  ),
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Complete Now',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          // زر Later
-                          Semantics(
-                            label: 'Later button. Dismiss this alert',
-                            hint: 'Double tap to dismiss',
-                            button: true,
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  _hapticFeedback();
-                                  _speak('Dismissed');
-                                  setState(() => _isDismissed = true);
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 22,
-                                  ),
-                                  side: BorderSide(
-                                    color: lightPurple,
-                                    width: 2.5,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(15),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Later',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: vibrantPurple,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ),
           ),
         ),
@@ -747,7 +503,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             topRight: Radius.circular(24),
           ),
           child: Container(
-            height: 90, // ارتفاع أكبر للفوتر
+            height: 95,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -769,10 +525,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -784,10 +537,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       description: 'You are on the home screen',
                       onTap: () {
                         _hapticFeedback();
-                        _explainFeature(
-                          'Home',
-                          'You are already on the home screen',
-                        );
+                        _speak('You are already on homepage');
                       },
                     ),
                     _buildNavButton(
@@ -797,7 +547,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       onTap: () {
                         _explainFeature(
                           'Reminders',
-                          'Create and manage reminders, and the app will notify you at the right time.',
+                          'Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -808,7 +558,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       },
                     ),
                     const SizedBox(width: 60), // مساحة للدائرة
-                    // ✅ زر Contact - يودي لصفحة جهات الاتصال
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
                       label: 'Contacts',
@@ -834,7 +583,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                       onTap: () {
                         _explainFeature(
                           'Settings',
-                          'Manage your app settings and preferences',
+                          'Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -851,9 +600,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
         ),
 
-        // 🔴 الدائرة الكبيرة للطوارئ - تودي لصفحة SOS
         Positioned(
-          bottom: 35, // نزلت من 45 إلى 35
+          bottom: 40,
           child: GestureDetector(
             onTap: () {
               _hapticFeedback();
@@ -867,8 +615,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               );
             },
             child: Container(
-              width: 70,
-              height: 70,
+              width: 75,
+              height: 75,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
@@ -878,25 +626,25 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 ),
                 border: Border.all(
                   color: Colors.white.withOpacity(0.3),
-                  width: 2,
+                  width: 3,
                 ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.red.withOpacity(0.6),
                     blurRadius: 25,
-                    spreadRadius: 3,
+                    spreadRadius: 5,
                   ),
                   BoxShadow(
                     color: Colors.red.withOpacity(0.3),
                     blurRadius: 40,
-                    spreadRadius: 5,
+                    spreadRadius: 8,
                   ),
                 ],
               ),
               child: const Icon(
                 Icons.emergency_outlined,
                 color: Colors.white,
-                size: 36,
+                size: 40,
               ),
             ),
           ),
@@ -921,7 +669,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: isActive
                 ? Colors.white.withOpacity(0.25)
@@ -939,7 +687,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                 color: isActive
                     ? Colors.white
                     : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
-                size: 22,
+                size: 25,
               ),
               const SizedBox(height: 3),
               Text(

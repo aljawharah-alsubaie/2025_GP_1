@@ -10,6 +10,7 @@ import 'contact_info_page.dart';
 import 'settings.dart';
 import 'add_person_page.dart';
 import 'edit_person_page.dart';
+import './sos_screen.dart';
 
 class FaceManagementPage extends StatefulWidget {
   const FaceManagementPage({super.key});
@@ -22,6 +23,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FlutterTts _tts = FlutterTts();
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
   List<Map<String, dynamic>> _people = [];
   bool _isLoading = true;
   String _searchQuery = '';
@@ -71,7 +75,16 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Future<void> _speak(String text) async {
-    await _tts.speak(text);
+    try {
+      await _tts.speak(text);
+    } catch (_) {}
+  }
+
+  Future<void> _speakNow(String text) async {
+    try {
+      await _tts.stop();
+      await _tts.speak(text);
+    } catch (_) {}
   }
 
   void _hapticFeedback() {
@@ -80,13 +93,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
 
   Future<void> _initializeFaceRecognition() async {
     final success = await InsightFacePipeline.initialize();
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to initialize face recognition'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (!success) {
+      _showSnackBar('Failed to initialize face recognition', Colors.red);
     } else {
       await _loadStoredEmbeddings();
     }
@@ -148,19 +156,33 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading people: $e')));
-      }
+      _showSnackBar('Error loading people: $e', Colors.red);
     }
   }
 
-  Future<void> _deletePerson(String personId, String personName) async {
+  /// 🔥 تحذف الشخص من Firestore + embeddings وترجع الاسم لو نجحت
+  Future<String?> _deletePerson(String personId) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) return null;
 
     try {
+      // 1) نجيب بيانات الشخص أول
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('people')
+          .doc(personId)
+          .get();
+
+      if (!doc.exists) {
+        _showSnackBar('Person not found', Colors.red);
+        return null;
+      }
+
+      // ناخذ الاسم من الدوكمنت
+      final personName = doc.data()?['name'] ?? 'This person';
+
+      // 2) نحذف ملف الشخص
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -168,6 +190,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           .doc(personId)
           .delete();
 
+      // 3) نحذف الإيمبدنق باستخدام الاسم
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -175,203 +198,379 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           .doc(personName)
           .delete();
 
+      // 4) نحذف الإيمبدنق من الجهاز
       InsightFacePipeline.removeFaceEmbedding(personName);
 
+      // 5) نحدث القائمة
       await _loadPeople();
 
-      if (mounted) {
-        _showSnackBar('$personName deleted successfully!', Colors.green);
-      }
+      // ✅ نرجّع الاسم عشان الدايالوج يطلع المسج
+      return personName;
     } catch (e) {
       _showSnackBar('Error deleting person: $e', Colors.red);
+      return null;
     }
   }
 
-  void _showDeleteConfirmation(String personId, String personName) {
-    _hapticFeedback();
-
-    _speak('Are you sure you want to delete $personName'); // 👈 أضف هذا السطر
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(maxWidth: 500),
-          padding: const EdgeInsets.all(30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.red,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 13),
-                  Text(
-                    'Delete Person',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: deepPurple,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
-                  text: 'Are you sure you want to delete ',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: deepPurple,
-                  ),
-                  children: [
-                    TextSpan(
-                      text: '"$personName"',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: deepPurple,
-                        fontSize: 17,
-                      ),
-                    ),
-                    const TextSpan(text: '?'),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 60),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        _hapticFeedback();
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        backgroundColor: deepPurple.withOpacity(0.15),
-                        foregroundColor: deepPurple,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(
-                            color: deepPurple.withOpacity(0.35),
-                            width: 1.3,
-                          ),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        _hapticFeedback();
-                        Navigator.pop(context);
-                        await _deletePerson(personId, personName);
-                        _speak('$personName deleted successfully');
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        backgroundColor: Colors.red,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        'Delete',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+  // ---------- دايلوج ثابت (ما يطلع فوقه الكيبورد) ----------
+  Widget _fixedDialog(Widget child) {
+    final mq = MediaQuery.of(context);
+    return MediaQuery(
+      data: mq.copyWith(viewInsets: EdgeInsets.zero),
+      child: Align(
+        alignment: const Alignment(0, -0.12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: child,
         ),
       ),
     );
   }
 
+  /// 🔴 دايلوج الحذف مع لودنق على زر Confirm
+  Future<void> _showDeleteConfirmation(
+    String personId,
+    String personName,
+  ) async {
+    _hapticFeedback();
+
+    final safeName = (personName.isNotEmpty) ? personName : 'this person';
+
+    await showDialog(
+      context: context,
+      useRootNavigator: true,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.55),
+      builder: (dialogContext) {
+        bool announced = false;
+        bool isDeleting = false;
+
+        return _fixedDialog(
+          StatefulBuilder(
+            builder: (context, setState) {
+              if (!announced) {
+                announced = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _speakNow(
+                    'Delete person. Are you sure you want to delete $safeName? '
+                    'This action cannot be undone. Buttons: Confirm on the top, Cancel at the bottom.',
+                  );
+                });
+              }
+
+              return AlertDialog(
+                backgroundColor: const Color(0xFFD32F2F),
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                contentPadding: const EdgeInsets.all(35),
+                insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+                title: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.delete_forever,
+                        color: Colors.white,
+                        size: 52,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Delete Person',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 26,
+                        letterSpacing: 0.3,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+                content: Text(
+                  'Are you sure you want to delete "$safeName"? '
+                  'This action cannot be undone.',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    height: 1.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                actions: [
+                  Column(
+                    children: [
+                      // زر Confirm (فوق) مع لودنق
+                      SizedBox(
+                        width: double.infinity,
+                        height: 75,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: TextButton(
+                            onPressed: isDeleting
+                                ? null
+                                : () async {
+                                    _hapticFeedback();
+                                    setState(() => isDeleting = true);
+
+                                    await _speakNow(
+                                      'Deleting $safeName, please wait.',
+                                    );
+
+                                    final deletedName = await _deletePerson(
+                                      personId,
+                                    );
+
+                                    if (!mounted) return;
+
+                                    if (deletedName != null) {
+                                      final showName = deletedName.isNotEmpty
+                                          ? deletedName
+                                          : safeName;
+
+                                      // ✅ مسج سكسيس نفس ستايل الأدد والإيديت
+                                      _showSnackBar(
+                                        '$showName deleted successfully!',
+                                        Colors.green,
+                                      );
+
+                                      await _speak(
+                                        'Person $showName deleted successfully.',
+                                      );
+
+                                      Navigator.pop(context); // يقفل الدايالوج
+                                    } else {
+                                      // فشل الحذف – رجّع الزر طبيعي وخليه يحاول مرة ثانية
+                                      setState(() => isDeleting = false);
+                                      await _speak(
+                                        'Failed to delete $safeName, please try again.',
+                                      );
+                                    }
+                                  },
+                            style: TextButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            child: isDeleting
+                                ? Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Color(0xFFD32F2F),
+                                              ),
+                                        ),
+                                      ),
+                                      SizedBox(width: 10),
+                                      Text(
+                                        'Deleting...',
+                                        style: TextStyle(
+                                          color: Color(0xFFD32F2F),
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 20,
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : const Text(
+                                    'Confirm',
+                                    style: TextStyle(
+                                      color: Color(0xFFD32F2F),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 20,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 25),
+                      // زر Cancel (تحت) يُعطَّل وقت الحذف
+                      SizedBox(
+                        width: double.infinity,
+                        height: 65,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: TextButton(
+                            onPressed: isDeleting
+                                ? null
+                                : () {
+                                    _hapticFeedback();
+                                    Navigator.pop(context);
+                                    _showSnackBar(
+                                      'Deletion cancelled',
+                                      Colors.red,
+                                    );
+                                    _speak('Deletion cancelled');
+                                  },
+                            style: TextButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 19,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   void _showSnackBar(String message, Color color) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        duration: const Duration(seconds: 2),
-      ),
+
+    final overlay = Overlay.of(context, rootOverlay: true);
+
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          bottom: 130,
+          left: 16,
+          right: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              height: 70,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 12),
+                  Icon(
+                    color == Colors.green
+                        ? Icons.check_circle
+                        : Icons.error_outline,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
+
+    overlay.insert(entry);
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        entry.remove();
+      }
+    });
   }
 
   List<Map<String, dynamic>> get _filteredPeople {
     if (_searchQuery.isEmpty) return _people;
     return _people
         .where(
-          (person) =>
-              person['name'].toLowerCase().contains(_searchQuery.toLowerCase()),
+          (person) => person['name'].toString().toLowerCase().contains(
+            _searchQuery.toLowerCase(),
+          ),
         )
         .toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: ultraLightPurple,
-      body: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  ultraLightPurple,
-                  palePurple.withOpacity(0.3),
-                  Colors.white,
-                ],
-                stops: const [0.0, 0.5, 1.0],
+    return ScaffoldMessenger(
+      key: _scaffoldMessengerKey,
+      child: Scaffold(
+        backgroundColor: ultraLightPurple,
+        body: Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    ultraLightPurple,
+                    palePurple.withOpacity(0.3),
+                    Colors.white,
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
+                ),
               ),
             ),
-          ),
-          SafeArea(
-            child: Column(
-              children: [
-                _buildModernHeader(),
-                Expanded(child: _buildPeopleList()),
-              ],
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildModernHeader(),
+                  Expanded(child: _buildPeopleList()),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [_buildAddButton(), _buildFloatingBottomNav()],
+          ],
+        ),
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [_buildAddButton(), _buildFloatingBottomNav()],
+        ),
       ),
     );
   }
@@ -397,33 +596,38 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           children: [
             Row(
               children: [
-                GestureDetector(
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Going back');
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: 52,
-                    height: 52,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [vibrantPurple, primaryPurple],
-                      ),
-                      borderRadius: BorderRadius.all(Radius.circular(18)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color.fromARGB(76, 142, 58, 149),
-                          blurRadius: 12,
-                          offset: Offset(0, 4),
+                Semantics(
+                  label: 'Go back to previous page',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () {
+                      _speak('Going back');
+                      Future.delayed(const Duration(milliseconds: 800), () {
+                        Navigator.pop(context);
+                      });
+                    },
+                    child: Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [vibrantPurple, primaryPurple],
                         ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.arrow_back_ios_new,
-                        color: Colors.white,
-                        size: 20,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: vibrantPurple.withOpacity(0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.arrow_back_ios_new,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
@@ -780,151 +984,65 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
+  // 🔁 زر الإضافة – نفس ستايل زر Add Voice Reminder
   Widget _buildAddButton() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-      child: GestureDetector(
-        onTap: () async {
-          _hapticFeedback();
-          _speak('Add New Person');
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddPersonPage()),
-          );
-          _loadPeople();
-        },
-        child: Container(
-          width: double.infinity,
-          height: 58,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: vibrantPurple.withOpacity(0.4),
-                blurRadius: 15,
-                offset: const Offset(0, 6),
+      // يرتفع عن الفوتر
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+      child: Semantics(
+        label: 'Add new person',
+        button: true,
+        hint: 'Double tap to add a new person',
+        child: GestureDetector(
+          onTap: () async {
+            _hapticFeedback();
+            _speak('Add New Person');
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AddPersonPage()),
+            );
+            _loadPeople();
+          },
+          child: Container(
+            width: double.infinity,
+            height: 70,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [deepPurple, vibrantPurple],
               ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: vibrantPurple.withOpacity(0.4),
+                  blurRadius: 15,
+                  offset: const Offset(0, 6),
                 ),
-                child: const Icon(Icons.add, color: Colors.white, size: 24),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Add New Person',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 📍 Bottom Navigation matching HomePage
-  Widget _buildFloatingBottomNav() {
-    return ClipRRect(
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(24),
-        topRight: Radius.circular(24),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              deepPurple.withOpacity(0.95),
-              vibrantPurple.withOpacity(0.98),
-              primaryPurple,
-            ],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: deepPurple.withOpacity(0.3),
-              blurRadius: 25,
-              offset: const Offset(0, -8),
+              ],
             ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildNavButton(
-                  icon: Icons.home_rounded,
-                  label: 'Home',
-                  isActive: true,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Home');
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HomePage()),
-                    );
-                  },
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.person_add,
+                    color: Colors.white,
+                    size: 26,
+                  ),
                 ),
-                _buildNavButton(
-                  icon: Icons.notifications_rounded,
-                  label: 'Reminders',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Reminders');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RemindersPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.contact_phone,
-                  label: 'Emergency',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Emergency Contact');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ContactInfoPage(),
-                      ),
-                    );
-                  },
-                ),
-                _buildNavButton(
-                  icon: Icons.settings_rounded,
-                  label: 'Settings',
-                  isActive: false,
-                  onTap: () {
-                    _hapticFeedback();
-                    _speak('Settings');
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsPage(),
-                      ),
-                    );
-                  },
+                const SizedBox(width: 12),
+                const Text(
+                  'Add New Person',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 20,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ],
             ),
@@ -934,10 +1052,173 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  // 🔘 Navigation button
+  Widget _buildFloatingBottomNav() {
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
+      children: [
+        // الفوتر الأساسي
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+          child: Container(
+            height: 95,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  deepPurple.withOpacity(0.95),
+                  vibrantPurple.withOpacity(0.98),
+                  primaryPurple,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: deepPurple.withOpacity(0.3),
+                  blurRadius: 25,
+                  offset: const Offset(0, -8),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildNavButton(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      isActive: false,
+                      description: 'Navigate to Homepage',
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Navigate to Homepage');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.notifications_rounded,
+                      label: 'Reminders',
+                      description: 'Manage your reminders and notifications',
+                      onTap: () {
+                        _speak(
+                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                        );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RemindersPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 60), // مساحة للدائرة
+                    _buildNavButton(
+                      icon: Icons.contacts_rounded,
+                      label: 'Contacts',
+                      description:
+                          'Manage your emergency contacts and important people',
+                      onTap: () {
+                        _speak('Contact, Store and manage emergency contacts');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ContactInfoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      description: 'Adjust app settings and preferences',
+                      onTap: () {
+                        _speak(
+                          'Settings, Manage your settings and preferences',
+                        );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        Positioned(
+          bottom: 40,
+          child: GestureDetector(
+            onTap: () {
+              _hapticFeedback();
+              _speak(
+                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+              );
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SosScreen()),
+              );
+            },
+            child: Container(
+              width: 75,
+              height: 75,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.red.shade400, Colors.red.shade700],
+                ),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 3,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.6),
+                    blurRadius: 25,
+                    spreadRadius: 5,
+                  ),
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 40,
+                    spreadRadius: 8,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.emergency_outlined,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
   Widget _buildNavButton({
     required IconData icon,
     required String label,
+    required String description,
     bool isActive = false,
     required VoidCallback onTap,
   }) {
@@ -949,7 +1230,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: isActive
                 ? Colors.white.withOpacity(0.25)
@@ -964,8 +1245,10 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             children: [
               Icon(
                 icon,
-                color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                size: 22,
+                color: isActive
+                    ? Colors.white
+                    : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
+                size: 25,
               ),
               const SizedBox(height: 3),
               Text(

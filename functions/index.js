@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
 // ========================================
 // Cloud Function: Send Welcome Email (Callable)
 // ========================================
-exports.sendWelcomeEmail = onCall(async (request) => {
+exports.sendVerificationEmail = onCall(async (request) => {
   const email = request.data.email;
   const displayName = request.data.displayName || 'User';
 

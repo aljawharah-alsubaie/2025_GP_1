@@ -590,27 +590,28 @@ class _RemindersPageState extends State<RemindersPage>
         child: Row(
           children: [
             Semantics(
-              label: 'Back to home',
+              label: 'Go back to previous page',
               button: true,
               child: GestureDetector(
                 onTap: () {
-                  _hapticFeedback();
                   _speak('Going back');
-                  Navigator.pop(context);
+                  Future.delayed(const Duration(milliseconds: 800), () {
+                    Navigator.pop(context);
+                  });
                 },
                 child: Container(
                   width: 52,
                   height: 52,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [vibrantPurple, primaryPurple],
                     ),
-                    borderRadius: BorderRadius.all(Radius.circular(18)),
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: Color.fromARGB(76, 142, 58, 149),
+                        color: vibrantPurple.withOpacity(0.3),
                         blurRadius: 12,
-                        offset: Offset(0, 4),
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
@@ -1066,7 +1067,7 @@ class _RemindersPageState extends State<RemindersPage>
 
   Widget _buildVoiceAddButton() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 25),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 55),
       child: Semantics(
         label: 'Add new reminder with voice',
         button: true,
@@ -1075,7 +1076,7 @@ class _RemindersPageState extends State<RemindersPage>
           onTap: _startVoiceReminder,
           child: Container(
             width: double.infinity,
-            height: 58,
+            height: 70,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [deepPurple, vibrantPurple],
@@ -1098,7 +1099,7 @@ class _RemindersPageState extends State<RemindersPage>
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.mic, color: Colors.white, size: 24),
+                  child: const Icon(Icons.mic, color: Colors.white, size: 26),
                 ),
                 const SizedBox(width: 12),
                 const Text(
@@ -1106,7 +1107,7 @@ class _RemindersPageState extends State<RemindersPage>
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    fontSize: 18,
+                    fontSize: 20,
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -1276,10 +1277,6 @@ class _RemindersPageState extends State<RemindersPage>
     return months[month - 1];
   }
 
-  // ✅ استبدل دالة _buildFloatingBottomNav() الموجودة في reminders_page.dart بهذا الكود
-
-  // ✅ استبدل دالة _buildFloatingBottomNav() الموجودة في reminders_page.dart بهذا الكود
-
   Widget _buildFloatingBottomNav() {
     return Stack(
       alignment: Alignment.bottomCenter,
@@ -1292,7 +1289,7 @@ class _RemindersPageState extends State<RemindersPage>
             topRight: Radius.circular(24),
           ),
           child: Container(
-            height: 90,
+            height: 95,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -1314,10 +1311,7 @@ class _RemindersPageState extends State<RemindersPage>
             child: SafeArea(
               top: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1326,9 +1320,16 @@ class _RemindersPageState extends State<RemindersPage>
                       icon: Icons.home_rounded,
                       label: 'Home',
                       isActive: false,
-                      onTap: () {
+                      onTap: () async {
                         _hapticFeedback();
-                        _speak('Going to Home');
+                        _speak('Navigating to Home page'); // بدون انتظار
+
+                        // حطّي المهلة اللي تبينها (مثلاً 1500ms)
+                        await Future.delayed(
+                          const Duration(milliseconds: 1500),
+                        );
+
+                        if (!mounted) return;
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
@@ -1343,17 +1344,17 @@ class _RemindersPageState extends State<RemindersPage>
                       isActive: true,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('You are already on reminders screen');
+                        _speak('You are already on reminders page');
                       },
                     ),
-                    const SizedBox(width: 60), // مساحة للدائرة
+                    const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
                       label: 'Contacts',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Emergency Contacts');
+                        _speak('Contacts, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1368,7 +1369,9 @@ class _RemindersPageState extends State<RemindersPage>
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Settings');
+                        _speak(
+                          'Settings, Manage your settings and preferences',
+                        );
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1386,52 +1389,55 @@ class _RemindersPageState extends State<RemindersPage>
 
         // 🔴 الدائرة الكبيرة للطوارئ
         Positioned(
-          bottom: 35,
-          child: Semantics(
-            label: 'Emergency SOS button',
-            button: true,
-            hint: 'Double tap for emergency',
-            child: GestureDetector(
-              onTap: () {
-                _hapticFeedback();
-                _speak('Emergency SOS. Contact emergency services quickly');
-                // توديك لصفحة SOS
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SosScreen()),
-                );
-              },
-              child: Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.red.shade400, Colors.red.shade700],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.6),
-                      blurRadius: 25,
-                      spreadRadius: 3,
+          bottom: 40,
+          child: Transform.translate(
+            offset: const Offset(4, 0),
+            child: Semantics(
+              label: 'Emergency SOS button',
+              button: true,
+              hint: 'Double tap for emergency',
+              child: GestureDetector(
+                onTap: () {
+                  _hapticFeedback();
+                  _speak('Emergency SOS. Contact emergency services quickly');
+                  // توديك لصفحة SOS
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SosScreen()),
+                  );
+                },
+                child: Container(
+                  width: 75,
+                  height: 75,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Colors.red.shade400, Colors.red.shade700],
                     ),
-                    BoxShadow(
-                      color: Colors.red.withOpacity(0.3),
-                      blurRadius: 40,
-                      spreadRadius: 5,
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 3,
                     ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.emergency_outlined,
-                  color: Colors.white,
-                  size: 36,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.6),
+                        blurRadius: 25,
+                        spreadRadius: 5,
+                      ),
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.3),
+                        blurRadius: 40,
+                        spreadRadius: 8,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.emergency_outlined,
+                    color: Colors.white,
+                    size: 40,
+                  ),
                 ),
               ),
             ),
@@ -1456,12 +1462,12 @@ class _RemindersPageState extends State<RemindersPage>
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
           decoration: BoxDecoration(
             color: isActive
                 ? Colors.white.withOpacity(0.25)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
             border: isActive
                 ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
                 : null,
@@ -1472,16 +1478,16 @@ class _RemindersPageState extends State<RemindersPage>
               Icon(
                 icon,
                 color: isActive ? Colors.white : Colors.white.withOpacity(0.9),
-                size: 20,
+                size: 25,
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(
                 label,
                 style: TextStyle(
                   color: isActive
                       ? Colors.white
                       : Colors.white.withOpacity(0.9),
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 ),
               ),

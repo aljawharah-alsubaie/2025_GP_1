@@ -3,6 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import './sos_screen.dart';
+import 'home_page.dart';
+import 'reminders.dart';
+import 'contact_info_page.dart';
+import 'settings.dart';
 
 class DeviceAlertsPage extends StatefulWidget {
   const DeviceAlertsPage({super.key});
@@ -127,27 +132,87 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
     }
   }
 
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFF4CAF50),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+  void _showOverlaySnackBar(String message, Color color, {int seconds = 2}) {
+    if (!mounted) return;
+
+    final overlay = Overlay.of(context, rootOverlay: true);
+
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          bottom: 120, 
+          left: 16,
+          right: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              height: 70,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 12),
+                  Icon(
+                    color == Colors.green
+                        ? Icons.check_circle
+                        : Icons.error_outline,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
+
+    overlay.insert(entry);
+
+    Future.delayed(Duration(seconds: seconds), () {
+      if (mounted) {
+        entry.remove();
+      }
+    });
+  }
+
+  void _showSuccessSnackBar(String message) {
+    _showOverlaySnackBar(message, Colors.green, seconds: 2);
   }
 
   void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFFF44336),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+    _showOverlaySnackBar(
+      const Color(0xFFF44336) == Colors.red
+          ? message
+          : message, // بس عشان ما نلخبط 😉
+      const Color(0xFFE53935),
+      seconds: 3,
     );
   }
 
@@ -176,6 +241,10 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
             ),
           ),
         ],
+      ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [_buildFloatingBottomNav()],
       ),
     );
   }
@@ -213,31 +282,34 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
         child: Row(
           children: [
             Semantics(
-              label: 'Back to settings',
+              label: 'Go back to previous page',
               button: true,
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
+                  _tts.stop(); // ✅ يوقف الكلام فوراً
                   _speak('Going back');
-                  Navigator.pop(context);
+                  Future.delayed(const Duration(milliseconds: 800), () {
+                    Navigator.pop(context);
+                  });
                 },
                 child: Container(
                   width: 52,
                   height: 52,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [vibrantPurple, primaryPurple],
                     ),
-                    borderRadius: BorderRadius.all(Radius.circular(18)),
+                    borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: Color.fromARGB(76, 142, 58, 149),
+                        color: vibrantPurple.withOpacity(0.3),
                         blurRadius: 12,
-                        offset: Offset(0, 4),
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Icon(
                       Icons.arrow_back_ios_new,
                       color: Colors.white,
@@ -348,7 +420,7 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
       button: true,
       child: Container(
         margin: const EdgeInsets.only(bottom: 24),
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(22),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
@@ -488,6 +560,222 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFloatingBottomNav() {
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
+      children: [
+        // الفوتر الأساسي
+        ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+          child: Container(
+            height: 95,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  deepPurple.withOpacity(0.95),
+                  vibrantPurple.withOpacity(0.98),
+                  primaryPurple,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: deepPurple.withOpacity(0.3),
+                  blurRadius: 25,
+                  offset: const Offset(0, -8),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildNavButton(
+                      icon: Icons.home_rounded,
+                      label: 'Home',
+                      isActive: false,
+                      description: 'Navigate to Homepage',
+                      onTap: () {
+                        _hapticFeedback();
+                        _speak('Navigate to Homepage');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const HomePage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.notifications_rounded,
+                      label: 'Reminders',
+                      description: 'Manage your reminders and notifications',
+                      onTap: () {
+                        _speak(
+                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                        );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const RemindersPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 60), // مساحة للدائرة
+                    _buildNavButton(
+                      icon: Icons.contacts_rounded,
+                      label: 'Contacts',
+                      description:
+                          'Manage your emergency contacts and important people',
+                      onTap: () {
+                        _speak('Contact, Store and manage emergency contacts');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ContactInfoPage(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildNavButton(
+                      icon: Icons.settings_rounded,
+                      label: 'Settings',
+                      description: 'Adjust app settings and preferences',
+                      onTap: () {
+                        _speak(
+                          'Settings, Manage your settings and preferences',
+                        );
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const SettingsPage(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        Positioned(
+          bottom: 40,
+          child: GestureDetector(
+            onTap: () {
+              _hapticFeedback();
+              _speak(
+                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+              );
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SosScreen()),
+              );
+            },
+            child: Container(
+              width: 75,
+              height: 75,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.red.shade400, Colors.red.shade700],
+                ),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.3),
+                  width: 3,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.6),
+                    blurRadius: 25,
+                    spreadRadius: 5,
+                  ),
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 40,
+                    spreadRadius: 8,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.emergency_outlined,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
+  Widget _buildNavButton({
+    required IconData icon,
+    required String label,
+    required String description,
+    bool isActive = false,
+    required VoidCallback onTap,
+  }) {
+    return Semantics(
+      label: '$label button',
+      button: true,
+      selected: isActive,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive
+                ? Colors.white.withOpacity(0.25)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: isActive
+                ? Border.all(color: Colors.white.withOpacity(0.3), width: 1.5)
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                color: isActive
+                    ? Colors.white
+                    : const Color.fromARGB(255, 255, 253, 253).withOpacity(0.9),
+                size: 25,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isActive
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.9),
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
