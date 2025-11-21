@@ -8,7 +8,6 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'home_page.dart';
 import 'Reminders.dart';
 import 'settings.dart';
-import 'location_selection_page.dart';
 import 'contact_info_page.dart';
 
 class SosScreen extends StatefulWidget {
@@ -20,7 +19,6 @@ class SosScreen extends StatefulWidget {
 
 class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   // DEMO toggle (true = no real sending, just shows success)
-  static const bool kDemoMode = true;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
