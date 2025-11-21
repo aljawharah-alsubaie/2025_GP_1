@@ -62,8 +62,7 @@ dependencies:
   hive_flutter: ^1.1.0
 
   # 🔹 SMS / Telephony
-  telephony:
-    path: ./packages/telephony
+
 
 dev_dependencies:
   flutter_test:
