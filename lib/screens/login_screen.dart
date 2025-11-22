@@ -9,6 +9,7 @@ import 'set_password_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -168,6 +169,20 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
+  Future<void> _sendLoginAlertEmail({
+    required String email,
+    required String method,
+  }) async {
+    if (email.isEmpty) return;
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('sendLoginAlertEmail')
+          .call({'email': email, 'loginMethod': method});
+    } catch (e) {
+      debugPrint('sendLoginAlertEmail failed: $e');
+    }
+  }
+
   Future<void> _login() async {
     // نشغّل اللودينق وأنيميشن الزر
     setState(() => _isLoading = true);
@@ -195,7 +210,6 @@ class _LoginScreenState extends State<LoginScreen>
 
       // ========== التحقق من صيغة الإيميل والدومين ==========
 
-      // لو ما كتب @ → نعطيه مثال
       if (!email.contains('@')) {
         await _showErrorWithSoundAndBanner(
           "Please enter a valid email in the format example@domain.com.",
@@ -203,10 +217,8 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // تحديد الدومين بعد الـ @
       final domain = email.split('@').last.toLowerCase();
 
-      // الدومينات المسموحه فقط
       const allowedDomains = [
         'gmail.com',
         'outlook.com',
@@ -219,7 +231,40 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // ========== محاولة تسجيل الدخول ==========
+      // ========== أولاً: نسأل Cloud Function هل الإيميل موجود ولا لا ==========
+      final checkEmailCallable = FirebaseFunctions.instance.httpsCallable(
+        'checkEmailStatus',
+      );
+
+      final checkResult = await checkEmailCallable.call(<String, dynamic>{
+        'email': email,
+      });
+
+      final checkData = Map<String, dynamic>.from(
+        checkResult.data as Map<dynamic, dynamic>,
+      );
+
+      final bool exists = checkData['exists'] == true;
+      final List<String> providers = List<String>.from(
+        checkData['providers'] ?? const [],
+      );
+
+      // لو ما فيه حساب بهذا الإيميل → نوقف هنا
+      if (!exists) {
+        await _showErrorWithSoundAndBanner(
+          'No account found for this email. Please sign up first',
+        );
+        return;
+      }
+
+      if (!providers.contains('password')) {
+        await _showErrorWithSoundAndBanner(
+          'This email is registered with Google. Please continue with Google sign-in.',
+        );
+        return;
+      }
+
+      // ========== محاولة تسجيل الدخول (الآن نعرف أكيد إن الإيميل موجود) ==========
       final UserCredential credential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
 
@@ -238,47 +283,57 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
+      // 🔒 إرسال إيميل تنبيه تسجيل دخول (Email/Password)
+      await _sendLoginAlertEmail(email: email, method: 'Email/Password');
+
+      // ✅ إحضار الاسم من Firestore عشان رسالة الترحيب
+      String fullName = 'User';
+
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        final data = userDoc.data();
+
+        if (data != null && data.isNotEmpty) {
+          fullName =
+              data['full_name'] ?? user.displayName ?? user.email ?? 'User';
+        } else {
+          fullName = user.displayName ?? user.email ?? 'User';
+        }
+      } catch (_) {
+        fullName = user.displayName ?? user.email ?? 'User';
+      }
+
+      _showSnackBar("Welcome back, $fullName!", Colors.green);
+      await _speakForce("Welcome back, $fullName!");
+
       // ========== نجاح تسجيل الدخول ==========
-      // لو عندك "Remember me" خزّني الإيميل هنا
       if (_rememberMe) {
         try {
           const storage = FlutterSecureStorage();
           await storage.write(key: 'saved_email', value: email);
-        } catch (_) {
-          // لو صار خطأ في التخزين نتجاهله
-        }
+        } catch (_) {}
       }
 
-      // نطق النجاح
-      await _speak(
-        "Login successful. Redirecting to homepage",
-        interrupt: true,
-      );
-
-      // الانتقال للهوم
       if (!mounted) return;
+      await Future.delayed(const Duration(milliseconds: 500));
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const HomePage()),
       );
     } on FirebaseAuthException catch (e) {
-      // للتتبع لو حابة تشوفين الكود في الـ debug console
       debugPrint('Login error code: ${e.code}');
 
-      // حالة: ما فيه حساب بهذا الإيميل (أو invalid-credential من بعض الإصدارات)
-      if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
-        await _showErrorWithSoundAndBanner(
-          'No account found for this email. Please sign up first',
-        );
-        return;
-      }
-
-      // حالة: الباسوورد غلط
-      if (e.code == 'wrong-password') {
+      // هنا إحنا متأكدين أصلاً إن الإيميل موجود (من Cloud Function),
+      // فلو صار wrong-password أو invalid-credential → معناها الباسوورد غلط
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
         await _showErrorWithSoundAndBanner('Invalid email or password');
         return;
       }
 
-      // حالة: صيغة الإيميل غلط من Firebase (احتياط)
       if (e.code == 'invalid-email') {
         await _showErrorWithSoundAndBanner(
           'The email format is invalid. Please enter a valid email address',
@@ -286,7 +341,6 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // حساب معطّل
       if (e.code == 'user-disabled') {
         await _showErrorWithSoundAndBanner(
           'This account has been disabled. Please contact support',
@@ -294,14 +348,24 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // أي خطأ ثاني غير متوقع
       await _showErrorWithSoundAndBanner(
-        'Login failed due to an unexpected error. Please try again',
+        'An unexpected error occurred. Please try again',
       );
     } catch (e) {
-      // أخطاء ثانية (شبكة، أشياء غير متوقعة)
+      // 🔌 إذا كان الخطأ من خارج Firebase: مثل socket timeout, DNS failure
+      if (e.toString().contains('SocketException') ||
+          e.toString().contains('Network') ||
+          e.toString().contains('Handshake') ||
+          e.toString().contains('Failed host lookup')) {
+        await _showErrorWithSoundAndBanner(
+          'Please check your internet connection and try again',
+        );
+        return;
+      }
+
+      // أي شيء غير الإنترنت
       await _showErrorWithSoundAndBanner(
-        'Login failed due to an unexpected error. Please try again',
+        'An unexpected error occurred. Please try again.',
       );
     } finally {
       if (mounted) {
@@ -319,10 +383,8 @@ class _LoginScreenState extends State<LoginScreen>
       await _speakForce("Google login activated. Please choose your account");
       await Future.delayed(const Duration(milliseconds: 400));
 
-      // 🟦 استخدام الميثود الخاصة بالـ Login فقط
       final cred = await GoogleSignInHandler.signInWithGoogleForLogin(context);
 
-      // المستخدم لغى اختيار الحساب
       if (cred == null) {
         await _showErrorWithSoundAndBanner("Google login was cancelled");
         return;
@@ -336,30 +398,45 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // 🔎 نجيب بياناته من Firestore عشان الاسم
-      final userDoc = await FirebaseFirestore.instance
+      // ✅ جرّبي إرسال إيميل التنبيه لكن لا تخلي أي خطأ يطيح اللوق إن
+      try {
+        await _sendLoginAlertEmail(email: user.email ?? '', method: 'Google');
+      } catch (e) {
+        // بس نطبع الخطأ في الـ debug عشان نعرف وش فيه
+        debugPrint('❌ sendLoginAlertEmail failed: $e');
+      }
+
+      // 🔎 Firestore
+      final userDocRef = FirebaseFirestore.instance
           .collection('users')
-          .doc(user.uid)
-          .get();
+          .doc(user.uid);
+      final userDoc = await userDocRef.get();
 
-      final data = userDoc.data() != null
-          ? userDoc.data() as Map<String, dynamic>
-          : {};
-
+      Map<String, dynamic> data = {};
       String fullName = 'User';
+
       if (userDoc.exists) {
+        data = userDoc.data() as Map<String, dynamic>;
         fullName = data['full_name'] ?? user.displayName ?? 'User';
       } else {
         fullName = user.displayName ?? user.email ?? 'User';
+
+        await userDocRef.set({
+          'full_name': fullName,
+          'email': user.email ?? '',
+          'phone': '',
+          'signInProvider': 'google',
+          'email_verified': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
 
-      // 🧾 نخزّن حالة الدخول
       const storage = FlutterSecureStorage();
       await storage.write(key: 'isLoggedIn', value: 'true');
       await storage.write(key: 'userEmail', value: user.email ?? '');
 
-      _showSnackBar("Welcome back, $fullName!", Colors.green);
-      await _speakForce("Welcome back, $fullName!");
+      _showSnackBar("Welcome, $fullName!", Colors.green);
+      await _speakForce("Welcome, $fullName!");
 
       if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 500));
@@ -375,18 +452,9 @@ class _LoginScreenState extends State<LoginScreen>
           transitionDuration: const Duration(milliseconds: 500),
         ),
       );
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'app-google-not-registered') {
-        await _showErrorWithSoundAndBanner(
-          'This Google account hasn’t been registered yet. Please sign up first',
-        );
-        return;
-      }
-
-      await _showErrorWithSoundAndBanner(
-        "Google login failed. Please try again",
-      );
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('❌ Google login ERROR: $e');
+      debugPrint(stack.toString());
       await _showErrorWithSoundAndBanner(
         "Google login failed due to an unexpected error. Please try again",
       );
@@ -407,7 +475,7 @@ class _LoginScreenState extends State<LoginScreen>
     entry = OverlayEntry(
       builder: (context) {
         return Positioned(
-          bottom: 120,
+          bottom: 80,
           left: 16,
           right: 16,
           child: Material(
@@ -688,7 +756,7 @@ class _LoginScreenState extends State<LoginScreen>
                             () => _obscurePassword = !_obscurePassword,
                           ),
                           ttsMessage:
-                              "Password field. Please type your account password. This field is secure.",
+                              "Password field. Please type your account password",
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return "Password is required";

@@ -761,7 +761,6 @@ class _SignupScreenState extends State<SignupScreen>
         return;
       }
 
-      // 🔎 نتأكد أن له doc في Firestore (الميثود نفسها تحاول تنشئه، بس نضمن)
       final userDocRef = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid);
@@ -778,15 +777,22 @@ class _SignupScreenState extends State<SignupScreen>
         });
       }
 
-      // 🧾 نخزن حالة الدخول
       const storage = FlutterSecureStorage();
       await storage.write(key: 'isLoggedIn', value: 'true');
       await storage.write(key: 'userEmail', value: user.email ?? '');
 
       final name = user.displayName ?? user.email ?? 'User';
 
-      _showSuccessWithSpeech(
-        "Google sign up completed successfully! Welcome $name.",
+      _showSnackBar("Welcome, $name!", Colors.green);
+      await _speakForce("Welcome, $name!");
+
+      await Future.delayed(const Duration(milliseconds: 1800));
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomePage()),
       );
 
       HapticFeedback.heavyImpact();
@@ -797,16 +803,6 @@ class _SignupScreenState extends State<SignupScreen>
         context,
         MaterialPageRoute(builder: (_) => const HomePage()),
       );
-    } on FirebaseAuthException catch (e) {
-      // لو الإيميل مرتبط بمزود ثاني مثلاً
-      if (e.code == 'account-exists-with-different-credential') {
-        _showErrorWithSoundAndBanner(
-          "An account already exists with this email using a different sign-in method. Please try logging in using that method.",
-        );
-        return;
-      }
-
-      _showErrorWithSoundAndBanner("Google sign-up failed. Please try again.");
     } catch (_) {
       _showErrorWithSoundAndBanner("Google sign-up failed. Please try again.");
     } finally {
@@ -814,7 +810,75 @@ class _SignupScreenState extends State<SignupScreen>
     }
   }
 
-  // =================== UI ===================
+  void _showSnackBar(String message, Color color) {
+    if (!mounted) return;
+
+    final overlay = Overlay.of(context, rootOverlay: true);
+
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          bottom: 80,
+          left: 16,
+          right: 16,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              height: 70,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 12),
+                  Icon(
+                    color == Colors.green
+                        ? Icons.check_circle
+                        : Icons.error_outline,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(entry);
+
+    Future.delayed(const Duration(seconds: 4), () {
+      try {
+        entry.remove();
+      } catch (_) {}
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

@@ -133,11 +133,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadUserData();
   }
 
-  Future<void> _speakWelcome() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    await _speak("Manage your personal information");
-  }
-
   Future<void> _speakPhoneNote() async {
     await _speak(
       "Phone number note. It should start with zero five and be exactly ten digits.",
@@ -167,7 +162,6 @@ class _ProfilePageState extends State<ProfilePage> {
           });
 
           // 1) تعريف الصفحة
-          await _speakWelcome();
           // 🔁 ديلاي زيادة بين الترحيب وملاحظة الرقم
           await Future.delayed(const Duration(seconds: 1));
           // 2) ملاحظة الرقم
@@ -180,7 +174,6 @@ class _ProfilePageState extends State<ProfilePage> {
           setState(() {
             _showPhoneEmptyError = _phoneController.text.trim().isEmpty;
           });
-          await _speakWelcome();
           await Future.delayed(const Duration(seconds: 1));
           await _speakPhoneNote();
           await Future.delayed(const Duration(seconds: 1));
@@ -190,7 +183,6 @@ class _ProfilePageState extends State<ProfilePage> {
         setState(() {
           _showPhoneEmptyError = _phoneController.text.trim().isEmpty;
         });
-        await _speakWelcome();
         await Future.delayed(const Duration(seconds: 1));
         await _speakPhoneNote();
         await Future.delayed(const Duration(seconds: 1));
@@ -200,7 +192,6 @@ class _ProfilePageState extends State<ProfilePage> {
       setState(() {
         _showPhoneEmptyError = _phoneController.text.trim().isEmpty;
       });
-      await _speakWelcome();
       await Future.delayed(const Duration(seconds: 1));
       await _speakPhoneNote();
       await Future.delayed(const Duration(seconds: 1));

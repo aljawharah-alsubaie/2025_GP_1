@@ -12,7 +12,8 @@ import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
 import 'settings.dart';
-import 'package:google_sign_in/google_sign_in.dart'; // ✅ مضاف: Google Sign-In
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class AccountInfoPage extends StatefulWidget {
   const AccountInfoPage({super.key});
@@ -792,6 +793,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
       );
     }
 
+    String userEmail = user.email ?? '';
+    String displayName = 'User';
+
     await _withBlocking(() async {
       if (isGoogleOnly) {
         final ok = await _reauthenticateWithGoogle();
@@ -811,6 +815,15 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         final userDoc = _firestore.collection('users').doc(user.uid);
         final snap = await userDoc.get().timeout(const Duration(seconds: 8));
         if (snap.exists) {
+          final data = snap.data();
+          if (data != null) {
+            if ((data['full_name'] ?? '').toString().isNotEmpty) {
+              displayName = data['full_name'];
+            }
+            if ((data['email'] ?? '').toString().isNotEmpty) {
+              userEmail = data['email'];
+            }
+          }
           await userDoc.delete().timeout(const Duration(seconds: 8));
         }
       } on TimeoutException {
@@ -844,9 +857,18 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         return;
       }
 
+      // بعد ما ينجح user.delete() وقبل signOut:
       try {
-        await _auth.signOut().timeout(const Duration(seconds: 6));
-      } catch (_) {}
+        if (userEmail.isNotEmpty) {
+          final callable = FirebaseFunctions.instance.httpsCallable(
+            'sendAccountDeletionEmail',
+          );
+          await callable.call({'email': userEmail, 'displayName': displayName});
+        }
+      } catch (e) {
+        // ما نكسر تجربة المستخدم لو الإيميل فشل، بس نطبع اللوق
+        print('Error sending account deletion email: $e');
+      }
 
       _showSuccessSnackBar('Account deleted successfully');
       await Future.delayed(const Duration(seconds: 1));
@@ -1375,4 +1397,3 @@ class _AccountInfoPageState extends State<AccountInfoPage>
     );
   }
 }
- 

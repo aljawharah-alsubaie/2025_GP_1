@@ -58,61 +58,54 @@ class GoogleSignInHandler {
   }
 
   /// 🔵 تستخدم في صفحة Login
-  /// ما تسمح بدخول أي حساب Google جديد ما له record في Firestore
+  /// 🔥 تسمح بدخول Google حتى لو أول مرة — وتسوّي له تسجيل جديد تلقائيًا
   static Future<UserCredential?> signInWithGoogleForLogin(
     BuildContext context,
   ) async {
-    // ✨ نفس الفكرة: نمسح الجلسة القديمة عشان يطلع الـ account picker قد ما نقدر
     try {
-      if (await _googleSignIn.isSignedIn()) {
-        await _googleSignIn.signOut();
-      }
-    } catch (_) {}
-
-    final googleUser = await _googleSignIn.signIn();
-    if (googleUser == null) {
-      // ألغى
-      return null;
-    }
-
-    final googleAuth = await googleUser.authentication;
-
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-
-    final userCredential = await _auth.signInWithCredential(credential);
-    final user = userCredential.user;
-    if (user == null) return null;
-
-    // 🔍 نتحقق هل هذا المستخدم مسجّل سابقًا في Firestore؟
-    final userDocRef = _firestore.collection('users').doc(user.uid);
-    final snap = await userDocRef.get();
-
-    final bool hasFirestoreRecord = snap.exists;
-    final bool isNewUser =
-        userCredential.additionalUserInfo?.isNewUser ?? false;
-
-    // لو ما له doc أو اعتبره Firebase newUser → نمنع الدخول
-    if (!hasFirestoreRecord || isNewUser) {
+      // نضمن خروج الجلسة القديمة
       try {
-        await user.delete(); // نحذفه من Auth عشان ما يبقى حساب غير معروف
+        if (await _googleSignIn.isSignedIn()) {
+          await _googleSignIn.signOut();
+        }
       } catch (_) {}
 
-      try {
-        await _auth.signOut();
-      } catch (_) {}
+      // يفتح اختيار الحساب
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null; // ألغي
 
-      // نرمي خطأ مخصص نلتقطه في login_screen
-      throw FirebaseAuthException(
-        code: 'app-google-not-registered',
-        message:
-            'No existing Google account found in the app. Please sign up with Google first.',
+      final googleAuth = await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
       );
-    }
 
-    // ✅ هنا نعرف أنه مسجل من قبل (Sign up with Google)
-    return userCredential;
+      // يسوي تسجيل دخول Firebase
+      final userCredential = await _auth.signInWithCredential(credential);
+      final user = userCredential.user;
+      if (user == null) return null;
+
+      final userDocRef = _firestore.collection('users').doc(user.uid);
+      final snap = await userDocRef.get();
+
+      // ✨✨ إذا ما له doc → أول مرة يدخل → نعتبرها Sign up تلقائيًا
+      if (!snap.exists) {
+        await userDocRef.set({
+          'full_name': user.displayName ?? 'User',
+          'email': user.email ?? '',
+          'phone': '',
+          'signInProvider': 'google',
+          'email_verified': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      // رجعي الـ UserCredential
+      return userCredential;
+    } catch (e) {
+      debugPrint("🔥 Google login error: $e");
+      rethrow;
+    }
   }
 }
