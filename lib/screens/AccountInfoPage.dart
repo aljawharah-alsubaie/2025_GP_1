@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'profile.dart';
-import 'package:munir_app/screens/login_screen.dart';
+import 'package:munir_app/screens/signup_screen.dart';
 import './sos_screen.dart';
 import 'home_page.dart';
 import 'reminders.dart';
@@ -275,8 +275,8 @@ class _AccountInfoPageState extends State<AccountInfoPage>
     try {
       return await action();
     } catch (e) {
-      _showErrorSnackBar('Unexpected error, please try again.');
-      _speak('Unexpected error, please try again.');
+      _showErrorSnackBar('Unexpected error, please try again');
+      _speak('Unexpected error, please try again');
       return null;
     } finally {
       _hideBlockingOverlay();
@@ -378,7 +378,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                           child: TextButton(
                             onPressed: () {
                               _hapticFeedback();
-                              Navigator.pop(context, true); // لا تنطق هنا
+                              Navigator.pop(context, true);
                             },
                             style: TextButton.styleFrom(
                               backgroundColor: Colors.transparent,
@@ -411,7 +411,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                           child: TextButton(
                             onPressed: () {
                               _hapticFeedback();
-                              Navigator.pop(context, false); // لا تنطق هنا
+                              Navigator.pop(context, false);
                             },
                             style: TextButton.styleFrom(
                               backgroundColor: Colors.transparent,
@@ -442,18 +442,18 @@ class _AccountInfoPageState extends State<AccountInfoPage>
     );
   }
 
-  Future<String?> _showPasswordDialog() async {
+  Future<bool> _showPasswordDialog(String email) async {
     final TextEditingController passwordController = TextEditingController();
     bool isPasswordVisible = false;
 
-    return await showDialog<String>(
+    final result = await showDialog<bool>(
       context: context,
       useRootNavigator: true,
       barrierDismissible: false,
       barrierColor: Colors.black.withOpacity(0.55),
       builder: (context) {
         bool announced = false;
-        String? errorText;
+        bool isLoading = false;
 
         return _fixedDialog(
           StatefulBuilder(
@@ -519,11 +519,6 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                     TextField(
                       controller: passwordController,
                       obscureText: !isPasswordVisible,
-                      onChanged: (v) {
-                        if (errorText != null && v.trim().isNotEmpty) {
-                          setState(() => errorText = null);
-                        }
-                      },
                       style: const TextStyle(
                         color: Color(0xFFD32F2F),
                         fontWeight: FontWeight.w700,
@@ -562,12 +557,6 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                           horizontal: 22,
                           vertical: 22,
                         ),
-                        errorText: errorText,
-                        errorStyle: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 15,
-                        ),
                       ),
                     ),
                   ],
@@ -584,27 +573,48 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: TextButton(
-                            onPressed: () {
-                              _hapticFeedback();
-                              final text = passwordController.text.trim();
-                              if (text.isEmpty) {
-                                setState(
-                                  () => errorText = 'Password is required',
-                                );
-                                _speakNow('Password is required');
-                                return;
-                              }
-                              Navigator.pop(context, text);
-                            },
+                            onPressed: isLoading
+                                ? null
+                                : () async {
+                                    _hapticFeedback();
+                                    final text = passwordController.text.trim();
+
+                                    if (text.isEmpty) {
+                                      _showFrontError('Password is required');
+
+                                      _speakNow('Password is required');
+                                      return;
+                                    }
+
+                                    setState(() => isLoading = true);
+                                    final ok = await _verifyPassword(
+                                      email,
+                                      text,
+                                    );
+                                    setState(() => isLoading = false);
+
+                                    if (!ok) {
+                                      _showFrontError(
+                                        'Invalid password. Please try again',
+                                      );
+
+                                      _speakNow(
+                                        'Invalid password. Please try again',
+                                      );
+                                      return;
+                                    }
+
+                                    Navigator.pop(context, true);
+                                  },
                             style: TextButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(18),
                               ),
                             ),
-                            child: const Text(
-                              'Confirm',
-                              style: TextStyle(
+                            child: Text(
+                              isLoading ? 'Please wait...' : 'Confirm',
+                              style: const TextStyle(
                                 color: Color(0xFFD32F2F),
                                 fontWeight: FontWeight.w700,
                                 fontSize: 20,
@@ -627,7 +637,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                           child: TextButton(
                             onPressed: () {
                               _hapticFeedback();
-                              Navigator.pop(context, null);
+                              Navigator.pop(context, false);
                             },
                             style: TextButton.styleFrom(
                               backgroundColor: Colors.transparent,
@@ -656,6 +666,8 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         );
       },
     );
+
+    return result ?? false;
   }
 
   Future<bool> _verifyPassword(String email, String password) async {
@@ -723,7 +735,55 @@ class _AccountInfoPageState extends State<AccountInfoPage>
     }
   }
 
-  // ✅ معدلة بالكامل: تفرّق بين Google و Email/Password
+  void _showFrontError(String message) {
+    final overlay = OverlayEntry(
+      builder: (context) => Positioned(
+        bottom: 40,
+        left: 20,
+        right: 20,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE53935),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 26),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context, rootOverlay: true).insert(overlay);
+
+    Future.delayed(const Duration(seconds: 3)).then((_) {
+      overlay.remove();
+    });
+  }
+
   Future<void> _deleteAccount() async {
     final confirmed = await _showDangerConfirmDialog(
       icon: Icons.delete_forever,
@@ -754,15 +814,8 @@ class _AccountInfoPageState extends State<AccountInfoPage>
     final bool isGoogleOnly =
         providers.length == 1 && providers.contains('google.com');
     final bool hasPasswordProvider = providers.contains('password');
-    String? password;
     String? email;
     if (hasPasswordProvider && !isGoogleOnly) {
-      password = await _showPasswordDialog();
-      if (password == null || password.isEmpty) {
-        _showErrorSnackBar('Deletion cancelled');
-        await _speakNow('Deletion cancelled');
-        return;
-      }
       email = user.email;
       if (email == null || email.isEmpty) {
         for (final info in user.providerData) {
@@ -775,6 +828,13 @@ class _AccountInfoPageState extends State<AccountInfoPage>
       if (email == null || email.isEmpty) {
         _showErrorSnackBar('Email not found. Please log in again.');
         await _speakNow('Email not found. Please log in again.');
+        return;
+      }
+
+      final ok = await _showPasswordDialog(email);
+      if (!ok) {
+        _showErrorSnackBar('Deletion cancelled');
+        await _speakNow('Deletion cancelled');
         return;
       }
     } else if (!isGoogleOnly) {
@@ -800,13 +860,6 @@ class _AccountInfoPageState extends State<AccountInfoPage>
       if (isGoogleOnly) {
         final ok = await _reauthenticateWithGoogle();
         if (!ok) {
-          return;
-        }
-      } else if (hasPasswordProvider) {
-        final ok = await _verifyPassword(email!, password!);
-        if (!ok) {
-          _showErrorSnackBar('Invalid password. Please try again');
-          await _speakNow('Invalid password. Please try again.');
           return;
         }
       }
@@ -857,7 +910,6 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         return;
       }
 
-      // بعد ما ينجح user.delete() وقبل signOut:
       try {
         if (userEmail.isNotEmpty) {
           final callable = FirebaseFunctions.instance.httpsCallable(
@@ -866,7 +918,6 @@ class _AccountInfoPageState extends State<AccountInfoPage>
           await callable.call({'email': userEmail, 'displayName': displayName});
         }
       } catch (e) {
-        // ما نكسر تجربة المستخدم لو الإيميل فشل، بس نطبع اللوق
         print('Error sending account deletion email: $e');
       }
 
@@ -874,10 +925,10 @@ class _AccountInfoPageState extends State<AccountInfoPage>
       await Future.delayed(const Duration(seconds: 1));
       await _tts.stop();
 
-      await _speakAwait('Account deleted successfully. Redirecting to login.');
+      await _speakAwait('Account deleted successfully. Redirecting to sign up');
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          MaterialPageRoute(builder: (_) => const SignupScreen()),
           (route) => false,
         );
       }

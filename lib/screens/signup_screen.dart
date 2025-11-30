@@ -302,12 +302,26 @@ class _SignupScreenState extends State<SignupScreen>
         errorMessage = _validateEmail(value);
         break;
       case 'phone':
-        errorMessage = _validatePhone(value);
+        final cleaned = value.trim().replaceAll(RegExp(r'[-\s()]'), '');
+        final issues = <String>[];
+
+        if (!cleaned.startsWith('05')) {
+          issues.add('start with 05');
+        }
+        if (cleaned.length != 10) {
+          issues.add('be exactly 10 digits');
+        }
+        if (!RegExp(r'^[0-9]+$').hasMatch(cleaned)) {
+          issues.add('contain only numbers');
+        }
+
+        if (value.isNotEmpty && issues.isNotEmpty) {
+          errorMessage = "Mobile number must ${issues.join(', ')}.";
+        }
         break;
       case 'password':
         final missing = _getMissingPasswordRequirements(value);
         if (missing.isNotEmpty && value.isNotEmpty) {
-          // نعرض كل المتطلبات المفقودة دفعة واحدة
           errorMessage = "Password missing: ${missing.join(', ')}";
         }
         break;
@@ -319,10 +333,9 @@ class _SignupScreenState extends State<SignupScreen>
     }
 
     if (errorMessage != null && value.isNotEmpty) {
-      // ألغِ قراءة قائمة (مثلاً قائمة الأخطاء الطويلة) واقرأ خطأ هذا الحقل الآن
       _showRealTimeError(errorMessage);
     } else {
-      // لو أصلح الخطأ، اسكتي ولا تعرضي شيء
+      // تم إصلاح الخطأ، نسكت
     }
   }
 
@@ -1629,7 +1642,10 @@ class _SignupScreenState extends State<SignupScreen>
                   _checkTimer?.cancel();
                   _resendCooldownTimer?.cancel();
                   _cancelAllSpeech(cancelTypingTimer: true);
-                  Navigator.pop(context);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
                 },
                 child: const Text(
                   "Back to Login",

@@ -275,11 +275,44 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // التحقق من التفعيل (email verified)
       if (!user.emailVerified) {
-        await _showErrorWithSoundAndBanner(
-          "Your email is not verified yet. Please check your inbox and verify your email before logging in",
-        );
+        try {
+          final callable = FirebaseFunctions.instance.httpsCallable(
+            'handleUnverifiedLogin',
+          );
+
+          final result = await callable.call(<String, dynamic>{
+            'email': email,
+            'displayName': user.displayName ?? email.split('@').first,
+          });
+
+          final data = Map<String, dynamic>.from(
+            result.data as Map<dynamic, dynamic>,
+          );
+
+          final bool resent = data['resent'] == true;
+          final String? lastSentAt = data['lastSentAt'] as String?;
+
+          if (resent) {
+            await _showErrorWithSoundAndBanner(
+              "Your email is not verified yet. We have sent you a new verification link. "
+              "Please check your inbox then try logging in again after verifying",
+            );
+          } else {
+            final extraTimeInfo = lastSentAt != null
+                ? " We already sent a verification email recently."
+                : "";
+            await _showErrorWithSoundAndBanner(
+              "Your email is not verified yet.$extraTimeInfo Please check your inbox and use the existing verification email",
+            );
+          }
+        } catch (e) {
+          await _showErrorWithSoundAndBanner(
+            "Your email is not verified yet. Please check your inbox for the verification email",
+          );
+        }
+
+        await FirebaseAuth.instance.signOut();
         return;
       }
 

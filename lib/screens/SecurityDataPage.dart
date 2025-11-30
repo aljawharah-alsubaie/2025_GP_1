@@ -106,9 +106,12 @@ class _SecurityDataPageState extends State<SecurityDataPage>
       _currentErrorMessage = message;
       _showErrorBanner = true;
     });
-    Future.delayed(const Duration(seconds: 6), () {
-      if (mounted) _hideErrorBanner();
-    });
+final displaySeconds = message.length > 60 ? 10 : 6;
+
+Future.delayed(Duration(seconds: displaySeconds), () {
+  if (mounted) _hideErrorBanner();
+});
+
   }
 
   // إخفاء بانر الخطأ

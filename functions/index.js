@@ -1,8 +1,9 @@
-const {onCall} = require('firebase-functions/v2/https');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 
 admin.initializeApp();
+const db = admin.firestore();
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -17,27 +18,168 @@ exports.sendVerificationEmail = onCall(async (request) => {
   const email = request.data.email;
   const displayName = request.data.displayName || 'User';
 
-console.log('📧 Sending verification email to:', email);
+  console.log('📧 Sending verification email to:', email);
 
   try {
     const link = await admin.auth().generateEmailVerificationLink(email);
-const dateOnly = new Date().toISOString().split('T')[0];
+    const dateOnly = new Date().toISOString().split('T')[0];
 
     const mailOptions = {
       from: '"MUNIR - Smart Glasses 💜" <munir.smart.glasses@gmail.com>',
       to: email,
-    subject: `Welcome to MUNIR - Verify Your Emai (${dateOnly})`,
+      subject: `Welcome to MUNIR - Verify Your Emai (${dateOnly})`,
       html: getWelcomeEmailTemplate(displayName, link)
     };
 
     await transporter.sendMail(mailOptions);
 
+    await db
+      .collection('email_verifications')
+      .doc(email)
+      .set(
+        {
+          lastSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
     console.log('✅ Email sent successfully to:', email);
-    return {success: true, message: 'Email sent successfully'};
+    return { success: true, message: 'Email sent successfully' };
 
   } catch (error) {
     console.error('❌ Error:', error);
     throw error;
+  }
+});
+
+function getResendVerificationExpiredTemplate(userName, verificationLink) {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>New Verification Link – MUNIR</title>
+</head>
+
+<body style="margin:0; padding:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#f8f9fa;">
+  <div style="max-width:600px; margin:0 auto; background:#ffffff;">
+
+    <div style="padding:30px 20px; text-align:center; background:linear-gradient(135deg, #B14ABA, #8E44AD);">
+      <h1 style="color:#ffffff; margin:0 0 10px 0; font-size:26px; font-weight:700;">
+        New verification link
+      </h1>
+      <p style="color:rgba(255,255,255,0.95); margin:0; font-size:14px;">
+        Hi ${userName}, your previous link may have expired, so here is a new one.
+      </p>
+    </div>
+
+    <div style="padding:26px 22px; color:#2C3E50;">
+      <p style="font-size:15px; margin:0 0 16px 0;">
+        To activate your <strong>MUNIR</strong> account, please verify your email by clicking the button below:
+      </p>
+
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${verificationLink}" style="background: linear-gradient(135deg, #B14ABA, #8E44AD); color: white; padding: 16px 40px; text-decoration: none; border-radius: 12px; display: inline-block; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(177, 74, 186, 0.3);">
+          Verify my email
+        </a>
+      </div>
+
+      <p style="color: #999; font-size: 13px; text-align: center; margin: 24px 0;">
+        Or copy and paste this link into your browser:<br>
+        <a href="${verificationLink}" style="color: #B14ABA; word-break: break-all; text-decoration: none; font-size: 12px;">${verificationLink}</a>
+      </p>
+    </div>
+
+    <div style="padding:14px 20px; font-size:12px; color:#95a5a6; text-align:center; background:#f2f2f2;">
+      MUNIR – Smart Glasses · Empowering visually impaired users 💜
+    </div>
+
+  </div>
+</body>
+</html>
+  `;
+}
+exports.handleUnverifiedLogin = onCall(async (request) => {
+  const email = request.data.email;
+  const displayName = request.data.displayName || 'User';
+
+  if (!email) {
+    throw new HttpsError('invalid-argument', 'Email is required');
+  }
+
+  const metaRef = db.collection('email_verifications').doc(email);
+  const metaSnap = await metaRef.get();
+
+  let shouldResend = false;
+  let lastSentAtIso = null;
+
+  if (!metaSnap.exists) {
+    // ما عندنا أي سجل → غالباً أول مرة أو من قبل ما نطبق التخزين
+    shouldResend = true;
+  } else {
+    const data = metaSnap.data() || {};
+    const lastSentAt = data.lastSentAt;
+
+    if (!lastSentAt) {
+      shouldResend = true;
+    } else {
+      const lastDate = lastSentAt.toDate
+        ? lastSentAt.toDate()
+        : new Date(lastSentAt);
+      lastSentAtIso = lastDate.toISOString();
+
+      const diffMs = Date.now() - lastDate.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+
+      // هنا شرط الـ 1 ساعة
+      if (diffHours >= 1) {
+        shouldResend = true;
+      }
+    }
+  }
+
+  if (!shouldResend) {
+    // لا نرسل جديد → نقول للـ client إنه يستعمل الإيميل القديم
+    return {
+      resent: false,
+      lastSentAt: lastSentAtIso,
+      message: 'Verification email already sent recently',
+    };
+  }
+
+  // نسوي generate لرابط جديد + نرسل تمبلت "expired/new link"
+  try {
+    const link = await admin.auth().generateEmailVerificationLink(email);
+    const dateOnly = new Date().toISOString().split('T')[0];
+
+    const mailOptions = {
+      from: '"MUNIR - Smart Glasses 💜" <munir.smart.glasses@gmail.com>',
+      to: email,
+      subject: `New Email Verification Link – MUNIR (${dateOnly})`,
+      html: getResendVerificationExpiredTemplate(displayName, link),
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    await metaRef.set(
+      {
+        lastSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+    console.log('✅ Resent verification email (after login) to:', email);
+
+    return {
+      resent: true,
+      message: 'New verification email sent',
+    };
+  } catch (error) {
+    console.error('❌ Error in handleUnverifiedLogin:', error);
+    throw new HttpsError(
+      'internal',
+      'Failed to send a new verification email',
+    );
   }
 });
 
