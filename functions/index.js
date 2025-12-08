@@ -27,21 +27,11 @@ exports.sendVerificationEmail = onCall(async (request) => {
     const mailOptions = {
       from: '"MUNIR - Smart Glasses 💜" <munir.smart.glasses@gmail.com>',
       to: email,
-      subject: `Welcome to MUNIR - Verify Your Emai (${dateOnly})`,
+      subject: `Welcome to MUNIR - Verify Your Email (${dateOnly})`,
       html: getWelcomeEmailTemplate(displayName, link)
     };
 
     await transporter.sendMail(mailOptions);
-
-    await db
-      .collection('email_verifications')
-      .doc(email)
-      .set(
-        {
-          lastSentAt: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      );
 
     console.log('✅ Email sent successfully to:', email);
     return { success: true, message: 'Email sent successfully' };
@@ -99,6 +89,7 @@ function getResendVerificationExpiredTemplate(userName, verificationLink) {
 </html>
   `;
 }
+
 exports.handleUnverifiedLogin = onCall(async (request) => {
   const email = request.data.email;
   const displayName = request.data.displayName || 'User';
@@ -107,20 +98,25 @@ exports.handleUnverifiedLogin = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'Email is required');
   }
 
-  const metaRef = db.collection('email_verifications').doc(email);
-  const metaSnap = await metaRef.get();
+  // 🟢 نجيب اليوزر من Firebase Auth
+  const userRecord = await admin.auth().getUserByEmail(email);
+  
+  // 🟢 نجيب document اليوزر من Firestore
+  const userDocRef = db.collection('users').doc(userRecord.uid);
+  const userDoc = await userDocRef.get();
 
   let shouldResend = false;
   let lastSentAtIso = null;
 
-  if (!metaSnap.exists) {
-    // ما عندنا أي سجل → غالباً أول مرة أو من قبل ما نطبق التخزين
+  if (!userDoc.exists) {
+    // لو ما موجود document (نادر)
     shouldResend = true;
   } else {
-    const data = metaSnap.data() || {};
-    const lastSentAt = data.lastSentAt;
+    const data = userDoc.data() || {};
+    const lastSentAt = data.lastVerificationEmailSentAt; // 🟢 نقرأ من field جديد
 
     if (!lastSentAt) {
+      // ما فيه سجل سابق
       shouldResend = true;
     } else {
       const lastDate = lastSentAt.toDate
@@ -131,15 +127,13 @@ exports.handleUnverifiedLogin = onCall(async (request) => {
       const diffMs = Date.now() - lastDate.getTime();
       const diffHours = diffMs / (1000 * 60 * 60);
 
-      // هنا شرط الـ 1 ساعة
-      if (diffHours >= 1) {
+      if (diffHours >= 24) {
         shouldResend = true;
       }
     }
   }
 
   if (!shouldResend) {
-    // لا نرسل جديد → نقول للـ client إنه يستعمل الإيميل القديم
     return {
       resent: false,
       lastSentAt: lastSentAtIso,
@@ -147,7 +141,6 @@ exports.handleUnverifiedLogin = onCall(async (request) => {
     };
   }
 
-  // نسوي generate لرابط جديد + نرسل تمبلت "expired/new link"
   try {
     const link = await admin.auth().generateEmailVerificationLink(email);
     const dateOnly = new Date().toISOString().split('T')[0];
@@ -161,9 +154,9 @@ exports.handleUnverifiedLogin = onCall(async (request) => {
 
     await transporter.sendMail(mailOptions);
 
-    await metaRef.set(
+    await userDocRef.set(
       {
-        lastSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastVerificationEmailSentAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
@@ -194,12 +187,12 @@ exports.sendCustomPasswordReset = onCall(async (request) => {
 
   try {
     const resetLink = await admin.auth().generatePasswordResetLink(email);
-const dateOnly = new Date().toISOString().split('T')[0];
+    const dateOnly = new Date().toISOString().split('T')[0];
 
     const mailOptions = {
       from: '"MUNIR - Smart Glasses 💜" <munir.smart.glasses@gmail.com>',
       to: email,
-    subject: `🔐 Password Reset Request – MUNIR (${dateOnly})`,
+      subject: `🔐 Password Reset Request – MUNIR (${dateOnly})`,
       html: getPasswordResetEmailTemplate(resetLink)
     };
 
@@ -248,7 +241,7 @@ function getWelcomeEmailTemplate(userName, verificationLink) {
 
       <!-- Greeting -->
       <p style="color:rgba(255,255,255,0.95); margin:0; font-size:15px;">
-We're happy to have you with us, ${userName}
+        We're happy to have you with us, ${userName}
       </p>
     </div>
 
@@ -262,15 +255,15 @@ We're happy to have you with us, ${userName}
         To complete your registration, please verify your email by clicking the button below:
       </p>
 
-            <div style="text-align: center; margin: 35px 0;">
-                <a href="${verificationLink}" style="background: linear-gradient(135deg, #B14ABA, #8E44AD); color: white; padding: 16px 40px; text-decoration: none; border-radius: 12px; display: inline-block; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(177, 74, 186, 0.3);">
-                    Verify my email
-                </a>
-            </div>
+      <div style="text-align: center; margin: 35px 0;">
+        <a href="${verificationLink}" style="background: linear-gradient(135deg, #B14ABA, #8E44AD); color: white; padding: 16px 40px; text-decoration: none; border-radius: 12px; display: inline-block; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(177, 74, 186, 0.3);">
+          Verify my email
+        </a>
+      </div>
 
-     <p style="color: #999; font-size: 13px; text-align: center; margin: 30px 0;">
-      Or copy and paste this link into your browser:<br>
-      <a href="${verificationLink}" style="color: #B14ABA; word-break: break-all; text-decoration: none; font-size: 12px;">${verificationLink}</a>
+      <p style="color: #999; font-size: 13px; text-align: center; margin: 30px 0;">
+        Or copy and paste this link into your browser:<br>
+        <a href="${verificationLink}" style="color: #B14ABA; word-break: break-all; text-decoration: none; font-size: 12px;">${verificationLink}</a>
       </p>
 
       <p style="font-size:14px; margin:0 0 4px 0;">
@@ -372,12 +365,12 @@ exports.sendLoginAlertEmail = onCall(async (request) => {
     console.error('❌ No email provided for login alert');
     throw new Error('Email is required');
   }
-const dateOnly = new Date().toISOString().split('T')[0];
+  const dateOnly = new Date().toISOString().split('T')[0];
 
   const mailOptions = {
     from: '"MUNIR - Smart Glasses 💜" <munir.smart.glasses@gmail.com>',
     to: email,
-subject: `🔔 New Login to Your MUNIR Account (${dateOnly})`,
+    subject: `🔔 New Login to Your MUNIR Account (${dateOnly})`,
     html: `
 <!DOCTYPE html>
 <html lang="en">
@@ -559,4 +552,3 @@ exports.checkEmailStatus = onCall(async (request) => {
     throw new HttpsError('internal', 'Unable to check email status');
   }
 });
-
