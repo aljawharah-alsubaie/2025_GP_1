@@ -591,6 +591,7 @@ class _SignupScreenState extends State<SignupScreen>
         'email': emailController.text.trim(),
         'phone': phoneController.text.trim(),
         'email_verified': false,
+        'lastVerificationEmailSentAt': FieldValue.serverTimestamp(),
       });
 
       setState(() {
