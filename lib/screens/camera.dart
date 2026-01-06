@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/face_recognition_api.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -327,33 +328,48 @@ class _CameraScreenState extends State<CameraScreen> {
         });
         textToSpeak = detectedColor;
       } else if (_processingMode == 'face') {
-        // Face Recognition using API
-        print('🔍 Starting face recognition with API...');
+        // Face Recognition using REST API
+        print('🔍 Starting face recognition with REST API...');
 
         try {
-          // استخدام الـ API للتعرف على الوجه مع File مباشرة
-          final result = await FaceRecognitionAPI.recognizeFace(
-            File(imagePath),
-          );
-
-          setState(() {
-            _faceResult = result;
-            _extractedText = "";
-            _detectedColor = "";
-          });
-
-          if (result.isMatch) {
-            textToSpeak = "Face recognized. This is ${result.personId}";
-            print(
-              '✅ Match found: ${result.personId} with ${result.confidence}% confidence',
-            );
+          final user = FirebaseAuth.instance.currentUser;
+          if (user == null) {
+            textToSpeak = "Please login to use face recognition";
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Please login to use face recognition'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            }
           } else {
-            textToSpeak = "Face detected but not recognized. Unknown person";
-            print('⚠️ No match found');
-          }
+            // Use REST API for face recognition
+            final result = await FaceRecognitionAPI.recognizeFace(
+              imageFile: File(imagePath),
+              userId: user.uid,
+            );
 
-          // Show result dialog
-          _showFaceResultDialog(result, imagePath);
+            // Store result directly - don't create new object
+            setState(() {
+              _faceResult = result;
+              _extractedText = "";
+              _detectedColor = "";
+            });
+
+            if (result.recognized && result.personName != null) {
+              textToSpeak = "Face recognized. This is ${result.personName}";
+              print(
+                '✅ Match found: ${result.personName} with ${(result.confidence * 100).toStringAsFixed(1)}% confidence',
+              );
+            } else {
+              textToSpeak = "Face detected but not recognized. Unknown person";
+              print('⚠️ No match found');
+            }
+
+            // Show result dialog
+            _showFaceResultDialog(result, imagePath);
+          }
         } catch (e) {
           print('❌ Face recognition error: $e');
           textToSpeak = "Error recognizing face. Please try again";
@@ -429,14 +445,14 @@ class _CameraScreenState extends State<CameraScreen> {
         title: Row(
           children: [
             Icon(
-              result.isMatch ? Icons.check_circle : Icons.cancel,
-              color: result.isMatch ? Colors.green : Colors.red,
+              result.recognized ? Icons.check_circle : Icons.cancel,
+              color: result.recognized ? Colors.green : Colors.red,
               size: 32,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                result.isMatch ? 'Face Recognized!' : 'Unknown Face',
+                result.recognized ? 'Face Recognized!' : 'Unknown Face',
                 style: const TextStyle(fontSize: 18),
               ),
             ),
@@ -456,25 +472,27 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (result.isMatch) ...[
-              _buildInfoRow('Name', result.personId, Icons.person),
+            if (result.recognized && result.personName != null) ...[
+              _buildInfoRow('Name', result.personName!, Icons.person),
               _buildInfoRow(
                 'Confidence',
                 '${(result.confidence * 100).toStringAsFixed(1)}%',
                 Icons.analytics,
               ),
-              _buildInfoRow(
-                'Similarity',
-                '${(result.similarity * 100).toStringAsFixed(1)}%',
-                Icons.percent,
-              ),
+              if (result.similarityScore != null)
+                _buildInfoRow(
+                  'Similarity',
+                  '${(result.similarityScore! * 100).toStringAsFixed(1)}%',
+                  Icons.percent,
+                ),
             ] else ...[
               _buildInfoRow('Status', 'Not in database', Icons.person_outline),
-              _buildInfoRow(
-                'Best Match',
-                result.personId != 'Unknown' ? result.personId : 'None',
-                Icons.search,
-              ),
+              if (result.personName != null && result.personName != 'Unknown')
+                _buildInfoRow(
+                  'Best Match',
+                  result.personName!,
+                  Icons.search,
+                ),
               _buildInfoRow(
                 'Confidence',
                 '${(result.confidence * 100).toStringAsFixed(1)}%',
@@ -509,7 +527,7 @@ class _CameraScreenState extends State<CameraScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
-          if (result.isMatch)
+          if (result.recognized)
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -645,11 +663,11 @@ class _CameraScreenState extends State<CameraScreen> {
                         border: Border.all(
                           color: _busy
                               ? Colors.orange
-                              : (_faceResult != null
-                                    ? (_faceResult!.isMatch
-                                          ? Colors.green
-                                          : Colors.red)
-                                    : Colors.white),
+                              : (_faceResult != null && _faceResult!.recognized
+                                    ? Colors.green
+                                    : (_faceResult != null
+                                          ? Colors.red
+                                          : Colors.white)),
                           width: 3,
                         ),
                         borderRadius: BorderRadius.circular(20),
@@ -842,7 +860,7 @@ class _CameraScreenState extends State<CameraScreen> {
                           if (_processingMode == 'face' &&
                               _faceResult != null) ...[
                             Text(
-                              _faceResult!.isMatch ? 'Recognized:' : 'Status:',
+                              _faceResult!.recognized ? 'Recognized:' : 'Status:',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -851,11 +869,11 @@ class _CameraScreenState extends State<CameraScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              _faceResult!.isMatch
-                                  ? _faceResult!.personId
+                              _faceResult!.recognized && _faceResult!.personName != null
+                                  ? _faceResult!.personName!
                                   : 'Unknown Person',
                               style: TextStyle(
-                                color: _faceResult!.isMatch
+                                color: _faceResult!.recognized
                                     ? Colors.greenAccent
                                     : Colors.redAccent,
                                 fontSize: 18,
@@ -989,8 +1007,8 @@ class _CameraScreenState extends State<CameraScreen> {
                               _processingMode == 'color'
                                   ? 'Detecting color...'
                                   : _processingMode == 'face'
-                                  ? 'Recognizing face...'
-                                  : 'Processing text...',
+                                      ? 'Recognizing face...'
+                                      : 'Processing text...',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -1008,27 +1026,21 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Widget _buildCornerIndicator() {
+    Color borderColor = Colors.white;
+    
+    if (_busy) {
+      borderColor = Colors.orange;
+    } else if (_faceResult != null) {
+      borderColor = _faceResult!.recognized ? Colors.green : Colors.red;
+    }
+    
     return Container(
       width: 30,
       height: 30,
       decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(
-            color: _busy
-                ? Colors.orange
-                : (_faceResult != null
-                      ? (_faceResult!.isMatch ? Colors.green : Colors.red)
-                      : Colors.white),
-            width: 4,
-          ),
-          left: BorderSide(
-            color: _busy
-                ? Colors.orange
-                : (_faceResult != null
-                      ? (_faceResult!.isMatch ? Colors.green : Colors.red)
-                      : Colors.white),
-            width: 4,
-          ),
+          top: BorderSide(color: borderColor, width: 4),
+          left: BorderSide(color: borderColor, width: 4),
         ),
       ),
     );

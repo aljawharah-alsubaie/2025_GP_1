@@ -1,15 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image/image.dart' as img;
 import 'package:flutter_tts/flutter_tts.dart';
-import '../services/insightface_pipeline.dart';
-
-// 👇 نفس الصفحات المستخدمة في الفوتر
+import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:path_provider/path_provider.dart';
+import '../services/face_recognition_api.dart';
+import 'face_rotation_capture_screen.dart';
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
@@ -29,8 +26,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
   final FocusNode _nameFocusNode = FocusNode();
 
   List<File> _selectedImages = [];
-  final int _minImages = 1;
-  final int _maxImages = 10;
   bool _isUploading = false;
   bool _isProcessing = false;
 
@@ -44,8 +39,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
   void initState() {
     super.initState();
     _initTts();
-
-    // 🗣️ يتكلم أول ما حقل الاسم ياخذ فوكس
     _nameFocusNode.addListener(() {
       if (_nameFocusNode.hasFocus) {
         _speak('Name field, enter the person name');
@@ -68,7 +61,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
   }
 
   Future<void> _speak(String text) async {
-    // عشان ما تتراكب الأصوات
     await _tts.stop();
     await _tts.speak(text);
   }
@@ -77,64 +69,92 @@ class _AddPersonPageState extends State<AddPersonPage> {
     HapticFeedback.mediumImpact();
   }
 
+  // ============================================================
+  // 🔐 تشفير الصورة بـ AES + IV عشوائي
+  // ============================================================
+  Future<File?> _encryptThumbnail(File imageFile, String userId) async {
+    try {
+      print('🔐 Starting thumbnail encryption...');
+
+      // 1️⃣ قراءة bytes الصورة
+      final imageBytes = await imageFile.readAsBytes();
+      print('📸 Image size: ${imageBytes.length} bytes');
+
+      // 2️⃣ إنشاء Key من user_id (32 characters for AES-256)
+      final keyString = userId.padRight(32).substring(0, 32);
+      final key = encrypt.Key.fromUtf8(keyString);
+
+      // 3️⃣ إنشاء IV عشوائي (16 bytes)
+      final iv = encrypt.IV.fromSecureRandom(16);
+
+      // 4️⃣ تشفير البيانات باستخدام AES-CBC مع PKCS7
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(
+          key,
+          mode: encrypt.AESMode.cbc,
+          padding: 'PKCS7',
+        ),
+      );
+
+      final encrypted = encrypter.encryptBytes(imageBytes, iv: iv);
+
+      // 5️⃣ دمج IV مع البيانات المشفرة
+      final combinedBytes = <int>[];
+      combinedBytes.addAll(iv.bytes);
+      combinedBytes.addAll(encrypted.bytes);
+
+      // 6️⃣ حفظ في ملف مؤقت
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final encryptedFile = File('${tempDir.path}/encrypted_thumb_$timestamp.enc');
+      await encryptedFile.writeAsBytes(combinedBytes);
+
+      print('✅ Encryption successful!');
+      print('🔑 Key (first 8 chars): ${keyString.substring(0, 8)}...');
+      print('🎲 IV (base64): ${iv.base64.substring(0, 12)}...');
+      print('📦 Original size: ${imageBytes.length} bytes');
+      print('📦 Encrypted size: ${encrypted.bytes.length} bytes');
+      print('📦 Total with IV: ${combinedBytes.length} bytes');
+      print('💾 Saved to: ${encryptedFile.path}');
+
+      return encryptedFile;
+    } catch (e) {
+      print('❌ Encryption error: $e');
+      return null;
+    }
+  }
+
   Future<void> _pickImages() async {
-    if (_selectedImages.length >= _maxImages) {
-      _showSnackBar('Maximum $_maxImages photos allowed', Colors.orange);
-      _speak('Maximum $_maxImages photos allowed');
+    // ✅ تحقق من الاسم قبل فتح الكاميرا
+    if (_nameController.text.trim().isEmpty) {
+      _showSnackBar('Please enter a name first', Colors.red);
+      _speak('Please enter a name first');
       return;
     }
 
     try {
-      final List<XFile> images = await ImagePicker().pickMultiImage(
-        imageQuality: 90,
+      _speak('Opening camera for face rotation capture');
+
+      final List<File>? capturedImages = await Navigator.push<List<File>>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const FaceRotationCaptureScreen(),
+        ),
       );
 
-      if (images.isNotEmpty) {
-        int added = 0;
-        for (var image in images) {
-          if (_selectedImages.length < _maxImages) {
-            _selectedImages.add(File(image.path));
-            added++;
-          }
-        }
-        setState(() {});
-
-        if (added > 0) {
-          _showSnackBar('$added Photo(s) Added Successfully', Colors.green);
-
-          // 🗣️ يتكلم بعد إضافة الصور
-          final plural = added > 1 ? 'photos' : 'photo';
-          _speak('$added $plural added successfully');
-        }
+      if (capturedImages != null && capturedImages.isNotEmpty) {
+        setState(() {
+          _selectedImages = capturedImages;
+        });
+        _showSnackBar(
+          '${capturedImages.length} photos captured successfully',
+          Colors.green,
+        );
+        _speak('${capturedImages.length} photos captured successfully');
       }
     } catch (e) {
-      _showSnackBar('Failed to pick images: $e', Colors.red);
-      _speak('Failed to pick images');
-    }
-  }
-
-  Future<void> _saveEmbeddingsToFirestore(String personId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      final embeddings = InsightFacePipeline.getStoredEmbeddings();
-      if (embeddings.containsKey(personId)) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('face_embeddings')
-            .doc(personId)
-            .set({
-              'name': personId,
-              'embeddings': embeddings[personId],
-              'image_count': (embeddings[personId] as List).length,
-              'created_at': FieldValue.serverTimestamp(),
-              'updated_at': FieldValue.serverTimestamp(),
-            });
-      }
-    } catch (e) {
-      print('Error saving embeddings: $e');
+      _showSnackBar('Failed to capture images: $e', Colors.red);
+      _speak('Failed to capture images');
     }
   }
 
@@ -145,9 +165,9 @@ class _AddPersonPageState extends State<AddPersonPage> {
       return;
     }
 
-    if (_selectedImages.length < _minImages) {
-      _showSnackBar('Please add at least $_minImages photo', Colors.red);
-      _speak('Please add at least one photo');
+    if (_selectedImages.length < 3) {
+      _showSnackBar('Please capture face rotation photos first', Colors.red);
+      _speak('Please capture face rotation photos first');
       return;
     }
 
@@ -161,156 +181,77 @@ class _AddPersonPageState extends State<AddPersonPage> {
       _isProcessing = true;
     });
 
+    File? encryptedThumbnail;
     try {
       final personName = _nameController.text.trim();
-      List<String> photoUrls = [];
-      int successCount = 0;
-      int failedCount = 0;
-      List<String> failReasons = [];
+      _speak('Encrypting and uploading photos. Please wait.');
 
-      print('Processing ${_selectedImages.length} images for $personName');
+      // 🔐 تشفير الصورة الأمامية (أول صورة) كـ thumbnail
+      if (_selectedImages.isNotEmpty) {
+        print('');
+        print('════════════════════════════════════════');
+        print('📸 Encrypting front photo as thumbnail...');
+        print('════════════════════════════════════════');
 
-      for (int i = 0; i < _selectedImages.length; i++) {
-        try {
-          print('Processing image ${i + 1}/${_selectedImages.length}');
+        encryptedThumbnail = await _encryptThumbnail(_selectedImages[0], user.uid);
 
-          final faceRect = await InsightFacePipeline.detectFace(
-            _selectedImages[i],
-          );
-
-          if (faceRect == null) {
-            failedCount++;
-            failReasons.add('Image ${i + 1}: No face detected');
-            print('Image $i: No face detected');
-            continue;
-          }
-
-          print(
-            'Image $i: Face detected at ${faceRect.width.toInt()}x${faceRect.height.toInt()}',
-          );
-
-          final croppedFace = await InsightFacePipeline.cropFace(
-            _selectedImages[i],
-            faceRect,
-          );
-
-          if (croppedFace == null) {
-            failedCount++;
-            failReasons.add('Image ${i + 1}: Failed to crop face');
-            print('Image $i: Failed to crop face');
-            continue;
-          }
-
-          final tempDir = await Directory.systemTemp.createTemp();
-          final tempFile = File('${tempDir.path}/face_$i.jpg');
-          final jpg = img.encodeJpg(croppedFace);
-          await tempFile.writeAsBytes(jpg);
-
-          print('Image $i: Saved cropped face to temp file');
-
-          final success = await InsightFacePipeline.storeFaceEmbedding(
-            personName,
-            tempFile,
-          );
-
-          if (success) {
-            successCount++;
-            print('Image $i: Embedding stored successfully');
-
-            try {
-              final storageRef = FirebaseStorage.instance
-                  .ref()
-                  .child('users')
-                  .child(user.uid)
-                  .child('faces')
-                  .child(personName)
-                  .child('${DateTime.now().millisecondsSinceEpoch}_$i.jpg');
-
-              final uploadTask = await storageRef.putFile(tempFile);
-              final photoUrl = await uploadTask.ref.getDownloadURL();
-              photoUrls.add(photoUrl);
-              print('Image $i: Uploaded to Firebase Storage');
-            } catch (e) {
-              print('Image $i: Failed to upload to storage: $e');
-            }
-          } else {
-            failedCount++;
-            failReasons.add('Image ${i + 1}: Failed to extract face features');
-            print('Image $i: Failed to extract embedding');
-          }
-
-          try {
-            await tempFile.delete();
-            await tempDir.delete();
-          } catch (e) {
-            print('Cleanup error: $e');
-          }
-        } catch (e, stackTrace) {
-          print('Error processing image $i: $e');
-          print('Stack trace: $stackTrace');
-          failedCount++;
-          failReasons.add('Image ${i + 1}: Processing error');
+        if (encryptedThumbnail != null) {
+          print('✅ Thumbnail encryption completed!');
+          print('📂 File: ${encryptedThumbnail.path}');
+          print('💾 Size: ${await encryptedThumbnail.length()} bytes');
+        } else {
+          print('⚠️ Thumbnail encryption failed, continuing without thumbnail');
         }
+        print('════════════════════════════════════════');
+        print('');
       }
 
-      print('Results: Success=$successCount, Failed=$failedCount');
+      // 📤 رفع البيانات إلى Backend
+      print('📤 Uploading to backend...');
+      final result = await FaceRecognitionAPI.enrollPerson(
+        name: personName,
+        userId: user.uid,
+        images: _selectedImages,
+        encryptedThumbnail: encryptedThumbnail,
+      );
 
-      if (successCount > 0) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('people')
-            .add({
-              'name': personName,
-              'photoUrls': photoUrls,
-              'photoCount': photoUrls.length,
-              'embeddingCount': successCount,
-              'faceDetected': true,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
-
-        await _saveEmbeddingsToFirestore(personName);
-
-        if (mounted) {
+      if (mounted) {
+        if (result.success) {
           _showSnackBar(
-            'Person $personName added successfully with $successCount photo${successCount > 1 ? 's' : ''}',
+            'Person $personName added successfully with ${result.successfulImages} photo${result.successfulImages > 1 ? 's' : ''}',
             Colors.green,
           );
-
           await _speak(
-            'Person $personName added successfully with $successCount photo${successCount > 1 ? 's' : ''}',
+            'Person $personName added successfully with ${result.successfulImages} photos',
           );
 
-          await Future.delayed(const Duration(milliseconds: 5000));
-
+          await Future.delayed(const Duration(milliseconds: 2000));
           Navigator.pop(context, true);
-        }
-      } else {
-        if (mounted) {
-          String errorMsg = 'Failed to process any images with faces.\n\n';
-          if (failReasons.isNotEmpty) {
-            errorMsg += 'Issues found:\n${failReasons.take(3).join('\n')}';
-            if (failReasons.length > 3) {
-              errorMsg += '\n... and ${failReasons.length - 3} more';
-            }
-          }
-          errorMsg +=
-              '\n\nTips:\n• Use well-lit photos\n• Face should be clearly visible\n• Avoid blurry images';
-
-          _showDetailedErrorDialog(errorMsg);
-          _speak(
-            'Failed to process images. Please review the tips and try again.',
+        } else {
+          _showSnackBar(
+            result.message ?? 'Failed to add person',
+            Colors.red,
           );
+          _speak('Failed to add person. ${result.message}');
         }
       }
-    } catch (e, stackTrace) {
-      print('Error in _addPerson: $e');
-      print('Stack trace: $stackTrace');
+    } catch (e) {
+      print('❌ Error adding person: $e');
       if (mounted) {
         _showSnackBar('Error adding person: $e', Colors.red);
         _speak('Error adding person, please try again');
       }
     } finally {
+      // 🗑️ حذف الملف المؤقت المشفر
+      if (encryptedThumbnail != null) {
+        try {
+          await encryptedThumbnail.delete();
+          print('🗑️ Deleted temporary encrypted file');
+        } catch (e) {
+          print('⚠️ Could not delete temp file: $e');
+        }
+      }
+
       if (mounted) {
         setState(() {
           _isUploading = false;
@@ -318,104 +259,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
         });
       }
     }
-  }
-
-  void _showDetailedErrorDialog(String message) {
-    if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        contentPadding: EdgeInsets.zero,
-        content: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(24)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.orange,
-                        size: 40,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Processing Failed',
-                      style: TextStyle(
-                        color: deepPurple,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 22,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      message,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: deepPurple.withOpacity(0.8),
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _hapticFeedback();
-                          Navigator.pop(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: deepPurple,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Try Again',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   void _showSnackBar(String message, Color color) {
@@ -658,6 +501,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 33),
 
                 // Photo Section Label
@@ -708,9 +552,10 @@ class _AddPersonPageState extends State<AddPersonPage> {
                         ? null
                         : () {
                             _speak(
-                              'Photo section, tap to upload one or more face photos',
+                              'Photo section. Tap to start face rotation capture. '
+                              'The camera will guide you to take 5 photos from different angles.',
                             );
-                            _pickImages();
+                            _pickImages(); // ✅ هنا التحقق من الاسم
                           },
                     borderRadius: BorderRadius.circular(15),
                     child: Center(
@@ -721,7 +566,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
                           Icon(
                             _selectedImages.isNotEmpty
                                 ? Icons.check_circle_outline
-                                : Icons.cloud_upload_outlined,
+                                : Icons.camera_alt_outlined,
                             size: 52,
                             color: _selectedImages.isNotEmpty
                                 ? vibrantPurple
@@ -730,8 +575,8 @@ class _AddPersonPageState extends State<AddPersonPage> {
                           const SizedBox(height: 11),
                           Text(
                             _selectedImages.isNotEmpty
-                                ? '${_selectedImages.length} photo${_selectedImages.length > 1 ? 's' : ''} uploaded'
-                                : 'Click here to upload photos',
+                                ? '${_selectedImages.length} rotation photos captured'
+                                : 'Tap to capture face rotation',
                             style: const TextStyle(
                               fontSize: 17.5,
                               fontWeight: FontWeight.w600,
@@ -741,8 +586,8 @@ class _AddPersonPageState extends State<AddPersonPage> {
                           const SizedBox(height: 5),
                           Text(
                             _selectedImages.isNotEmpty
-                                ? 'Click to change photos'
-                                : 'JPG or PNG',
+                                ? 'Tap to retake'
+                                : 'Front, Left, Right, Up, Down',
                             style: const TextStyle(
                               fontSize: 14.5,
                               color: deepPurple,
@@ -754,24 +599,24 @@ class _AddPersonPageState extends State<AddPersonPage> {
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 29),
               ],
             ),
           ),
 
           const SizedBox(height: 12),
+
           SizedBox(
             width: double.infinity,
             height: 66,
             child: ElevatedButton.icon(
-              onPressed:
-                  _isUploading ||
+              onPressed: _isUploading ||
                       _isProcessing ||
                       _nameController.text.trim().isEmpty ||
-                      _selectedImages.length < _minImages
+                      _selectedImages.length < 3
                   ? null
                   : () {
-                      // 🗣️ لما يضغط على زر الإضافة
                       _hapticFeedback();
                       _speak(
                         'Add new person button, processing photos. Please wait.',
@@ -817,7 +662,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
     );
   }
 
-  // 🔻 نفس الفوتر حق FaceManagementPage بالضبط
   Widget _buildFloatingBottomNav() {
     return Stack(
       alignment: Alignment.bottomCenter,
@@ -929,7 +773,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
             ),
           ),
         ),
-
         Positioned(
           bottom: 40,
           child: GestureDetector(

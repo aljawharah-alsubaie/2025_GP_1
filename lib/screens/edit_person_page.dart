@@ -1,13 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_tts/flutter_tts.dart';
 import '../services/insightface_pipeline.dart';
+
+// ✅ استبدلنا image_picker بـ face_rotation_capture_screen
+import 'face_rotation_capture_screen.dart';
 
 // 👇 نفس الصفحات المستخدمة في الفوتر
 import 'home_page.dart';
@@ -79,35 +81,36 @@ class _EditPersonPageState extends State<EditPersonPage> {
     HapticFeedback.mediumImpact();
   }
 
+  // ✅ معدلة لتستخدم Face Rotation Capture
   Future<void> _pickImages() async {
     try {
-      final List<XFile> images = await ImagePicker().pickMultiImage(
-        imageQuality: 90,
+      _speak('Opening camera for face rotation capture');
+      
+      // ✅ فتح صفحة Face Rotation Capture
+      final List<File>? capturedImages = await Navigator.push<List<File>>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const FaceRotationCaptureScreen(),
+        ),
       );
 
-      if (images.isNotEmpty) {
-        int added = 0;
-        for (var image in images) {
-          if (_newImages.length < _maxImages) {
-            _newImages.add(File(image.path));
-            added++;
-          }
-        }
-        setState(() {});
+      if (capturedImages != null && capturedImages.isNotEmpty) {
+        setState(() {
+          _newImages = capturedImages;
+        });
 
-        if (added > 0) {
-          _showSnackBar('$added Photo(s) Added Successfully', Colors.green);
-
-          // 🗣️ يتكلم بعد إضافة الصور
-          final plural = added > 1 ? 'photos' : 'photo';
-          _speak(
-            '$added $plural added successfully. These photos will replace the existing ones.',
-          );
-        }
+        _showSnackBar(
+          '${capturedImages.length} rotation photos captured successfully',
+          Colors.green,
+        );
+        
+        _speak(
+          '${capturedImages.length} photos captured successfully. These photos will replace the existing ones.',
+        );
       }
     } catch (e) {
-      _showSnackBar('Failed to pick images: $e', Colors.red);
-      _speak('Failed to pick images, please try again.');
+      _showSnackBar('Failed to capture images: $e', Colors.red);
+      _speak('Failed to capture images, please try again.');
     }
   }
 
@@ -656,7 +659,7 @@ class _EditPersonPageState extends State<EditPersonPage> {
                 ),
                 const SizedBox(height: 15),
 
-                // رفع الصور
+                // رفع الصور - معدلة للـ rotation
                 Container(
                   height: 140,
                   decoration: BoxDecoration(
@@ -676,7 +679,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
                         ? null
                         : () {
                             _speak(
-                              'Photo section, select new photos to replace the existing ones',
+                              'Photo section. Tap to start face rotation capture. '
+                              'The camera will guide you to take 5 photos from different angles. '
+                              'These photos will replace the existing ones.',
                             );
                             _pickImages();
                           },
@@ -688,7 +693,7 @@ class _EditPersonPageState extends State<EditPersonPage> {
                           Icon(
                             _newImages.isNotEmpty
                                 ? Icons.check_circle_outline
-                                : Icons.cloud_upload_outlined,
+                                : Icons.camera_alt_outlined,
                             size: 52,
                             color: _newImages.isNotEmpty
                                 ? vibrantPurple
@@ -697,8 +702,8 @@ class _EditPersonPageState extends State<EditPersonPage> {
                           const SizedBox(height: 11),
                           Text(
                             _newImages.isNotEmpty
-                                ? '${_newImages.length} photo${_newImages.length > 1 ? 's' : ''} selected'
-                                : 'Click here to select photos',
+                                ? '${_newImages.length} rotation photos captured'
+                                : 'Tap to capture face rotation',
                             style: const TextStyle(
                               fontSize: 17.5,
                               fontWeight: FontWeight.w600,
@@ -709,7 +714,7 @@ class _EditPersonPageState extends State<EditPersonPage> {
                           Text(
                             _newImages.isNotEmpty
                                 ? 'Will replace existing photos'
-                                : 'JPG or PNG',
+                                : 'Front, Left, Right, Up, Down',
                             style: const TextStyle(
                               fontSize: 14.5,
                               color: deepPurple,
@@ -768,7 +773,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-
               style: ElevatedButton.styleFrom(
                 backgroundColor: vibrantPurple,
                 shape: RoundedRectangleBorder(

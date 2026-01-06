@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import '../services/insightface_pipeline.dart';
+import 'dart:typed_data';
+import 'package:http/http.dart' as http;
+import 'package:encrypt/encrypt.dart' as encrypt;
+import '../services/face_recognition_api.dart';
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
@@ -45,7 +47,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   void initState() {
     super.initState();
     _initTts();
-    _initializeFaceRecognition();
     _loadPeople();
 
     _fadeController = AnimationController(
@@ -91,128 +92,101 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     HapticFeedback.mediumImpact();
   }
 
-  Future<void> _initializeFaceRecognition() async {
-    final success = await InsightFacePipeline.initialize();
-    if (!success) {
-      _showSnackBar('Failed to initialize face recognition', Colors.red);
-    } else {
-      await _loadStoredEmbeddings();
-    }
-  }
+  Future<void> _loadPeople() async {
+    setState(() => _isLoading = true);
 
-  Future<void> _loadStoredEmbeddings() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('face_embeddings')
-          .get();
+      final persons = await FaceRecognitionAPI.listPersons(user.uid);
+      
+      // 🔍 Debug: طباعة الـ response
+      print('=====================================');
+      print('📋 Total persons loaded: ${persons.length}');
+      print('=====================================');
+      
+      for (var person in persons) {
+        print('');
+        print('👤 Person Name: ${person.name}');
+        print('🆔 Person ID: ${person.personId}');
+        print('🖼️ Thumbnail URL: ${person.thumbnailUrl}');
+        print('📸 Number of photos: ${person.numPhotos}');
+        print('---');
+      }
+      print('=====================================');
+      
+      if (mounted) {
+        setState(() {
+          _people = persons.map((person) {
+            final personData = {
+              'id': person.personId,
+              'name': person.name,
+              'photoUrls': person.thumbnailUrl != null ? [person.thumbnailUrl] : [],
+              'numPhotos': person.numPhotos,
+            };
+            
+            // 🔍 Debug: طباعة البيانات المحفوظة
+            print('💾 Saved person data: $personData');
+            
+            return personData;
+          }).toList();
+          _isLoading = false;
+        });
 
-      if (snapshot.docs.isNotEmpty) {
-        Map<String, List<List<double>>> allEmbeddings = {};
-
-        for (var doc in snapshot.docs) {
-          final data = doc.data();
-          if (data['embeddings'] != null) {
-            List<List<double>> personEmbeddings = (data['embeddings'] as List)
-                .map(
-                  (e) => (e as List).map((v) => (v as num).toDouble()).toList(),
-                )
-                .toList();
-            allEmbeddings[doc.id] = personEmbeddings;
-          }
+        if (persons.isEmpty) {
+          _speak('No persons found. Add someone to get started.');
+        } else {
+          _speak('${persons.length} person${persons.length > 1 ? 's' : ''} found');
         }
-
-        InsightFacePipeline.loadMultipleEmbeddings(allEmbeddings);
-        print('✅ Loaded embeddings for ${allEmbeddings.length} persons');
       }
     } catch (e) {
-      print('Error loading embeddings: $e');
+      print('❌ Error loading people: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showSnackBar('Error loading list: $e', Colors.red);
+      }
     }
   }
 
-  Future<void> _loadPeople() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('people')
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      setState(() {
-        _people = snapshot.docs.map((doc) {
-          final data = doc.data();
-          data['id'] = doc.id;
-          return data;
-        }).toList();
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-      _showSnackBar('Error loading people: $e', Colors.red);
-    }
-  }
-
-  /// 🔥 تحذف الشخص من Firestore + embeddings وترجع الاسم لو نجحت
   Future<String?> _deletePerson(String personId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
 
     try {
-      // 1) نجيب بيانات الشخص أول
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('people')
-          .doc(personId)
-          .get();
-
-      if (!doc.exists) {
-        _showSnackBar('Person not found', Colors.red);
-        return null;
+      // جلب اسم الشخص قبل الحذف
+      String personName = 'Unknown';
+      
+      // البحث عن الشخص في القائمة
+      for (var p in _people) {
+        if (p['id'] == personId) {
+          personName = p['name'] as String? ?? 'Unknown';
+          break;
+        }
       }
 
-      // ناخذ الاسم من الدوكمنت
-      final personName = doc.data()?['name'] ?? 'This person';
+      final success = await FaceRecognitionAPI.deletePerson(
+        userId: user.uid,
+        personId: personId,
+      );
 
-      // 2) نحذف ملف الشخص
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('people')
-          .doc(personId)
-          .delete();
-
-      // 3) نحذف الإيمبدنق باستخدام الاسم
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('face_embeddings')
-          .doc(personName)
-          .delete();
-
-      // 4) نحذف الإيمبدنق من الجهاز
-      InsightFacePipeline.removeFaceEmbedding(personName);
-
-      // 5) نحدث القائمة
-      await _loadPeople();
-
-      // ✅ نرجّع الاسم عشان الدايالوج يطلع المسج
-      return personName;
+      if (success) {
+        await _loadPeople();
+        return personName;
+      } else {
+        _showSnackBar('Failed to delete person', Colors.red);
+        return null;
+      }
     } catch (e) {
+      print('❌ Error deleting person: $e');
       _showSnackBar('Error deleting person: $e', Colors.red);
       return null;
     }
   }
 
-  // ---------- دايلوج ثابت (ما يطلع فوقه الكيبورد) ----------
   Widget _fixedDialog(Widget child) {
     final mq = MediaQuery.of(context);
     return MediaQuery(
@@ -227,7 +201,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  /// 🔴 دايلوج الحذف مع لودنق على زر Confirm
   Future<void> _showDeleteConfirmation(
     String personId,
     String personName,
@@ -307,7 +280,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 actions: [
                   Column(
                     children: [
-                      // زر Confirm (فوق) مع لودنق
                       SizedBox(
                         width: double.infinity,
                         height: 75,
@@ -338,7 +310,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                           ? deletedName
                                           : safeName;
 
-                                      // ✅ مسج سكسيس نفس ستايل الأدد والإيديت
                                       _showSnackBar(
                                         '$showName deleted successfully!',
                                         Colors.green,
@@ -348,9 +319,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                         'Person $showName deleted successfully.',
                                       );
 
-                                      Navigator.pop(context); // يقفل الدايالوج
+                                      Navigator.pop(dialogContext);
                                     } else {
-                                      // فشل الحذف – رجّع الزر طبيعي وخليه يحاول مرة ثانية
                                       setState(() => isDeleting = false);
                                       await _speak(
                                         'Failed to delete $safeName, please try again.',
@@ -403,7 +373,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         ),
                       ),
                       const SizedBox(height: 25),
-                      // زر Cancel (تحت) يُعطَّل وقت الحذف
                       SizedBox(
                         width: double.infinity,
                         height: 65,
@@ -418,7 +387,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                 ? null
                                 : () {
                                     _hapticFeedback();
-                                    Navigator.pop(context);
+                                    Navigator.pop(dialogContext);
                                     _showSnackBar(
                                       'Deletion cancelled',
                                       Colors.red,
@@ -533,6 +502,138 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           ),
         )
         .toList();
+  }
+
+  // ============================================================
+  // 🔐 Build Encrypted & Decrypted Image Widget
+  // ============================================================
+  Widget _buildEncryptedImage(String? thumbnailUrl) {
+    if (thumbnailUrl == null || thumbnailUrl.isEmpty) {
+      return Icon(
+        Icons.person,
+        color: deepPurple.withOpacity(0.5),
+        size: 32,
+      );
+    }
+
+    // تحميل وفك تشفير الصورة
+    return FutureBuilder<Uint8List?>(
+      future: _downloadAndDecryptImage(thumbnailUrl),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done && 
+            snapshot.hasData && 
+            snapshot.data != null) {
+          return CircleAvatar(
+            radius: 32,
+            backgroundColor: Colors.white,
+            backgroundImage: MemoryImage(snapshot.data!),
+          );
+        }
+        
+        // Loading
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation<Color>(vibrantPurple),
+            ),
+          );
+        }
+        
+        // Error or no data
+        return Icon(
+          Icons.person,
+          color: deepPurple.withOpacity(0.5),
+          size: 32,
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // 🔽 Download and Decrypt Image
+  // ============================================================
+  Future<Uint8List?> _downloadAndDecryptImage(String url) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return null;
+      
+      print('🔽 Downloading encrypted image from: $url');
+      
+      // 1️⃣ تحميل الملف المشفر
+      final response = await http.get(Uri.parse(url));
+      
+      if (response.statusCode != 200) {
+        print('❌ Failed to download: ${response.statusCode}');
+        return null;
+      }
+      
+      final encryptedBytes = response.bodyBytes;
+      print('📦 Downloaded ${encryptedBytes.length} bytes (encrypted)');
+      
+      // 2️⃣ فك التشفير
+      final decryptedBytes = _decryptThumbnail(encryptedBytes, user.uid);
+      
+      if (decryptedBytes != null) {
+        print('✅ Decrypted ${decryptedBytes.length} bytes');
+        return decryptedBytes;
+      }
+      
+      print('❌ Decryption failed');
+      return null;
+      
+    } catch (e) {
+      print('❌ Error downloading/decrypting image: $e');
+      return null;
+    }
+  }
+
+  // ============================================================
+  // 🔓 Decrypt Thumbnail (AES-256-CBC)
+  // ============================================================
+  Uint8List? _decryptThumbnail(Uint8List encryptedBytes, String userId) {
+    try {
+      print('🔓 Starting decryption...');
+      
+      // 1️⃣ فصل IV عن البيانات المشفرة
+      if (encryptedBytes.length < 16) {
+        print('❌ File too small (${encryptedBytes.length} bytes)');
+        return null;
+      }
+      
+      final iv = encrypt.IV(encryptedBytes.sublist(0, 16));
+      final encryptedData = encryptedBytes.sublist(16);
+      
+      print('📦 IV: ${iv.bytes.length} bytes');
+      print('📦 Encrypted data: ${encryptedData.length} bytes');
+      
+      // 2️⃣ إنشاء Key من user_id (نفس الطريقة في التشفير)
+      final keyString = userId.padRight(32).substring(0, 32);
+      final key = encrypt.Key.fromUtf8(keyString);
+      
+      print('🔑 Key (first 8 chars): ${keyString.substring(0, 8)}...');
+      
+      // 3️⃣ فك التشفير باستخدام AES-CBC
+      final encrypter = encrypt.Encrypter(
+        encrypt.AES(
+          key,
+          mode: encrypt.AESMode.cbc,
+          padding: 'PKCS7',
+        ),
+      );
+      
+      final encrypted = encrypt.Encrypted(encryptedData);
+      final decrypted = encrypter.decryptBytes(encrypted, iv: iv);
+      
+      print('✅ Decryption successful! Size: ${decrypted.length} bytes');
+      return Uint8List.fromList(decrypted);
+      
+    } catch (e) {
+      print('❌ Decryption error: $e');
+      return null;
+    }
   }
 
   @override
@@ -752,6 +853,15 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Widget _buildPersonCard(Map<String, dynamic> person) {
+    // 🔍 Debug: طباعة بيانات الشخص عند بناء الكارت
+    print('🎨 Building card for: ${person['name']}');
+    print('🖼️ Photo URLs: ${person['photoUrls']}');
+    
+    final hasPhoto = person['photoUrls'] != null && 
+                     (person['photoUrls'] as List).isNotEmpty;
+    
+    print('✅ Has photo: $hasPhoto');
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -799,24 +909,17 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     ],
                   ),
                   padding: const EdgeInsets.all(3),
-                  child: CircleAvatar(
-                    radius: 32,
-                    backgroundColor: Colors.white,
-                    backgroundImage:
-                        person['photoUrls'] != null &&
-                            (person['photoUrls'] as List).isNotEmpty
-                        ? NetworkImage(person['photoUrls'][0])
-                        : null,
-                    child:
-                        person['photoUrls'] == null ||
-                            (person['photoUrls'] as List).isEmpty
-                        ? Icon(
+                  child: hasPhoto
+                      ? _buildEncryptedImage(person['photoUrls'][0])  // ✅ فك التشفير
+                      : CircleAvatar(
+                          radius: 32,
+                          backgroundColor: Colors.white,
+                          child: Icon(
                             Icons.person,
                             color: deepPurple.withOpacity(0.5),
                             size: 32,
-                          )
-                        : null,
-                  ),
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -832,6 +935,14 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         ),
                       ),
                       const SizedBox(height: 4),
+                      Text(
+                        '${person['numPhotos'] ?? 0} photo${(person['numPhotos'] ?? 0) > 1 ? 's' : ''}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: deepPurple.withOpacity(0.6),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -984,10 +1095,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  // 🔁 زر الإضافة – نفس ستايل زر Add Voice Reminder
   Widget _buildAddButton() {
     return Padding(
-      // يرتفع عن الفوتر
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
       child: Semantics(
         label: 'Add new person',
@@ -1055,9 +1164,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   Widget _buildFloatingBottomNav() {
     return Stack(
       alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
+      clipBehavior: Clip.none,
       children: [
-        // الفوتر الأساسي
         ClipRRect(
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
@@ -1123,7 +1231,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                         );
                       },
                     ),
-                    const SizedBox(width: 60), // مساحة للدائرة
+                    const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
                       label: 'Contacts',
@@ -1161,7 +1269,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             ),
           ),
         ),
-
         Positioned(
           bottom: 40,
           child: GestureDetector(
@@ -1214,7 +1321,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
   Widget _buildNavButton({
     required IconData icon,
     required String label,
