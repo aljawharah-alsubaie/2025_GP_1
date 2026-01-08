@@ -64,6 +64,12 @@ dependencies:
   # 🔹 Local DB
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+<<<<<<< HEAD
+=======
+  # Security -   
+  encrypt: ^5.0.3
+
+>>>>>>> 4b28b4ea1d982c3c2693b59f80ce9477ad291deb
 
 dev_dependencies:
   flutter_test:
