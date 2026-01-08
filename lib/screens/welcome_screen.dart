@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import 'login_screen.dart';
 import 'signup_screen.dart';
 
@@ -42,7 +44,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
     _animationController.forward();
 
-    // ✅ تهيئة الـ TTS ثم نطق رسالة الترحيب بعد ما يجهز (تشتغل حتى أول مرة)
+    // ✅ تهيئة الـ TTS ثم نطق رسالة الترحيب
     _setupTtsAndSpeak();
   }
 
@@ -54,34 +56,30 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.dispose();
   }
 
-  // ✅ خلتها Future عشان نقدر نعمل await لها
   Future<void> _initTts() async {
-    await _flutterTts.setLanguage("en-US");
+    // ✅ نحدد اللغة بناءً على اختيار المستخدم
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    
+    await _flutterTts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setVolume(1.0);
-
-    // يخلي speak ينتظر لين يخلص قبل ما يكمل (مفيد لاحقًا)
     await _flutterTts.awaitSpeakCompletion(true);
   }
 
-  // ✅ دالة تجمع التهيئة + الترحيب
   Future<void> _setupTtsAndSpeak() async {
-    // نهيء TTS أول
     await _initTts();
-
-    // ننتظر شوي بسيط بعد التهيئة (خصوصًا أول تشغيل)
     await Future.delayed(const Duration(milliseconds: 200));
-
-    // ثم نطق رسالة الترحيب
     await _speakWelcomeMessage();
   }
 
-  // رسالة الترحيب
   Future<void> _speakWelcomeMessage() async {
-    await _flutterTts.speak(
-      "Welcome to your new journey. Please choose Create Account or Login",
-    );
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final message = languageProvider.isArabic
+        ? "مرحبا بك في رحلتك الجديدة. من فضلك اختر إنشاء حساب أو تسجيل الدخول"
+        : "Welcome to your new journey. Please choose Create Account or Login";
+    
+    await _flutterTts.speak(message);
   }
 
   Future<void> _playButtonSound() async {
@@ -97,16 +95,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   }
 
   void _navigateWithSoundAndSpeech(Widget screen, String buttonName) async {
-    // إيقاف أي كلام سابق
     await _flutterTts.stop();
-
-    // تشغيل الصوت أولاً
     await _playButtonSound();
-
-    // ثم التحدث باسم الزر
     await _speakButtonText(buttonName);
 
-    // الانتقال بعد انتهاء الكلام
     _flutterTts.setCompletionHandler(() {
       if (mounted) {
         Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
@@ -116,11 +108,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background same as registration page
+          // Background
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
@@ -179,7 +173,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             const SizedBox(height: 0),
 
                             Text(
-                              "Welcome to your new journey",
+                              languageProvider.translate('welcomeToJourney'),
                               style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -195,13 +189,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                       // Create Account button
                       _buildButton(
-                        title: 'Create Account',
+                        title: languageProvider.translate('createAccount'),
                         icon: Icons.person_add_outlined,
                         isPrimary: true,
                         onPressed: () {
                           _navigateWithSoundAndSpeech(
                             const SignupScreen(),
-                            'Create Account',
+                            languageProvider.translate('createAccount'),
                           );
                         },
                       ),
@@ -221,13 +215,13 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                       // Login button
                       _buildButton(
-                        title: 'Login',
+                        title: languageProvider.translate('login'),
                         icon: Icons.login_outlined,
                         isPrimary: false,
                         onPressed: () {
                           _navigateWithSoundAndSpeech(
                             const LoginScreen(),
-                            'Login',
+                            languageProvider.translate('login'),
                           );
                         },
                       ),

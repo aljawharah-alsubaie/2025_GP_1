@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import '../services/google_signin_handler.dart';
+import '../providers/language_provider.dart';
 import 'home_page.dart';
 import 'signup_screen.dart';
 import 'set_password_screen.dart';
@@ -28,11 +30,9 @@ class _LoginScreenState extends State<LoginScreen>
   bool _obscurePassword = true;
   bool _rememberMe = false;
 
-  // Error banner state
   String? _currentErrorMessage;
   bool _showErrorBanner = false;
 
-  // Animations
   late AnimationController _animationController;
   late AnimationController _buttonAnimationController;
   late Animation<double> _fadeAnimation;
@@ -40,7 +40,6 @@ class _LoginScreenState extends State<LoginScreen>
   late Animation<double> _scaleAnimation;
   late Animation<double> _buttonScaleAnimation;
 
-  // TTS
   late final FlutterTts _tts;
   bool _ttsReady = false;
 
@@ -96,12 +95,14 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _initTts() async {
     _tts = FlutterTts();
-
-    await _tts.setLanguage("en-US");
+    
+    // ✅ نحدد اللغة بناءً على اختيار المستخدم
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
+    
     await _tts.setSpeechRate(0.5);
     await _tts.setPitch(1.0);
     await _tts.setVolume(1.0);
-
     await _tts.awaitSpeakCompletion(true);
 
     _tts.setStartHandler(() {});
@@ -111,10 +112,11 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _ttsReady = true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _speak(
-        "Welcome back. Please enter your email and password to continue",
-        interrupt: true,
-      );
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+      final message = languageProvider.isArabic
+          ? "مرحبا بعودتك. من فضلك ادخل بريدك الإلكتروني وكلمة المرور للمتابعة"
+          : "Welcome back. Please enter your email and password to continue";
+      _speak(message, interrupt: true);
     });
   }
 
@@ -184,35 +186,40 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _login() async {
-    // نشغّل اللودينق وأنيميشن الزر
     setState(() => _isLoading = true);
     _buttonAnimationController.forward().then((_) {
       _buttonAnimationController.reverse();
     });
 
-    // نطق بداية العملية
-    _speak("Logging in, please wait.", interrupt: true);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    _speak(
+      languageProvider.isArabic ? "جاري تسجيل الدخول، انتظر من فضلك" : "Logging in, please wait.",
+      interrupt: true,
+    );
 
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
 
-      // ========== التحقق من الإدخالات الأساسية ==========
       if (email.isEmpty) {
-        await _showErrorWithSoundAndBanner("Email is required to continue");
+        await _showErrorWithSoundAndBanner(
+          languageProvider.isArabic ? "البريد الإلكتروني مطلوب للمتابعة" : "Email is required to continue"
+        );
         return;
       }
 
       if (password.isEmpty) {
-        await _showErrorWithSoundAndBanner("Password is required to continue");
+        await _showErrorWithSoundAndBanner(
+          languageProvider.isArabic ? "كلمة المرور مطلوبة للمتابعة" : "Password is required to continue"
+        );
         return;
       }
 
-      // ========== التحقق من صيغة الإيميل والدومين ==========
-
       if (!email.contains('@')) {
         await _showErrorWithSoundAndBanner(
-          "Please enter a valid email in the format example@domain.com.",
+          languageProvider.isArabic
+              ? "من فضلك ادخل بريد إلكتروني صحيح بالصيغة example@domain.com"
+              : "Please enter a valid email in the format example@domain.com.",
         );
         return;
       }
@@ -227,11 +234,12 @@ class _LoginScreenState extends State<LoginScreen>
       ];
 
       if (!allowedDomains.contains(domain)) {
-        await _showErrorWithSoundAndBanner('Invalid email or password.');
+        await _showErrorWithSoundAndBanner(
+          languageProvider.isArabic ? "بريد إلكتروني أو كلمة مرور غير صحيحة" : 'Invalid email or password.'
+        );
         return;
       }
 
-      // ========== أولاً: نسأل Cloud Function هل الإيميل موجود ولا لا ==========
       final checkEmailCallable = FirebaseFunctions.instance.httpsCallable(
         'checkEmailStatus',
       );
@@ -249,29 +257,33 @@ class _LoginScreenState extends State<LoginScreen>
         checkData['providers'] ?? const [],
       );
 
-      // لو ما فيه حساب بهذا الإيميل → نوقف هنا
       if (!exists) {
         await _showErrorWithSoundAndBanner(
-          'No account found for this email. Please sign up first',
+          languageProvider.isArabic
+              ? "لا يوجد حساب بهذا البريد. من فضلك أنشئ حساباً أولاً"
+              : 'No account found for this email. Please sign up first',
         );
         return;
       }
 
       if (!providers.contains('password')) {
         await _showErrorWithSoundAndBanner(
-          'This email is registered with Google. Please continue with Google sign-in.',
+          languageProvider.isArabic
+              ? "هذا البريد مسجل عبر Google. من فضلك استخدم تسجيل الدخول بـ Google"
+              : 'This email is registered with Google. Please continue with Google sign-in.',
         );
         return;
       }
 
-      // ========== محاولة تسجيل الدخول (الآن نعرف أكيد إن الإيميل موجود) ==========
       final UserCredential credential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
 
       final user = credential.user;
 
       if (user == null) {
-        await _showErrorWithSoundAndBanner("Login failed. Please try again");
+        await _showErrorWithSoundAndBanner(
+          languageProvider.isArabic ? "فشل تسجيل الدخول. حاول مرة أخرى" : "Login failed. Please try again"
+        );
         return;
       }
 
@@ -295,20 +307,26 @@ class _LoginScreenState extends State<LoginScreen>
 
           if (resent) {
             await _showErrorWithSoundAndBanner(
-              "Your email is not verified yet. We have sent you a new verification link. "
-              "Please check your inbox then try logging in again after verifying",
+              languageProvider.isArabic
+                  ? "بريدك لم يتم التحقق منه بعد. أرسلنا لك رابط تحقق جديد. تفقد بريدك ثم حاول تسجيل الدخول مرة أخرى"
+                  : "Your email is not verified yet. We have sent you a new verification link. "
+                    "Please check your inbox then try logging in again after verifying",
             );
           } else {
             final extraTimeInfo = lastSentAt != null
-                ? " We already sent a verification email recently."
+                ? (languageProvider.isArabic ? " أرسلنا رسالة تحقق مؤخراً." : " We already sent a verification email recently.")
                 : "";
             await _showErrorWithSoundAndBanner(
-              "Your email is not verified yet.$extraTimeInfo Please check your inbox and use the existing verification email",
+              languageProvider.isArabic
+                  ? "بريدك لم يتم التحقق منه بعد.$extraTimeInfo من فضلك تفقد بريدك واستخدم رسالة التحقق الموجودة"
+                  : "Your email is not verified yet.$extraTimeInfo Please check your inbox and use the existing verification email",
             );
           }
         } catch (e) {
           await _showErrorWithSoundAndBanner(
-            "Your email is not verified yet. Please check your inbox for the verification email",
+            languageProvider.isArabic
+                ? "بريدك لم يتم التحقق منه بعد. من فضلك تفقد بريدك للحصول على رسالة التحقق"
+                : "Your email is not verified yet. Please check your inbox for the verification email",
           );
         }
 
@@ -316,10 +334,8 @@ class _LoginScreenState extends State<LoginScreen>
         return;
       }
 
-      // 🔒 إرسال إيميل تنبيه تسجيل دخول (Email/Password)
       await _sendLoginAlertEmail(email: email, method: 'Email/Password');
 
-      // ✅ إحضار الاسم من Firestore عشان رسالة الترحيب
       String fullName = 'User';
 
       try {
@@ -340,10 +356,13 @@ class _LoginScreenState extends State<LoginScreen>
         fullName = user.displayName ?? user.email ?? 'User';
       }
 
-      _showSnackBar("Welcome back, $fullName!", Colors.green);
-      await _speakForce("Welcome back, $fullName!");
+      final welcomeMsg = languageProvider.isArabic
+          ? "مرحباً بعودتك، $fullName!"
+          : "Welcome back, $fullName!";
+      
+      _showSnackBar(welcomeMsg, Colors.green);
+      await _speakForce(welcomeMsg);
 
-      // ========== نجاح تسجيل الدخول ==========
       if (_rememberMe) {
         try {
           const storage = FlutterSecureStorage();
@@ -360,86 +379,99 @@ class _LoginScreenState extends State<LoginScreen>
     } on FirebaseAuthException catch (e) {
       debugPrint('Login error code: ${e.code}');
 
-      // هنا إحنا متأكدين أصلاً إن الإيميل موجود (من Cloud Function),
-      // فلو صار wrong-password أو invalid-credential → معناها الباسوورد غلط
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        await _showErrorWithSoundAndBanner('Invalid email or password');
+        await _showErrorWithSoundAndBanner(
+          languageProvider.isArabic ? "بريد إلكتروني أو كلمة مرور غير صحيحة" : 'Invalid email or password'
+        );
         return;
       }
 
       if (e.code == 'invalid-email') {
         await _showErrorWithSoundAndBanner(
-          'The email format is invalid. Please enter a valid email address',
+          languageProvider.isArabic
+              ? "صيغة البريد الإلكتروني غير صحيحة. من فضلك ادخل بريداً صحيحاً"
+              : 'The email format is invalid. Please enter a valid email address',
         );
         return;
       }
 
       if (e.code == 'user-disabled') {
         await _showErrorWithSoundAndBanner(
-          'This account has been disabled. Please contact support',
+          languageProvider.isArabic
+              ? "تم تعطيل هذا الحساب. من فضلك تواصل مع الدعم"
+              : 'This account has been disabled. Please contact support',
         );
         return;
       }
 
       await _showErrorWithSoundAndBanner(
-        'An unexpected error occurred. Please try again',
+        languageProvider.isArabic
+            ? "حدث خطأ غير متوقع. حاول مرة أخرى"
+            : 'An unexpected error occurred. Please try again',
       );
     } catch (e) {
-      // 🔌 إذا كان الخطأ من خارج Firebase: مثل socket timeout, DNS failure
       if (e.toString().contains('SocketException') ||
           e.toString().contains('Network') ||
           e.toString().contains('Handshake') ||
           e.toString().contains('Failed host lookup')) {
         await _showErrorWithSoundAndBanner(
-          'Please check your internet connection and try again',
+          languageProvider.isArabic
+              ? "من فضلك تحقق من اتصالك بالإنترنت وحاول مرة أخرى"
+              : 'Please check your internet connection and try again',
         );
         return;
       }
 
-      // أي شيء غير الإنترنت
       await _showErrorWithSoundAndBanner(
-        'An unexpected error occurred. Please try again.',
+        languageProvider.isArabic
+            ? "حدث خطأ غير متوقع. حاول مرة أخرى"
+            : 'An unexpected error occurred. Please try again.',
       );
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
-  }
-
-  Future<void> _loginWithGoogle() async {
+  }Future<void> _loginWithGoogle() async {
     if (_isLoading) return;
 
     try {
       setState(() => _isLoading = true);
+      
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
-      await _speakForce("Google login activated. Please choose your account");
+      await _speakForce(
+        languageProvider.isArabic
+            ? "تم تفعيل تسجيل الدخول بـ Google. من فضلك اختر حسابك"
+            : "Google login activated. Please choose your account"
+      );
       await Future.delayed(const Duration(milliseconds: 400));
 
       final cred = await GoogleSignInHandler.signInWithGoogleForLogin(context);
 
       if (cred == null) {
-        await _showErrorWithSoundAndBanner("Google login was cancelled");
+        await _showErrorWithSoundAndBanner(
+          languageProvider.isArabic ? "تم إلغاء تسجيل الدخول بـ Google" : "Google login was cancelled"
+        );
         return;
       }
 
       final user = cred.user;
       if (user == null) {
         await _showErrorWithSoundAndBanner(
-          "Google sign-in failed, please try again.",
+          languageProvider.isArabic
+              ? "فشل تسجيل الدخول بـ Google، حاول مرة أخرى"
+              : "Google sign-in failed, please try again.",
         );
         return;
       }
 
-      // ✅ جرّبي إرسال إيميل التنبيه لكن لا تخلي أي خطأ يطيح اللوق إن
       try {
         await _sendLoginAlertEmail(email: user.email ?? '', method: 'Google');
       } catch (e) {
-        // بس نطبع الخطأ في الـ debug عشان نعرف وش فيه
         debugPrint('❌ sendLoginAlertEmail failed: $e');
       }
 
-      // 🔎 Firestore
       final userDocRef = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid);
@@ -468,8 +500,12 @@ class _LoginScreenState extends State<LoginScreen>
       await storage.write(key: 'isLoggedIn', value: 'true');
       await storage.write(key: 'userEmail', value: user.email ?? '');
 
-      _showSnackBar("Welcome, $fullName!", Colors.green);
-      await _speakForce("Welcome, $fullName!");
+      final welcomeMsg = languageProvider.isArabic
+          ? "مرحباً، $fullName!"
+          : "Welcome, $fullName!";
+      
+      _showSnackBar(welcomeMsg, Colors.green);
+      await _speakForce(welcomeMsg);
 
       if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 500));
@@ -488,8 +524,12 @@ class _LoginScreenState extends State<LoginScreen>
     } catch (e, stack) {
       debugPrint('❌ Google login ERROR: $e');
       debugPrint(stack.toString());
+      
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       await _showErrorWithSoundAndBanner(
-        "Google login failed due to an unexpected error. Please try again",
+        languageProvider.isArabic
+            ? "فشل تسجيل الدخول بـ Google بسبب خطأ غير متوقع. حاول مرة أخرى"
+            : "Google login failed due to an unexpected error. Please try again",
       );
     } finally {
       if (mounted) {
@@ -654,6 +694,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -732,9 +774,9 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 16),
-                                const Text(
-                                  "Welcome Back",
-                                  style: TextStyle(
+                                Text(
+                                  languageProvider.translate('welcomeBack'),
+                                  style: const TextStyle(
                                     fontSize: 32,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
@@ -743,7 +785,7 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  "Log in to continue your journey",
+                                  languageProvider.translate('loginToContinue'),
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
@@ -760,20 +802,25 @@ class _LoginScreenState extends State<LoginScreen>
 
                         _buildEnhancedTextFormField(
                           controller: _emailController,
-                          hint: "Email Address",
+                          hint: languageProvider.translate('emailAddress'),
                           icon: Icons.email_outlined,
                           keyboardType: TextInputType.emailAddress,
-                          ttsMessage:
-                              "Email field. Please type the email you used to create your account.",
+                          ttsMessage: languageProvider.isArabic
+                              ? "حقل البريد الإلكتروني. من فضلك اكتب البريد الذي استخدمته لإنشاء حسابك"
+                              : "Email field. Please type the email you used to create your account.",
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return "Email is required";
+                              return languageProvider.isArabic
+                                  ? "البريد الإلكتروني مطلوب"
+                                  : "Email is required";
                             }
                             final emailRegex = RegExp(
                               r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                             );
                             if (!emailRegex.hasMatch(value.trim())) {
-                              return "Please enter a valid email address";
+                              return languageProvider.isArabic
+                                  ? "من فضلك ادخل بريداً إلكترونياً صحيحاً"
+                                  : "Please enter a valid email address";
                             }
                             return null;
                           },
@@ -783,16 +830,19 @@ class _LoginScreenState extends State<LoginScreen>
 
                         _buildPasswordField(
                           controller: _passwordController,
-                          hint: "Password",
+                          hint: languageProvider.translate('password'),
                           obscure: _obscurePassword,
                           onToggle: () => setState(
                             () => _obscurePassword = !_obscurePassword,
                           ),
-                          ttsMessage:
-                              "Password field. Please type your account password",
+                          ttsMessage: languageProvider.isArabic
+                              ? "حقل كلمة المرور. من فضلك اكتب كلمة مرور حسابك"
+                              : "Password field. Please type your account password",
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return "Password is required";
+                              return languageProvider.isArabic
+                                  ? "كلمة المرور مطلوبة"
+                                  : "Password is required";
                             }
                             return null;
                           },
@@ -820,12 +870,15 @@ class _LoginScreenState extends State<LoginScreen>
 
                                       if (newValue) {
                                         _speakForce(
-                                          "Remember me is activated. Your email will be filled in automatically next time.",
+                                          languageProvider.isArabic
+                                              ? "تم تفعيل تذكرني. سيتم ملء بريدك تلقائياً في المرة القادمة"
+                                              : "Remember me is activated. Your email will be filled in automatically next time.",
                                         );
                                       } else {
-                                        // ✅ لما يطفّيه
                                         _speakForce(
-                                          "Remember me is deactivated. Your email will not be remembered.",
+                                          languageProvider.isArabic
+                                              ? "تم تعطيل تذكرني. لن يتم تذكر بريدك"
+                                              : "Remember me is deactivated. Your email will not be remembered.",
                                         );
                                       }
                                     },
@@ -845,17 +898,21 @@ class _LoginScreenState extends State<LoginScreen>
 
                                     if (_rememberMe) {
                                       await _speakForce(
-                                        "Remember me is on. Your email will be filled in automatically next time.",
+                                        languageProvider.isArabic
+                                            ? "تم تفعيل تذكرني. سيتم ملء بريدك تلقائياً في المرة القادمة"
+                                            : "Remember me is on. Your email will be filled in automatically next time.",
                                       );
                                     } else {
                                       await _speakForce(
-                                        "Remember me is off. Your email will not be remembered.",
+                                        languageProvider.isArabic
+                                            ? "تم تعطيل تذكرني. لن يتم تذكر بريدك"
+                                            : "Remember me is off. Your email will not be remembered.",
                                       );
                                     }
                                   },
-                                  child: const Text(
-                                    "Remember me",
-                                    style: TextStyle(
+                                  child: Text(
+                                    languageProvider.translate('rememberMe'),
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.w800,
                                       fontSize: 16,
@@ -871,7 +928,9 @@ class _LoginScreenState extends State<LoginScreen>
                               child: TextButton(
                                 onPressed: () {
                                   _speak(
-                                    "Forgot Password page. Please enter your email to reset your password",
+                                    languageProvider.isArabic
+                                        ? "صفحة نسيت كلمة المرور. من فضلك ادخل بريدك لإعادة تعيين كلمة المرور"
+                                        : "Forgot Password page. Please enter your email to reset your password",
                                     interrupt: true,
                                   );
                                   Navigator.push(
@@ -898,9 +957,9 @@ class _LoginScreenState extends State<LoginScreen>
                                     ),
                                   );
                                 },
-                                child: const Text(
-                                  "Forgot Password?",
-                                  style: TextStyle(
+                                child: Text(
+                                  languageProvider.translate('forgotPassword'),
+                                  style: const TextStyle(
                                     color: Color.fromARGB(255, 231, 172, 238),
                                     fontWeight: FontWeight.w800,
                                     fontSize: 17,
@@ -918,8 +977,12 @@ class _LoginScreenState extends State<LoginScreen>
                           child: Semantics(
                             button: true,
                             label: _isLoading
-                                ? 'Logging in, please wait'
-                                : 'Login button',
+                                ? (languageProvider.isArabic
+                                    ? 'جاري تسجيل الدخول، انتظر من فضلك'
+                                    : 'Logging in, please wait')
+                                : (languageProvider.isArabic
+                                    ? 'زر تسجيل الدخول'
+                                    : 'Login button'),
                             hint: _isLoading ? '' : 'Double tap to login',
                             enabled: !_isLoading,
                             child: SizedBox(
@@ -947,9 +1010,9 @@ class _LoginScreenState extends State<LoginScreen>
                                           strokeWidth: 2,
                                         ),
                                       )
-                                    : const Text(
-                                        "Log In",
-                                        style: TextStyle(
+                                    : Text(
+                                        languageProvider.translate('logIn'),
+                                        style: const TextStyle(
                                           fontSize: 21,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -974,7 +1037,7 @@ class _LoginScreenState extends State<LoginScreen>
                                 horizontal: 16,
                               ),
                               child: Text(
-                                "OR",
+                                languageProvider.translate('or'),
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.7),
                                   fontWeight: FontWeight.w500,
@@ -995,7 +1058,7 @@ class _LoginScreenState extends State<LoginScreen>
                         _buildFullWidthSocialButton(
                           icon: Icons.g_mobiledata,
                           onTap: _loginWithGoogle,
-                          label: "Continue with Google",
+                          label: languageProvider.translate('continueWithGoogle'),
                         ),
 
                         const SizedBox(height: 40),
@@ -1007,7 +1070,7 @@ class _LoginScreenState extends State<LoginScreen>
                           child: GestureDetector(
                             onTap: () async {
                               HapticFeedback.selectionClick();
-                              await _speakForce("Sign up");
+                              await _speakForce(languageProvider.translate('signUp'));
                               if (!mounted) return;
                               Navigator.push(
                                 context,
@@ -1044,16 +1107,16 @@ class _LoginScreenState extends State<LoginScreen>
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
-                                    "Don't have an account? ",
+                                    languageProvider.translate('dontHaveAccount'),
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.9),
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  const Text(
-                                    "Sign Up",
-                                    style: TextStyle(
+                                  Text(
+                                    languageProvider.translate('signUp'),
+                                    style: const TextStyle(
                                       color: Color.fromARGB(255, 248, 183, 255),
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -1151,6 +1214,8 @@ class _LoginScreenState extends State<LoginScreen>
     String? Function(String?)? validator,
     String? ttsMessage,
   }) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Semantics(
       label: 'Password input field',
       textField: true,
@@ -1196,7 +1261,9 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             suffixIcon: Semantics(
               button: true,
-              label: obscure ? 'Show password' : 'Hide password',
+              label: obscure
+                  ? (languageProvider.isArabic ? 'إظهار كلمة المرور' : 'Show password')
+                  : (languageProvider.isArabic ? 'إخفاء كلمة المرور' : 'Hide password'),
               hint: 'Double tap to toggle password visibility',
               child: IconButton(
                 onPressed: onToggle,

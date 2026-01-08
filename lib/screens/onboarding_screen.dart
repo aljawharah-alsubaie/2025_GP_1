@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
 import 'welcome_screen.dart';
+import '../providers/language_provider.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({Key? key}) : super(key: key);
@@ -20,13 +22,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     'assets/images/onboarding2.png',
   ];
 
-  final List<String> titles = ["Welcome to Munir", "Smart Assistance for You"];
-
-  final List<String> subtitles = [
-    "Your AI-powered companion for easier daily life.",
-    "Read text, recognize faces, and get real-time feedback.",
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -42,12 +37,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _initTts() async {
-    await _flutterTts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    
+    // تحديد اللغة بناءً على اختيار المستخدم
+    await _flutterTts.setLanguage(
+      languageCode == 'ar' ? 'ar-SA' : 'en-US',
+    );
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setVolume(1.0);
 
-    // تحدث تلقائي عند بدء التطبيق
     _speakCurrentPage();
   }
 
@@ -60,7 +59,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _isSpeaking = true;
     });
 
-    String fullText = "${titles[_currentPage]}. ${subtitles[_currentPage]}";
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    String fullText;
+    
+    if (_currentPage == 0) {
+      fullText = "${languageProvider.translate('welcomeToMunir')}. ${languageProvider.translate('aiCompanion')}";
+    } else {
+      fullText = "${languageProvider.translate('smartAssistance')}. ${languageProvider.translate('readTextRecognize')}";
+    }
 
     await _flutterTts.speak(fullText);
 
@@ -68,7 +74,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       setState(() {
         _isSpeaking = false;
       });
-      // الانتقال للصفحة التالية بعد انتهاء الكلام
       _autoNextPage();
     });
   }
@@ -83,9 +88,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
   }
 
-  void _startAutoPlay() {
-    // يمكن إضافة منطق للتحكم التلقائي هنا إذا لزم الأمر
-  }
+  void _startAutoPlay() {}
 
   void _nextPage() {
     if (_currentPage < images.length - 1) {
@@ -107,7 +110,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _onPageTap() {
-    // عند النقر على الشاشة، تخطي الكلام الحالي والانتقال للصفحة التالية
     _flutterTts.stop();
     _nextPage();
   }
@@ -116,12 +118,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     setState(() {
       _currentPage = index;
     });
-    // تحدث بالكلام الجديد عند تغيير الصفحة
     _speakCurrentPage();
   }
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
+    final titles = [
+      languageProvider.translate('welcomeToMunir'),
+      languageProvider.translate('smartAssistance'),
+    ];
+    
+    final subtitles = [
+      languageProvider.translate('aiCompanion'),
+      languageProvider.translate('readTextRecognize'),
+    ];
+
     return Scaffold(
       body: GestureDetector(
         onTap: _onPageTap,
@@ -129,8 +142,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           controller: _pageController,
           itemCount: images.length,
           onPageChanged: _onPageChanged,
-          physics:
-              const ClampingScrollPhysics(), // لمنع المستخدم من التمرير يدوياً
+          physics: const ClampingScrollPhysics(),
           itemBuilder: (context, index) {
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
@@ -147,7 +159,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      // مؤشر التحدث بدلاً من زر Skip
                       if (_isSpeaking && _currentPage == index)
                         Row(
                           children: [
@@ -162,21 +173,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             Container(
                               width: 12,
                               height: 12,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFB14ABA),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFB14ABA),
                                 shape: BoxShape.circle,
                               ),
                             ),
                           ],
                         )
                       else
-                        const SizedBox(width: 100), // للحفاظ على التوازن
+                        const SizedBox(width: 100),
                     ],
                   ),
-
                   const SizedBox(height: 20),
-
-                  // ✅ الصورة مع تأثير للجذب البصري
                   Expanded(
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 500),
@@ -184,8 +192,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       child: Image.asset(images[index], fit: BoxFit.contain),
                     ),
                   ),
-
-                  // ✅ العنوان مع تأثير الظهور
                   AnimatedOpacity(
                     duration: const Duration(milliseconds: 500),
                     opacity: 1.0,
@@ -198,10 +204,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-
                   const SizedBox(height: 10),
-
-                  // ✅ الوصف مع تأثير الظهور
                   AnimatedOpacity(
                     duration: const Duration(milliseconds: 500),
                     opacity: 1.0,
@@ -211,10 +214,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-
                   const SizedBox(height: 30),
-
-                  // ✅ مؤشرات التقدم فقط (بدون أزرار)
                   Center(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -234,16 +234,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       }),
                     ),
                   ),
-
                   const SizedBox(height: 20),
-
-                  // ✅ تعليمات للمستخدم
                   AnimatedOpacity(
                     duration: const Duration(milliseconds: 500),
                     opacity: _isSpeaking ? 0.0 : 1.0,
-                    child: const Text(
-                      "Tap anywhere to continue",
-                      style: TextStyle(
+                    child: Text(
+                      languageProvider.translate('tapToContinue'),
+                      style: const TextStyle(
                         fontSize: 14,
                         color: Colors.grey,
                         fontStyle: FontStyle.italic,

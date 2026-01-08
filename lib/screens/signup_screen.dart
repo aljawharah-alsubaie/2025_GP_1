@@ -7,10 +7,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
 
 import 'home_page.dart';
 import 'login_screen.dart';
 import '../services/google_signin_handler.dart';
+import '../providers/language_provider.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
@@ -75,7 +77,7 @@ class _SignupScreenState extends State<SignupScreen>
   bool _isSpeaking = false;
 
   void _cancelAllSpeech({bool cancelTypingTimer = false}) {
-    _speechGen++; // يبطل أي تسلسل نطق سابق
+    _speechGen++;
     try {
       _flutterTts.stop();
     } catch (_) {}
@@ -140,13 +142,16 @@ class _SignupScreenState extends State<SignupScreen>
 
   Future<void> _initTTS() async {
     _flutterTts = FlutterTts();
-    await _flutterTts.setLanguage("en-US");
+    
+    // ✅ نحدد اللغة بناءً على اختيار المستخدم
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _flutterTts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
+    
     await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
     await _flutterTts.awaitSpeakCompletion(true);
 
-    // تتبع بداية/نهاية/إلغاء النطق
     try {
       _flutterTts.setStartHandler(() {
         _isSpeaking = true;
@@ -160,9 +165,7 @@ class _SignupScreenState extends State<SignupScreen>
       _flutterTts.setErrorHandler((msg) {
         _isSpeaking = false;
       });
-    } catch (_) {
-      // بعض الإصدارات قد لا تدعم جميع الـ handlers
-    }
+    } catch (_) {}
 
     setState(() => _ttsInitialized = true);
     WidgetsBinding.instance.addPostFrameCallback((_) => _speakWelcome());
@@ -180,8 +183,11 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   void _speakWelcome() {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     _speak(
-      "Create Account page. Please fill in your details to create a new account.",
+      languageProvider.isArabic
+          ? "صفحة إنشاء حساب. من فضلك املأ بياناتك لإنشاء حساب جديد"
+          : "Create Account page. Please fill in your details to create a new account.",
       interrupt: true,
     );
   }
@@ -214,10 +220,8 @@ class _SignupScreenState extends State<SignupScreen>
         );
   }
 
-  // لا نخفي الرسالة إلا بعد انتهاء القراءة (إن كان autoHide=true)
   Future<void> _autoHideBannerAfter(Duration d) async {
     await Future.delayed(d);
-    // انتظر انتهاء أي قراءة حالية
     while (_isSpeaking) {
       await Future.delayed(const Duration(milliseconds: 150));
       if (!mounted) return;
@@ -230,7 +234,6 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   void _showRealTimeError(String errorMessage) {
-    // أي فاليديشن لحظي يلغي القراءة الحالية ثم يعرض رسالة الحقل
     _cancelAllSpeech();
     _showErrorWithSoundAndBanner(errorMessage, autoHide: true);
   }
@@ -248,19 +251,20 @@ class _SignupScreenState extends State<SignupScreen>
     _speakForce("Error: $errorMessage");
     HapticFeedback.heavyImpact();
 
-    // لا نخفي الرسالة إلا بعد ما يخلص TTS
     if (autoHide) {
       _autoHideBannerAfter(const Duration(seconds: 10));
     }
   }
 
   void _hideErrorBanner() {
-    _cancelAllSpeech(); // أيضًا يوقف أي قراءة قائمة
+    _cancelAllSpeech();
     setState(() {
       _showErrorBanner = false;
       _currentErrorMessage = null;
     });
-    _speak("Error message closed");
+    
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    _speak(languageProvider.isArabic ? "تم إغلاق رسالة الخطأ" : "Error message closed");
   }
 
   void _showSuccessWithSpeech(String successMessage) {
@@ -285,13 +289,13 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   void _onFieldFocusChanged(String fieldName, bool hasFocus) {
-    if (hasFocus && _showErrorBanner) {
-      // لا نخفي فورًا، إلا إذا تبين أن المستخدم يعدل ومحتاج يسمع خطأ الحقل
-    }
+    if (hasFocus && _showErrorBanner) {}
   }
 
   void _validateFieldInRealTime(String fieldName, String value) {
     if (!mounted) return;
+    
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     String? errorMessage;
 
     switch (fieldName) {
@@ -306,54 +310,74 @@ class _SignupScreenState extends State<SignupScreen>
         final issues = <String>[];
 
         if (!cleaned.startsWith('05')) {
-          issues.add('start with 05');
+          issues.add(languageProvider.isArabic ? 'يبدأ بـ 05' : 'start with 05');
         }
         if (cleaned.length != 10) {
-          issues.add('be exactly 10 digits');
+          issues.add(languageProvider.isArabic ? 'يحتوي على 10 أرقام بالضبط' : 'be exactly 10 digits');
         }
         if (!RegExp(r'^[0-9]+$').hasMatch(cleaned)) {
-          issues.add('contain only numbers');
+          issues.add(languageProvider.isArabic ? 'يحتوي على أرقام فقط' : 'contain only numbers');
         }
 
         if (value.isNotEmpty && issues.isNotEmpty) {
-          errorMessage = "Mobile number must ${issues.join(', ')}.";
+          errorMessage = languageProvider.isArabic
+              ? "رقم الجوال يجب أن ${issues.join('، ')}"
+              : "Mobile number must ${issues.join(', ')}.";
         }
         break;
       case 'password':
         final missing = _getMissingPasswordRequirements(value);
         if (missing.isNotEmpty && value.isNotEmpty) {
-          errorMessage = "Password missing: ${missing.join(', ')}";
+          errorMessage = languageProvider.isArabic
+              ? "كلمة المرور ناقصة: ${missing.join('، ')}"
+              : "Password missing: ${missing.join(', ')}";
         }
         break;
       case 'confirmPassword':
         if (value.isNotEmpty && value != passwordController.text) {
-          errorMessage = "Passwords do not match";
+          errorMessage = languageProvider.isArabic
+              ? "كلمات المرور غير متطابقة"
+              : "Passwords do not match";
         }
         break;
     }
 
     if (errorMessage != null && value.isNotEmpty) {
       _showRealTimeError(errorMessage);
-    } else {
-      // تم إصلاح الخطأ، نسكت
     }
   }
 
   String? _validateName(String? value) {
-    if (value == null || value.trim().isEmpty) return "Name is required";
-    if (value.trim().length < 2) return "Name must be at least 2 characters";
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
+    if (value == null || value.trim().isEmpty) {
+      return languageProvider.isArabic ? "الاسم مطلوب" : "Name is required";
+    }
+    if (value.trim().length < 2) {
+      return languageProvider.isArabic
+          ? "الاسم يجب أن يحتوي على حرفين على الأقل"
+          : "Name must be at least 2 characters";
+    }
     if (RegExp(r'[0-9]').hasMatch(value)) {
-      return "Name should not contain numbers";
+      return languageProvider.isArabic
+          ? "الاسم يجب ألا يحتوي على أرقام"
+          : "Name should not contain numbers";
     }
     return null;
   }
 
   String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) return "Email is required";
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
+    if (value == null || value.trim().isEmpty) {
+      return languageProvider.isArabic ? "البريد الإلكتروني مطلوب" : "Email is required";
+    }
 
     final emailRegex = RegExp(r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,}$');
     if (!emailRegex.hasMatch(value.trim())) {
-      return "Please enter a valid email address, such as example@domain.com";
+      return languageProvider.isArabic
+          ? "من فضلك ادخل بريداً إلكترونياً صحيحاً، مثل example@domain.com"
+          : "Please enter a valid email address, such as example@domain.com";
     }
 
     final allowedDomains = {
@@ -364,72 +388,125 @@ class _SignupScreenState extends State<SignupScreen>
     };
 
     final parts = value.trim().split('@');
-    if (parts.length != 2) return "Invalid email format";
+    if (parts.length != 2) {
+      return languageProvider.isArabic ? "صيغة البريد غير صحيحة" : "Invalid email format";
+    }
+    
     final domain = parts[1].toLowerCase();
     if (!allowedDomains.containsKey(domain)) {
-      return "Only ${allowedDomains.values.join(', ')} emails are allowed";
+      return languageProvider.isArabic
+          ? "فقط بريد ${allowedDomains.values.join('، ')} مسموح"
+          : "Only ${allowedDomains.values.join(', ')} emails are allowed";
     }
     return null;
   }
 
   String? _validatePhone(String? value) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (value == null || value.trim().isEmpty) {
-      return "Mobile number is required";
+      return languageProvider.isArabic ? "رقم الجوال مطلوب" : "Mobile number is required";
     }
+    
     final cleaned = value.trim().replaceAll(RegExp(r'[-\s()]'), '');
-    if (!cleaned.startsWith('05')) return "Mobile number must start with 05";
-    if (cleaned.length != 10) return "Mobile number must be exactly 10 digits";
+    
+    if (!cleaned.startsWith('05')) {
+      return languageProvider.isArabic
+          ? "رقم الجوال يجب أن يبدأ بـ 05"
+          : "Mobile number must start with 05";
+    }
+    
+    if (cleaned.length != 10) {
+      return languageProvider.isArabic
+          ? "رقم الجوال يجب أن يحتوي على 10 أرقام بالضبط"
+          : "Mobile number must be exactly 10 digits";
+    }
+    
     if (!RegExp(r'^[0-9]+$').hasMatch(cleaned)) {
-      return "Mobile number should contain only numbers";
+      return languageProvider.isArabic
+          ? "رقم الجوال يجب أن يحتوي على أرقام فقط"
+          : "Mobile number should contain only numbers";
     }
     return null;
   }
 
   List<String> _getMissingPasswordRequirements(String password) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final missing = <String>[];
-    if (password.length < 8) missing.add('At least 8 characters long');
-    if (!password.contains(RegExp(r'[A-Z]')))
-      missing.add('One uppercase letter (A-Z)');
-    if (!password.contains(RegExp(r'[a-z]')))
-      missing.add('One lowercase letter (a-z)');
-    if (!password.contains(RegExp(r'[0-9]'))) missing.add('One number (0-9)');
+    
+    if (password.length < 8) {
+      missing.add(languageProvider.isArabic
+          ? '8 أحرف على الأقل'
+          : 'At least 8 characters long');
+    }
+    if (!password.contains(RegExp(r'[A-Z]'))) {
+      missing.add(languageProvider.isArabic
+          ? 'حرف كبير واحد (A-Z)'
+          : 'One uppercase letter (A-Z)');
+    }
+    if (!password.contains(RegExp(r'[a-z]'))) {
+      missing.add(languageProvider.isArabic
+          ? 'حرف صغير واحد (a-z)'
+          : 'One lowercase letter (a-z)');
+    }
+    if (!password.contains(RegExp(r'[0-9]'))) {
+      missing.add(languageProvider.isArabic ? 'رقم واحد (0-9)' : 'One number (0-9)');
+    }
     if (!password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>]'))) {
-      missing.add('One special character');
+      missing.add(languageProvider.isArabic ? 'رمز خاص واحد' : 'One special character');
     }
     return missing;
   }
 
   String? _validatePassword(String password) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final errors = _getMissingPasswordRequirements(password);
+    
     if (errors.isEmpty) return null;
+    
     return errors.length == 1
-        ? "Password missing: ${errors.first}"
-        : "Password missing ${errors.length} requirements";
+        ? (languageProvider.isArabic
+            ? "كلمة المرور ناقصة: ${errors.first}"
+            : "Password missing: ${errors.first}")
+        : (languageProvider.isArabic
+            ? "كلمة المرور ناقصة ${errors.length} متطلبات"
+            : "Password missing ${errors.length} requirements");
   }
 
   String _getPasswordStrength(String password) {
-    if (password.isEmpty) return 'Empty';
-    if (password.length < 8) return 'Too Short';
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
+    if (password.isEmpty) return languageProvider.isArabic ? 'فارغة' : 'Empty';
+    if (password.length < 8) return languageProvider.isArabic ? 'قصيرة جداً' : 'Too Short';
+    
     var score = 0;
     if (password.contains(RegExp(r'[A-Z]'))) score++;
     if (password.contains(RegExp(r'[a-z]'))) score++;
     if (password.contains(RegExp(r'[0-9]'))) score++;
-    if (score == 3 && password.length >= 8) return 'Strong';
-    if (score >= 2) return 'Medium';
-    if (score >= 1) return 'Weak';
-    return 'Very Weak';
+    
+    if (score == 3 && password.length >= 8) {
+      return languageProvider.isArabic ? 'قوية' : 'Strong';
+    }
+    if (score >= 2) return languageProvider.isArabic ? 'متوسطة' : 'Medium';
+    if (score >= 1) return languageProvider.isArabic ? 'ضعيفة' : 'Weak';
+    return languageProvider.isArabic ? 'ضعيفة جداً' : 'Very Weak';
   }
 
   Color _getPasswordStrengthColor(String password) {
     switch (_getPasswordStrength(password)) {
       case 'Strong':
+      case 'قوية':
         return Colors.green;
       case 'Medium':
+      case 'متوسطة':
         return Colors.orange;
       case 'Weak':
+      case 'ضعيفة':
       case 'Very Weak':
+      case 'ضعيفة جداً':
         return Colors.red;
       case 'Too Short':
+      case 'قصيرة جداً':
         return Colors.redAccent;
       default:
         return Colors.grey;
@@ -450,10 +527,16 @@ class _SignupScreenState extends State<SignupScreen>
     final pwdErrors = _getMissingPasswordRequirements(passwordController.text);
     if (pwdErrors.isNotEmpty) errors['password'] = pwdErrors;
 
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (confirmPasswordController.text.isEmpty) {
-      errors['confirmPassword'] = "Please confirm your password";
+      errors['confirmPassword'] = languageProvider.isArabic
+          ? "من فضلك أكد كلمة المرور"
+          : "Please confirm your password";
     } else if (confirmPasswordController.text != passwordController.text) {
-      errors['confirmPassword'] = "Passwords do not match";
+      errors['confirmPassword'] = languageProvider.isArabic
+          ? "كلمات المرور غير متطابقة"
+          : "Passwords do not match";
     }
     return errors;
   }
@@ -461,34 +544,43 @@ class _SignupScreenState extends State<SignupScreen>
   Future<void> _announceAllErrors(Map<String, dynamic> errors) async {
     if (errors.isEmpty) return;
 
-    // أوقفي أي قراءة حالية
     _cancelAllSpeech();
     final gen = _speechGen;
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
-    // رسالة متعددة الأسطر + نقاط فرعية للباسورد
-    String general = "Please fix the following errors:\n\n";
+    String general = languageProvider.isArabic
+        ? "من فضلك أصلح الأخطاء التالية:\n\n"
+        : "Please fix the following errors:\n\n";
+    
     if (errors.containsKey('name')) {
-      general += "• Name: ${errors['name']}\n\n";
+      general += languageProvider.isArabic
+          ? "• الاسم: ${errors['name']}\n\n"
+          : "• Name: ${errors['name']}\n\n";
     }
     if (errors.containsKey('email')) {
-      general += "• Email: ${errors['email']}\n\n";
+      general += languageProvider.isArabic
+          ? "• البريد: ${errors['email']}\n\n"
+          : "• Email: ${errors['email']}\n\n";
     }
     if (errors.containsKey('phone')) {
-      general += "• Mobile Number: ${errors['phone']}\n\n";
+      general += languageProvider.isArabic
+          ? "• رقم الجوال: ${errors['phone']}\n\n"
+          : "• Mobile Number: ${errors['phone']}\n\n";
     }
     if (errors.containsKey('confirmPassword')) {
-      general += "• Confirm Password: ${errors['confirmPassword']}\n\n";
+      general += languageProvider.isArabic
+          ? "• تأكيد كلمة المرور: ${errors['confirmPassword']}\n\n"
+          : "• Confirm Password: ${errors['confirmPassword']}\n\n";
     }
     if (errors.containsKey('password')) {
       final list = errors['password'] as List<String>;
-      general += "• Password:\n";
+      general += languageProvider.isArabic ? "• كلمة المرور:\n" : "• Password:\n";
       for (final item in list) {
         general += "   - $item\n";
       }
       general += "\n";
     }
 
-    // نعرض الشريط بدون إخفاء تلقائي؛ سننهيه يدويًا بعد القراءة أو عند إغلاق المستخدم
     setState(() {
       _currentErrorMessage = general.trimRight();
       _showErrorBanner = true;
@@ -497,32 +589,44 @@ class _SignupScreenState extends State<SignupScreen>
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted || gen != _speechGen) return;
 
-    await _speakForce("Found ${errors.length} errors");
+    final foundMsg = languageProvider.isArabic
+        ? "وُجد ${errors.length} أخطاء"
+        : "Found ${errors.length} errors";
+    await _speakForce(foundMsg);
+    
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted || gen != _speechGen) return;
 
     if (errors.containsKey('name')) {
-      await _speak("Name: ${errors['name']}");
+      await _speak(languageProvider.isArabic
+          ? "الاسم: ${errors['name']}"
+          : "Name: ${errors['name']}");
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted || gen != _speechGen) return;
     }
     if (errors.containsKey('email')) {
-      await _speak("Email: ${errors['email']}");
+      await _speak(languageProvider.isArabic
+          ? "البريد: ${errors['email']}"
+          : "Email: ${errors['email']}");
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted || gen != _speechGen) return;
     }
     if (errors.containsKey('phone')) {
-      await _speak("Mobile Number: ${errors['phone']}");
+      await _speak(languageProvider.isArabic
+          ? "رقم الجوال: ${errors['phone']}"
+          : "Mobile Number: ${errors['phone']}");
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted || gen != _speechGen) return;
     }
     if (errors.containsKey('confirmPassword')) {
-      await _speak("Confirm Password: ${errors['confirmPassword']}");
+      await _speak(languageProvider.isArabic
+          ? "تأكيد كلمة المرور: ${errors['confirmPassword']}"
+          : "Confirm Password: ${errors['confirmPassword']}");
       await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted || gen != _speechGen) return;
     }
     if (errors.containsKey('password')) {
-      await _speak("Password issues:");
+      await _speak(languageProvider.isArabic ? "مشاكل كلمة المرور:" : "Password issues:");
       await Future.delayed(const Duration(milliseconds: 200));
       if (!mounted || gen != _speechGen) return;
 
@@ -534,14 +638,22 @@ class _SignupScreenState extends State<SignupScreen>
       }
     }
 
-    await _speak("Please fix these errors and try again.");
+    await _speak(languageProvider.isArabic
+        ? "من فضلك أصلح هذه الأخطاء وحاول مرة أخرى"
+        : "Please fix these errors and try again.");
+    
     if (mounted && gen == _speechGen) {
       _autoHideBannerAfter(const Duration(seconds: 4));
     }
   }
 
   void _registerUser() async {
-    _speak("Starting registration process. Please wait...");
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
+    _speak(languageProvider.isArabic
+        ? "جاري بدء عملية التسجيل. انتظر من فضلك..."
+        : "Starting registration process. Please wait...");
+    
     final fieldErrors = _validateAllFields();
     if (fieldErrors.isNotEmpty) {
       await _announceAllErrors(fieldErrors);
@@ -604,56 +716,69 @@ class _SignupScreenState extends State<SignupScreen>
       _startCheckingVerification();
 
       _showSuccessWithSpeech(
-        "Account created successfully! Please check your inbox and spam folder for the verification link. We've sent an email to ${emailController.text}.",
+        languageProvider.isArabic
+            ? "تم إنشاء الحساب بنجاح! من فضلك تفقد بريدك الوارد ومجلد الرسائل المزعجة لرابط التحقق. أرسلنا بريداً إلى ${emailController.text}"
+            : "Account created successfully! Please check your inbox and spam folder for the verification link. We've sent an email to ${emailController.text}.",
       );
     } on FirebaseAuthException catch (e) {
-      var error = "Registration failed";
+      var error = languageProvider.isArabic ? "فشل التسجيل" : "Registration failed";
+      
       if (e.code == 'too-many-requests' ||
           (e.message?.contains('blocked') ?? false)) {
-        error =
-            "Too many attempts from this device. Please wait 15–30 minutes and try again, or use a different network.";
+        error = languageProvider.isArabic
+            ? "محاولات كثيرة من هذا الجهاز. انتظر 15-30 دقيقة وحاول مرة أخرى، أو استخدم شبكة مختلفة"
+            : "Too many attempts from this device. Please wait 15–30 minutes and try again, or use a different network.";
       } else if (e.code == 'email-send-failed') {
-        error =
-            e.message ??
-            "Failed to send verification email. Please try again later.";
+        error = languageProvider.isArabic
+            ? "فشل إرسال بريد التحقق. حاول لاحقاً"
+            : e.message ?? "Failed to send verification email. Please try again later.";
       } else {
         switch (e.code) {
           case 'email-already-in-use':
-            error = "This email is already registered. Please login instead.";
+            error = languageProvider.isArabic
+                ? "هذا البريد مسجل بالفعل. من فضلك سجّل الدخول بدلاً من ذلك"
+                : "This email is already registered. Please login instead.";
             break;
           case 'invalid-email':
-            error = "Invalid email address";
+            error = languageProvider.isArabic ? "بريد إلكتروني غير صحيح" : "Invalid email address";
             break;
           case 'weak-password':
-            error = "Password too weak (min 6 characters)";
+            error = languageProvider.isArabic
+                ? "كلمة المرور ضعيفة جداً (6 أحرف على الأقل)"
+                : "Password too weak (min 6 characters)";
             break;
           case 'operation-not-allowed':
-            error =
-                "Registration is temporarily disabled. Please try again later.";
+            error = languageProvider.isArabic
+                ? "التسجيل معطل مؤقتاً. حاول لاحقاً"
+                : "Registration is temporarily disabled. Please try again later.";
             break;
           default:
-            error = e.message ?? "Registration failed";
+            error = e.message ?? (languageProvider.isArabic ? "فشل التسجيل" : "Registration failed");
         }
       }
-      _showErrorWithSoundAndBanner(error); // autoHide مع انتظار انتهاء القراءة
+      _showErrorWithSoundAndBanner(error);
     } catch (e) {
       _showErrorWithSoundAndBanner(
-        "Unexpected error occurred. Please try again.",
+        languageProvider.isArabic
+            ? "حدث خطأ غير متوقع. حاول مرة أخرى"
+            : "Unexpected error occurred. Please try again.",
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _startCheckingVerification() {
+  }void _startCheckingVerification() {
     _checkTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       await _checkEmailVerification();
       _checkCount++;
       if (_checkCount >= 100) {
         timer.cancel();
         if (!mounted) return;
+        
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
         _showErrorWithSoundAndBanner(
-          "Verification timeout. Please resend the email.",
+          languageProvider.isArabic
+              ? "انتهت مهلة التحقق. من فضلك أعد إرسال البريد"
+              : "Verification timeout. Please resend the email.",
         );
       }
     });
@@ -671,7 +796,6 @@ class _SignupScreenState extends State<SignupScreen>
         setState(() => _emailVerified = true);
         _checkTimer?.cancel();
 
-        // ✅ هنا التعديل المهم: تحديث email_verified في Firestore
         await FirebaseFirestore.instance
             .collection('users')
             .doc(updated!.uid)
@@ -684,9 +808,12 @@ class _SignupScreenState extends State<SignupScreen>
           value: emailController.text.trim(),
         );
 
-        _showSuccessWithSpeech(
-          "Email verified successfully! Welcome ${nameController.text}. Redirecting to home page...",
-        );
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+        final successMsg = languageProvider.isArabic
+            ? "تم التحقق من البريد بنجاح! مرحباً ${nameController.text}. جاري التوجيه للصفحة الرئيسية..."
+            : "Email verified successfully! Welcome ${nameController.text}. Redirecting to home page...";
+        
+        _showSuccessWithSpeech(successMsg);
         HapticFeedback.heavyImpact();
 
         await Future.delayed(const Duration(seconds: 2));
@@ -715,33 +842,49 @@ class _SignupScreenState extends State<SignupScreen>
         setState(() => _resendCooldown--);
       } else {
         setState(() => _canResend = true);
-        _speak("You can now resend the verification email");
+        
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+        _speak(languageProvider.isArabic
+            ? "يمكنك الآن إعادة إرسال رسالة التحقق"
+            : "You can now resend the verification email");
         timer.cancel();
       }
     });
   }
 
   Future<void> _resendVerificationEmail() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (!_canResend) {
-      _speak("Please wait $_resendCooldown seconds before resending email");
+      _speak(languageProvider.isArabic
+          ? "من فضلك انتظر $_resendCooldown ثانية قبل إعادة إرسال البريد"
+          : "Please wait $_resendCooldown seconds before resending email");
       return;
     }
 
     try {
       setState(() => _isLoading = true);
-      _speak("Sending new verification email...");
+      _speak(languageProvider.isArabic
+          ? "جاري إرسال رسالة تحقق جديدة..."
+          : "Sending new verification email...");
+      
       final user = FirebaseAuth.instance.currentUser;
       await user?.sendEmailVerification();
 
       _startResendCooldown();
       _showSuccessWithSpeech(
-        "New verification email sent successfully! Please check your inbox and spam folder",
+        languageProvider.isArabic
+            ? "تم إرسال رسالة تحقق جديدة بنجاح! من فضلك تفقق بريدك الوارد ومجلد الرسائل المزعجة"
+            : "New verification email sent successfully! Please check your inbox and spam folder",
       );
       HapticFeedback.mediumImpact();
     } catch (e) {
-      var msg = "Failed to resend email";
+      var msg = languageProvider.isArabic ? "فشل إعادة إرسال البريد" : "Failed to resend email";
+      
       if (e is FirebaseAuthException && e.code == 'too-many-requests') {
-        msg = "Too many requests. Please wait and try again";
+        msg = languageProvider.isArabic
+            ? "طلبات كثيرة. انتظر وحاول مرة أخرى"
+            : "Too many requests. Please wait and try again";
       }
       _showErrorWithSoundAndBanner(msg);
     } finally {
@@ -753,16 +896,21 @@ class _SignupScreenState extends State<SignupScreen>
     if (_isLoading) return;
 
     try {
-      _speak("Starting Google sign up process. Please wait.");
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+      
+      _speak(languageProvider.isArabic
+          ? "جاري بدء عملية التسجيل بـ Google. انتظر من فضلك"
+          : "Starting Google sign up process. Please wait.");
+      
       setState(() => _isLoading = true);
 
-      // 🟣 استخدام ميثود خاصة بالـ Sign up
       final cred = await GoogleSignInHandler.signInWithGoogleForSignup(context);
 
-      // المستخدم لغى
       if (cred == null) {
         _showErrorWithSoundAndBanner(
-          "Google sign-up canceled. Please try again.",
+          languageProvider.isArabic
+              ? "تم إلغاء التسجيل بـ Google. حاول مرة أخرى"
+              : "Google sign-up canceled. Please try again.",
         );
         return;
       }
@@ -770,7 +918,9 @@ class _SignupScreenState extends State<SignupScreen>
       final user = cred.user;
       if (user == null) {
         _showErrorWithSoundAndBanner(
-          "Google sign-up failed. Please try again.",
+          languageProvider.isArabic
+              ? "فشل التسجيل بـ Google. حاول مرة أخرى"
+              : "Google sign-up failed. Please try again.",
         );
         return;
       }
@@ -797,8 +947,12 @@ class _SignupScreenState extends State<SignupScreen>
 
       final name = user.displayName ?? user.email ?? 'User';
 
-      _showSnackBar("Welcome, $name!", Colors.green);
-      await _speakForce("Welcome, $name!");
+      final welcomeMsg = languageProvider.isArabic
+          ? "مرحباً، $name!"
+          : "Welcome, $name!";
+      
+      _showSnackBar(welcomeMsg, Colors.green);
+      await _speakForce(welcomeMsg);
 
       await Future.delayed(const Duration(milliseconds: 1800));
 
@@ -818,7 +972,12 @@ class _SignupScreenState extends State<SignupScreen>
         MaterialPageRoute(builder: (_) => const HomePage()),
       );
     } catch (_) {
-      _showErrorWithSoundAndBanner("Google sign-up failed. Please try again.");
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+      _showErrorWithSoundAndBanner(
+        languageProvider.isArabic
+            ? "فشل التسجيل بـ Google. حاول مرة أخرى"
+            : "Google sign-up failed. Please try again."
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -896,6 +1055,8 @@ class _SignupScreenState extends State<SignupScreen>
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -944,6 +1105,8 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   Widget _buildSignupForm() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Form(
@@ -972,9 +1135,9 @@ class _SignupScreenState extends State<SignupScreen>
                       color: Colors.white,
                     ),
                     const SizedBox(height: 10),
-                    const Text(
-                      "Create Account",
-                      style: TextStyle(
+                    Text(
+                      languageProvider.translate('createAccount'),
+                      style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -983,7 +1146,7 @@ class _SignupScreenState extends State<SignupScreen>
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      "Join us and start your journey",
+                      languageProvider.translate('joinUs'),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -1005,7 +1168,7 @@ class _SignupScreenState extends State<SignupScreen>
               hint: 'Enter your full name without numbers',
               child: _buildEnhancedTextFormField(
                 controller: nameController,
-                hint: "Name",
+                hint: languageProvider.translate('name'),
                 icon: Icons.person_outline,
                 validator: _validateName,
                 fieldName: 'name',
@@ -1020,7 +1183,7 @@ class _SignupScreenState extends State<SignupScreen>
               hint: 'We will send a verification link to this email',
               child: _buildEnhancedTextFormField(
                 controller: emailController,
-                hint: "Email Address",
+                hint: languageProvider.translate('emailAddress'),
                 icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
                 validator: _validateEmail,
@@ -1036,7 +1199,7 @@ class _SignupScreenState extends State<SignupScreen>
               hint: 'Enter your 10-digit mobile number starting with 05',
               child: _buildEnhancedTextFormField(
                 controller: phoneController,
-                hint: "Mobile Number (05XXXXXXXX)",
+                hint: languageProvider.translate('mobileNumber'),
                 icon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
                 validator: _validatePhone,
@@ -1050,17 +1213,18 @@ class _SignupScreenState extends State<SignupScreen>
               label: 'Password input field',
               textField: true,
               obscured: true,
-              hint:
-                  'Create a strong password with uppercase, lowercase, numbers and special characters',
+              hint: 'Create a strong password with uppercase, lowercase, numbers and special characters',
               child: _buildPasswordField(
                 controller: passwordController,
-                hint: "Password",
+                hint: languageProvider.translate('password'),
                 obscure: _obscurePassword,
                 onToggle: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) {
-                    return "Password is required";
+                    return languageProvider.isArabic
+                        ? "كلمة المرور مطلوبة"
+                        : "Password is required";
                   }
                   return _validatePassword(v.trim());
                 },
@@ -1074,8 +1238,7 @@ class _SignupScreenState extends State<SignupScreen>
 
               // Strength
               Semantics(
-                label:
-                    'Password strength: ${_getPasswordStrength(passwordController.text)}',
+                label: '${languageProvider.translate('passwordStrength')}: ${_getPasswordStrength(passwordController.text)}',
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -1096,7 +1259,7 @@ class _SignupScreenState extends State<SignupScreen>
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        "Password Strength: ${_getPasswordStrength(passwordController.text)}",
+                        "${languageProvider.translate('passwordStrength')}: ${_getPasswordStrength(passwordController.text)}",
                         style: TextStyle(
                           color: _getPasswordStrengthColor(
                             passwordController.text,
@@ -1127,16 +1290,16 @@ class _SignupScreenState extends State<SignupScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      children: const [
-                        Icon(
+                      children: [
+                        const Icon(
                           Icons.checklist_rtl,
                           color: Color(0xFF6B1D73),
                           size: 20,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
-                          'Password Requirements:',
-                          style: TextStyle(
+                          languageProvider.translate('passwordRequirements'),
+                          style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF6B1D73),
@@ -1146,23 +1309,23 @@ class _SignupScreenState extends State<SignupScreen>
                     ),
                     const SizedBox(height: 12),
                     _buildPasswordRequirement(
-                      'At least 8 characters',
+                      languageProvider.translate('atLeast8Chars'),
                       passwordController.text.length >= 8,
                     ),
                     _buildPasswordRequirement(
-                      'Uppercase letter (A-Z)',
+                      languageProvider.translate('oneUppercase'),
                       passwordController.text.contains(RegExp(r'[A-Z]')),
                     ),
                     _buildPasswordRequirement(
-                      'Lowercase letter (a-z)',
+                      languageProvider.translate('oneLowercase'),
                       passwordController.text.contains(RegExp(r'[a-z]')),
                     ),
                     _buildPasswordRequirement(
-                      'Number (0-9)',
+                      languageProvider.translate('oneNumber'),
                       passwordController.text.contains(RegExp(r'[0-9]')),
                     ),
                     _buildPasswordRequirement(
-                      'Special character',
+                      languageProvider.translate('oneSpecialChar'),
                       passwordController.text.contains(
                         RegExp(r'[!@#$%^&*(),.?":{}|<>]'),
                       ),
@@ -1182,17 +1345,21 @@ class _SignupScreenState extends State<SignupScreen>
               hint: 'Re-enter your password to confirm',
               child: _buildPasswordField(
                 controller: confirmPasswordController,
-                hint: "Confirm Password",
+                hint: languageProvider.translate('confirmPassword'),
                 obscure: _obscureConfirmPassword,
                 onToggle: () => setState(
                   () => _obscureConfirmPassword = !_obscureConfirmPassword,
                 ),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) {
-                    return "Please confirm your password";
+                    return languageProvider.isArabic
+                        ? "من فضلك أكد كلمة المرور"
+                        : "Please confirm your password";
                   }
                   if (v != passwordController.text) {
-                    return "Passwords do not match";
+                    return languageProvider.isArabic
+                        ? "كلمات المرور غير متطابقة"
+                        : "Passwords do not match";
                   }
                   return null;
                 },
@@ -1214,7 +1381,7 @@ class _SignupScreenState extends State<SignupScreen>
                   onPressed: _isLoading
                       ? null
                       : () {
-                          _onButtonTap("Create account");
+                          _onButtonTap(languageProvider.translate('createAccount'));
                           _registerUser();
                         },
                   style: ElevatedButton.styleFrom(
@@ -1235,9 +1402,9 @@ class _SignupScreenState extends State<SignupScreen>
                             strokeWidth: 2,
                           ),
                         )
-                      : const Text(
-                          "Create Account",
-                          style: TextStyle(
+                      : Text(
+                          languageProvider.translate('createAccount'),
+                          style: const TextStyle(
                             fontSize: 21,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1260,7 +1427,7 @@ class _SignupScreenState extends State<SignupScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    "OR",
+                    languageProvider.translate('or'),
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontWeight: FontWeight.w500,
@@ -1300,7 +1467,9 @@ class _SignupScreenState extends State<SignupScreen>
                     onPressed: _isLoading
                         ? null
                         : () {
-                            _onButtonTap("Sign up with Google, Please wait");
+                            _onButtonTap(languageProvider.isArabic
+                                ? "التسجيل بـ Google، انتظر من فضلك"
+                                : "Sign up with Google, Please wait");
                             _signUpWithGoogle();
                           },
                     style: ElevatedButton.styleFrom(
@@ -1314,12 +1483,12 @@ class _SignupScreenState extends State<SignupScreen>
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.g_mobiledata, size: 30),
-                        SizedBox(width: 12),
+                      children: [
+                        const Icon(Icons.g_mobiledata, size: 30),
+                        const SizedBox(width: 12),
                         Text(
-                          "Continue with Google",
-                          style: TextStyle(
+                          languageProvider.translate('continueWithGoogle'),
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                           ),
@@ -1340,7 +1509,7 @@ class _SignupScreenState extends State<SignupScreen>
               hint: 'Double tap to go to login page',
               child: GestureDetector(
                 onTap: () async {
-                  _onButtonTap("Log in");
+                  _onButtonTap(languageProvider.translate('logIn'));
                   _cancelAllSpeech(cancelTypingTimer: true);
                   await Future.delayed(const Duration(milliseconds: 300));
                   Navigator.pushReplacement(
@@ -1366,16 +1535,16 @@ class _SignupScreenState extends State<SignupScreen>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        "Already have an account? ",
+                        languageProvider.translate('alreadyHaveAccount'),
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.9),
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const Text(
-                        "Log In",
-                        style: TextStyle(
+                      Text(
+                        languageProvider.translate('logIn'),
+                        style: const TextStyle(
                           color: Color.fromARGB(255, 248, 183, 255),
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -1395,6 +1564,8 @@ class _SignupScreenState extends State<SignupScreen>
   }
 
   Widget _buildVerificationWaitingScreen() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
@@ -1424,7 +1595,9 @@ class _SignupScreenState extends State<SignupScreen>
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    _emailVerified ? "Email Verified!" : "Check Your Email",
+                    _emailVerified
+                        ? languageProvider.translate('emailVerified')
+                        : languageProvider.translate('checkYourEmail'),
                     style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -1435,7 +1608,7 @@ class _SignupScreenState extends State<SignupScreen>
                   const SizedBox(height: 16),
                   if (_emailVerified)
                     Text(
-                      "Redirecting to home...",
+                      languageProvider.translate('redirectingToHome'),
                       style: TextStyle(
                         fontSize: 16,
                         color: Colors.white.withOpacity(0.9),
@@ -1446,7 +1619,7 @@ class _SignupScreenState extends State<SignupScreen>
                     Column(
                       children: [
                         Text(
-                          "We sent an email to",
+                          languageProvider.translate('weSentEmail'),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -1489,16 +1662,16 @@ class _SignupScreenState extends State<SignupScreen>
                             children: [
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
-                                children: const [
-                                  Icon(
+                                children: [
+                                  const Icon(
                                     Icons.warning_amber_rounded,
                                     color: Colors.white,
                                     size: 26,
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    "IMPORTANT!",
-                                    style: TextStyle(
+                                    languageProvider.translate('important'),
+                                    style: const TextStyle(
                                       fontSize: 19,
                                       color: Colors.white,
                                       fontWeight: FontWeight.w800,
@@ -1508,7 +1681,7 @@ class _SignupScreenState extends State<SignupScreen>
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                "Check your SPAM/JUNK folder!",
+                                languageProvider.translate('checkSpam'),
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.white.withOpacity(0.95),
@@ -1551,12 +1724,12 @@ class _SignupScreenState extends State<SignupScreen>
               child: Column(
                 children: [
                   Row(
-                    children: const [
-                      Icon(Icons.info_outline, color: Colors.white, size: 26),
-                      SizedBox(width: 12),
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.white, size: 26),
+                      const SizedBox(width: 12),
                       Text(
-                        "Next Steps",
-                        style: TextStyle(
+                        languageProvider.translate('nextSteps'),
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -1566,12 +1739,19 @@ class _SignupScreenState extends State<SignupScreen>
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "1. Open your email app\n"
-                    "2. Check INBOX and SPAM folder\n"
-                    "3. Find our verification email\n"
-                    "4. Click the verification link\n"
-                    "5. Come back here automatically\n\n"
-                    "We're checking automatically!",
+                    languageProvider.isArabic
+                        ? "1. افتح تطبيق البريد\n"
+                          "2. تحقق من الوارد والبريد المزعج\n"
+                          "3. ابحث عن رسالة التحقق\n"
+                          "4. اضغط على رابط التحقق\n"
+                          "5. عُد هنا تلقائياً\n\n"
+                          "نحن نتحقق تلقائياً!"
+                        : "1. Open your email app\n"
+                          "2. Check INBOX and SPAM folder\n"
+                          "3. Find our verification email\n"
+                          "4. Click the verification link\n"
+                          "5. Come back here automatically\n\n"
+                          "We're checking automatically!",
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.9),
                       fontSize: 17,
@@ -1588,11 +1768,17 @@ class _SignupScreenState extends State<SignupScreen>
             // Resend email
             Semantics(
               label: _canResend
-                  ? 'Resend verification email button'
-                  : 'Resend available in $_resendCooldown seconds',
+                  ? (languageProvider.isArabic
+                      ? 'زر إعادة إرسال رسالة التحقق'
+                      : 'Resend verification email button')
+                  : (languageProvider.isArabic
+                      ? 'الإرسال متاح خلال $_resendCooldown ثانية'
+                      : 'Resend available in $_resendCooldown seconds'),
               button: true,
               hint: _canResend
-                  ? 'Double tap to send verification email again'
+                  ? (languageProvider.isArabic
+                      ? 'اضغط مرتين لإرسال رسالة التحقق مرة أخرى'
+                      : 'Double tap to send verification email again')
                   : '',
               child: SizedBox(
                 width: double.infinity,
@@ -1601,7 +1787,7 @@ class _SignupScreenState extends State<SignupScreen>
                   onPressed: (_isLoading || !_canResend)
                       ? null
                       : () {
-                          _onButtonTap("Resend verification email");
+                          _onButtonTap(languageProvider.translate('resendEmail'));
                           _resendVerificationEmail();
                         },
                   icon: Icon(
@@ -1610,8 +1796,8 @@ class _SignupScreenState extends State<SignupScreen>
                   ),
                   label: Text(
                     _canResend
-                        ? "Resend Verification Email"
-                        : "Resend in $_resendCooldown seconds",
+                        ? languageProvider.translate('resendEmail')
+                        : "${languageProvider.translate('resendIn')} $_resendCooldown ${languageProvider.translate('seconds')}",
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
@@ -1639,7 +1825,7 @@ class _SignupScreenState extends State<SignupScreen>
               hint: 'Double tap to go back to login page',
               child: TextButton(
                 onPressed: () {
-                  _onButtonTap("Back to login");
+                  _onButtonTap(languageProvider.translate('backToLogin'));
                   _checkTimer?.cancel();
                   _resendCooldownTimer?.cancel();
                   _cancelAllSpeech(cancelTypingTimer: true);
@@ -1648,9 +1834,9 @@ class _SignupScreenState extends State<SignupScreen>
                     MaterialPageRoute(builder: (_) => const LoginScreen()),
                   );
                 },
-                child: const Text(
-                  "Back to Login",
-                  style: TextStyle(
+                child: Text(
+                  languageProvider.translate('backToLogin'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.w800,
@@ -1756,6 +1942,8 @@ class _SignupScreenState extends State<SignupScreen>
     String? Function(String?)? validator,
     required String fieldName,
   }) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
@@ -1796,12 +1984,16 @@ class _SignupScreenState extends State<SignupScreen>
             ),
           ),
           suffixIcon: Semantics(
-            label: obscure ? 'Show password' : 'Hide password',
+            label: obscure
+                ? (languageProvider.isArabic ? 'إظهار كلمة المرور' : 'Show password')
+                : (languageProvider.isArabic ? 'إخفاء كلمة المرور' : 'Hide password'),
             button: true,
             hint: 'Double tap to toggle password visibility',
             child: IconButton(
               onPressed: () {
-                _onButtonTap(obscure ? "Show password" : "Hide password");
+                _onButtonTap(obscure
+                    ? (languageProvider.isArabic ? "إظهار كلمة المرور" : "Show password")
+                    : (languageProvider.isArabic ? "إخفاء كلمة المرور" : "Hide password"));
                 onToggle();
               },
               icon: Icon(
@@ -1823,7 +2015,6 @@ class _SignupScreenState extends State<SignupScreen>
     );
   }
 
-  /// Error banner مع سكرول داخلي ويظل ظاهرًا حتى تنتهي القراءة أو الإغلاق اليدوي.
   Widget _buildErrorBanner() {
     if (!_showErrorBanner || _currentErrorMessage == null) {
       return const SizedBox.shrink();
