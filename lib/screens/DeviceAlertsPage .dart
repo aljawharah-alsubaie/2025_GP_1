@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import './sos_screen.dart';
 import 'home_page.dart';
 import 'reminders.dart';
@@ -29,7 +31,6 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
   late AnimationController _fadeController;
   late AnimationController _slideController;
 
-  // 🎨 نظام ألوان موحد (نفس الألوان من SettingsPage)
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -54,7 +55,8 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -76,6 +78,8 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
   }
 
   Future<void> _loadSettings() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
       final user = _auth.currentUser;
       if (user != null) {
@@ -105,11 +109,15 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
       setState(() {
         isLoading = false;
       });
-      _showErrorSnackBar('Failed to load settings');
+      _showErrorSnackBar(languageProvider.isArabic
+          ? 'فشل تحميل الإعدادات'
+          : 'Failed to load settings');
     }
   }
 
   Future<void> _saveSettings() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
       final user = _auth.currentUser;
       if (user != null) {
@@ -124,11 +132,15 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
               'updated_at': FieldValue.serverTimestamp(),
             });
 
-        _showSuccessSnackBar('Settings saved successfully');
+        _showSuccessSnackBar(languageProvider.isArabic
+            ? 'تم حفظ الإعدادات بنجاح'
+            : 'Settings saved successfully');
       }
     } catch (e) {
       print('Error saving settings: $e');
-      _showErrorSnackBar('Failed to save settings');
+      _showErrorSnackBar(languageProvider.isArabic
+          ? 'فشل حفظ الإعدادات'
+          : 'Failed to save settings');
     }
   }
 
@@ -142,7 +154,7 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
     entry = OverlayEntry(
       builder: (context) {
         return Positioned(
-          bottom: 120, 
+          bottom: 120,
           left: 16,
           right: 16,
           child: Material(
@@ -207,13 +219,7 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
   }
 
   void _showErrorSnackBar(String message) {
-    _showOverlaySnackBar(
-      const Color(0xFFF44336) == Colors.red
-          ? message
-          : message, // بس عشان ما نلخبط 😉
-      const Color(0xFFE53935),
-      seconds: 3,
-    );
+    _showOverlaySnackBar(message, const Color(0xFFE53935), seconds: 3);
   }
 
   @override
@@ -263,6 +269,8 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
   }
 
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
@@ -287,8 +295,8 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
-                  _tts.stop(); // ✅ يوقف الكلام فوراً
-                  _speak('Going back');
+                  _tts.stop();
+                  _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                   Future.delayed(const Duration(milliseconds: 800), () {
                     Navigator.pop(context);
                   });
@@ -311,7 +319,9 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                   ),
                   child: Center(
                     child: Icon(
-                      Icons.arrow_back_ios_new,
+                      languageProvider.isArabic
+                          ? Icons.arrow_forward_ios
+                          : Icons.arrow_back_ios_new,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -325,7 +335,7 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Device & Alerts',
+                    languageProvider.isArabic ? 'الجهاز والتنبيهات' : 'Device & Alerts',
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.w900,
@@ -338,7 +348,9 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Manage notifications & devices',
+                    languageProvider.isArabic
+                        ? 'إدارة الإشعارات والأجهزة'
+                        : 'Manage notifications & devices',
                     style: TextStyle(
                       fontSize: 14,
                       color: deepPurple.withOpacity(0.6),
@@ -356,6 +368,8 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
   }
 
   Widget _buildContent() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
           .animate(
@@ -368,8 +382,10 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
         padding: const EdgeInsets.fromLTRB(16, 35, 16, 16),
         children: [
           _buildToggleCard(
-            title: 'Bluetooth Device',
-            subtitle: 'Enable automatic connection',
+            title: languageProvider.isArabic ? 'جهاز البلوتوث' : 'Bluetooth Device',
+            subtitle: languageProvider.isArabic
+                ? 'تفعيل الاتصال التلقائي'
+                : 'Enable automatic connection',
             icon: Icons.bluetooth,
             value: bluetoothEnabled,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
@@ -379,12 +395,20 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                 bluetoothEnabled = value;
               });
               _saveSettings();
-              _speak(value ? 'Bluetooth enabled' : 'Bluetooth disabled');
+              _speak(value
+                  ? (languageProvider.isArabic
+                      ? 'تم تفعيل البلوتوث'
+                      : 'Bluetooth enabled')
+                  : (languageProvider.isArabic
+                      ? 'تم تعطيل البلوتوث'
+                      : 'Bluetooth disabled'));
             },
           ),
           _buildToggleCard(
-            title: 'Device Alerts',
-            subtitle: 'Receive notifications',
+            title: languageProvider.isArabic ? 'تنبيهات الجهاز' : 'Device Alerts',
+            subtitle: languageProvider.isArabic
+                ? 'استقبال الإشعارات'
+                : 'Receive notifications',
             icon: Icons.notifications_active,
             value: deviceAlertsEnabled,
             gradient: const LinearGradient(
@@ -396,7 +420,13 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                 deviceAlertsEnabled = value;
               });
               _saveSettings();
-              _speak(value ? 'Alerts enabled' : 'Alerts disabled');
+              _speak(value
+                  ? (languageProvider.isArabic
+                      ? 'تم تفعيل التنبيهات'
+                      : 'Alerts enabled')
+                  : (languageProvider.isArabic
+                      ? 'تم تعطيل التنبيهات'
+                      : 'Alerts disabled'));
             },
           ),
           const SizedBox(height: 20),
@@ -499,6 +529,8 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
   }
 
   Widget _buildInfoCard() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -538,7 +570,7 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
               ),
               const SizedBox(width: 10),
               Text(
-                'Information',
+                languageProvider.isArabic ? 'معلومات' : 'Information',
                 style: TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -549,7 +581,9 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
           ),
           const SizedBox(height: 12),
           Text(
-            'Bluetooth connection allows the app to automatically connect to your smart glass. Device alerts will notify you of important reminders!',
+            languageProvider.isArabic
+                ? 'اتصال البلوتوث يسمح للتطبيق بالاتصال تلقائياً بنظارتك الذكية. تنبيهات الجهاز ستخطرك بالتذكيرات المهمة!'
+                : 'Bluetooth connection allows the app to automatically connect to your smart glass. Device alerts will notify you of important reminders!',
             style: TextStyle(
               fontSize: 14,
               color: deepPurple.withOpacity(0.8),
@@ -565,11 +599,12 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
+      clipBehavior: Clip.none,
       children: [
-        // الفوتر الأساسي
         ClipRRect(
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
@@ -605,12 +640,14 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
                       description: 'Navigate to Homepage',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigate to Homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -621,11 +658,13 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                       description: 'Manage your reminders and notifications',
                       onTap: () {
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -635,14 +674,16 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                         );
                       },
                     ),
-                    const SizedBox(width: 60), // مساحة للدائرة
+                    const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
                       description:
                           'Manage your emergency contacts and important people',
                       onTap: () {
-                        _speak('Contact, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، تخزين وإدارة جهات اتصال الطوارئ'
+                            : 'Contact, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -653,11 +694,13 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                       description: 'Adjust app settings and preferences',
                       onTap: () {
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -680,7 +723,9 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+                languageProvider.isArabic
+                    ? 'طوارئ، إرسال تنبيه طوارئ لجهات الاتصال الموثوقة عندما تحتاج المساعدة'
+                    : 'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
               );
               Navigator.push(
                 context,
@@ -726,7 +771,6 @@ class _DeviceAlertsPageState extends State<DeviceAlertsPage>
     );
   }
 
-  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
   Widget _buildNavButton({
     required IconData icon,
     required String label,

@@ -11,6 +11,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import '../services/face_recognition_api.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -36,7 +38,6 @@ class _CameraScreenState extends State<CameraScreen> {
   String? _selectedImagePath;
   String _processingMode = 'text';
 
-  // IBM Watson TTS credentials
   static const String IBM_TTS_API_KEY =
       "Ibvg1Q2qca9ALJa1JCZVp09gFJMstnyeAXaOWKNrq6o-";
   static const String IBM_TTS_URL =
@@ -91,7 +92,6 @@ class _CameraScreenState extends State<CameraScreen> {
   Future<void> _initCamera() async {
     _cameras = await availableCameras();
     if (_cameras != null && _cameras!.isNotEmpty) {
-      // Use front camera for face recognition, back camera for others
       final cameraIndex = _processingMode == 'face' ? 1 : 0;
       _controller = CameraController(
         _cameras![cameraIndex < _cameras!.length ? cameraIndex : 0],
@@ -104,6 +104,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _initFaceRecognition() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     print('🚀 Initializing Face Recognition API...');
     try {
       final apiConnected = await FaceRecognitionAPI.testConnection();
@@ -111,8 +113,10 @@ class _CameraScreenState extends State<CameraScreen> {
         print('✅ Face Recognition API connected successfully');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Face recognition API connected'),
+            SnackBar(
+              content: Text(languageProvider.isArabic
+                  ? 'تم الاتصال بواجهة التعرف على الوجوه'
+                  : 'Face recognition API connected'),
               backgroundColor: Colors.green,
             ),
           );
@@ -121,8 +125,10 @@ class _CameraScreenState extends State<CameraScreen> {
         print('❌ Failed to connect to Face Recognition API');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to connect to face recognition API'),
+            SnackBar(
+              content: Text(languageProvider.isArabic
+                  ? 'فشل الاتصال بواجهة التعرف على الوجوه'
+                  : 'Failed to connect to face recognition API'),
               backgroundColor: Colors.red,
             ),
           );
@@ -166,6 +172,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   String _rgbToColorName(List<int> rgb) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     String closestColor = 'unknown';
     double minDistance = double.infinity;
 
@@ -176,6 +184,42 @@ class _CameraScreenState extends State<CameraScreen> {
         closestColor = name;
       }
     });
+
+    // ترجمة أسماء الألوان
+    if (languageProvider.isArabic) {
+      const arabicColors = {
+        'red': 'أحمر',
+        'green': 'أخضر',
+        'blue': 'أزرق',
+        'yellow': 'أصفر',
+        'orange': 'برتقالي',
+        'purple': 'بنفسجي',
+        'pink': 'وردي',
+        'brown': 'بني',
+        'black': 'أسود',
+        'white': 'أبيض',
+        'gray': 'رمادي',
+        'grey': 'رمادي',
+        'cyan': 'سماوي',
+        'magenta': 'أرجواني',
+        'lime': 'ليموني',
+        'maroon': 'عنابي',
+        'navy': 'كحلي',
+        'olive': 'زيتوني',
+        'silver': 'فضي',
+        'teal': 'تركواز',
+        'aqua': 'أكوا',
+        'fuchsia': 'فوشيا',
+        'gold': 'ذهبي',
+        'indigo': 'نيلي',
+        'khaki': 'كاكي',
+        'lavender': 'لافندر',
+        'salmon': 'سلموني',
+        'turquoise': 'فيروزي',
+        'violet': 'بنفسجي فاتح',
+      };
+      return arabicColors[closestColor] ?? closestColor;
+    }
 
     return closestColor;
   }
@@ -248,13 +292,19 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<String> _detectColorFromImage(String imagePath) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
       List<int> dominantRgb = await _getDominantColor(imagePath);
       String colorName = _rgbToColorName(dominantRgb);
-      return "The color is $colorName";
+      return languageProvider.isArabic
+          ? "اللون هو $colorName"
+          : "The color is $colorName";
     } catch (e) {
       print('Color detection error: $e');
-      return "Could not detect color";
+      return languageProvider.isArabic
+          ? "لم نتمكن من اكتشاف اللون"
+          : "Could not detect color";
     }
   }
 
@@ -291,13 +341,13 @@ class _CameraScreenState extends State<CameraScreen> {
       print('TTS Exception: $e');
       return null;
     }
-  }
-
-  Future<void> _processImage(
+  }Future<void> _processImage(
     String imagePath, {
     bool fromGallery = false,
   }) async {
     setState(() => _busy = true);
+    
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     try {
       if (fromGallery) {
@@ -317,7 +367,9 @@ class _CameraScreenState extends State<CameraScreen> {
         if (extractedText.trim().isNotEmpty) {
           textToSpeak = extractedText;
         } else {
-          textToSpeak = "No text detected in the image";
+          textToSpeak = languageProvider.isArabic
+              ? "لم يتم اكتشاف نص في الصورة"
+              : "No text detected in the image";
         }
       } else if (_processingMode == 'color') {
         String detectedColor = await _detectColorFromImage(imagePath);
@@ -328,29 +380,30 @@ class _CameraScreenState extends State<CameraScreen> {
         });
         textToSpeak = detectedColor;
       } else if (_processingMode == 'face') {
-        // Face Recognition using REST API
         print('🔍 Starting face recognition with REST API...');
 
         try {
           final user = FirebaseAuth.instance.currentUser;
           if (user == null) {
-            textToSpeak = "Please login to use face recognition";
+            textToSpeak = languageProvider.isArabic
+                ? "من فضلك سجّل الدخول لاستخدام التعرف على الوجوه"
+                : "Please login to use face recognition";
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Please login to use face recognition'),
+                SnackBar(
+                  content: Text(languageProvider.isArabic
+                      ? 'من فضلك سجّل الدخول لاستخدام التعرف على الوجوه'
+                      : 'Please login to use face recognition'),
                   backgroundColor: Colors.orange,
                 ),
               );
             }
           } else {
-            // Use REST API for face recognition
             final result = await FaceRecognitionAPI.recognizeFace(
               imageFile: File(imagePath),
               userId: user.uid,
             );
 
-            // Store result directly - don't create new object
             setState(() {
               _faceResult = result;
               _extractedText = "";
@@ -358,26 +411,33 @@ class _CameraScreenState extends State<CameraScreen> {
             });
 
             if (result.recognized && result.personName != null) {
-              textToSpeak = "Face recognized. This is ${result.personName}";
+              textToSpeak = languageProvider.isArabic
+                  ? "تم التعرف على الوجه. هذا ${result.personName}"
+                  : "Face recognized. This is ${result.personName}";
               print(
                 '✅ Match found: ${result.personName} with ${(result.confidence * 100).toStringAsFixed(1)}% confidence',
               );
             } else {
-              textToSpeak = "Face detected but not recognized. Unknown person";
+              textToSpeak = languageProvider.isArabic
+                  ? "تم اكتشاف وجه لكن لم يتم التعرف عليه. شخص غير معروف"
+                  : "Face detected but not recognized. Unknown person";
               print('⚠️ No match found');
             }
 
-            // Show result dialog
             _showFaceResultDialog(result, imagePath);
           }
         } catch (e) {
           print('❌ Face recognition error: $e');
-          textToSpeak = "Error recognizing face. Please try again";
+          textToSpeak = languageProvider.isArabic
+              ? "خطأ في التعرف على الوجه. حاول مرة أخرى"
+              : "Error recognizing face. Please try again";
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Face recognition error: $e'),
+                content: Text(languageProvider.isArabic
+                    ? 'خطأ في التعرف على الوجه: $e'
+                    : 'Face recognition error: $e'),
                 backgroundColor: Colors.red,
               ),
             );
@@ -405,13 +465,19 @@ class _CameraScreenState extends State<CameraScreen> {
             String successMessage;
             switch (_processingMode) {
               case 'color':
-                successMessage = 'Color detected and playing audio!';
+                successMessage = languageProvider.isArabic
+                    ? 'تم اكتشاف اللون وتشغيل الصوت!'
+                    : 'Color detected and playing audio!';
                 break;
               case 'face':
-                successMessage = 'Face processed and playing audio!';
+                successMessage = languageProvider.isArabic
+                    ? 'تمت معالجة الوجه وتشغيل الصوت!'
+                    : 'Face processed and playing audio!';
                 break;
               default:
-                successMessage = 'Text extracted and playing audio!';
+                successMessage = languageProvider.isArabic
+                    ? 'تم استخراج النص وتشغيل الصوت!'
+                    : 'Text extracted and playing audio!';
             }
 
             ScaffoldMessenger.of(context).showSnackBar(
@@ -428,7 +494,12 @@ class _CameraScreenState extends State<CameraScreen> {
       print('❌ Processing error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(languageProvider.isArabic
+                ? 'خطأ: $e'
+                : 'Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -437,6 +508,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _showFaceResultDialog(RecognitionResult result, String imagePath) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -452,7 +525,9 @@ class _CameraScreenState extends State<CameraScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                result.recognized ? 'Face Recognized!' : 'Unknown Face',
+                result.recognized
+                    ? (languageProvider.isArabic ? 'تم التعرف على الوجه!' : 'Face Recognized!')
+                    : (languageProvider.isArabic ? 'وجه غير معروف' : 'Unknown Face'),
                 style: const TextStyle(fontSize: 18),
               ),
             ),
@@ -473,28 +548,36 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
             const SizedBox(height: 16),
             if (result.recognized && result.personName != null) ...[
-              _buildInfoRow('Name', result.personName!, Icons.person),
               _buildInfoRow(
-                'Confidence',
+                languageProvider.isArabic ? 'الاسم' : 'Name',
+                result.personName!,
+                Icons.person,
+              ),
+              _buildInfoRow(
+                languageProvider.isArabic ? 'الثقة' : 'Confidence',
                 '${(result.confidence * 100).toStringAsFixed(1)}%',
                 Icons.analytics,
               ),
               if (result.similarityScore != null)
                 _buildInfoRow(
-                  'Similarity',
+                  languageProvider.isArabic ? 'التشابه' : 'Similarity',
                   '${(result.similarityScore! * 100).toStringAsFixed(1)}%',
                   Icons.percent,
                 ),
             ] else ...[
-              _buildInfoRow('Status', 'Not in database', Icons.person_outline),
+              _buildInfoRow(
+                languageProvider.isArabic ? 'الحالة' : 'Status',
+                languageProvider.isArabic ? 'غير موجود في قاعدة البيانات' : 'Not in database',
+                Icons.person_outline,
+              ),
               if (result.personName != null && result.personName != 'Unknown')
                 _buildInfoRow(
-                  'Best Match',
+                  languageProvider.isArabic ? 'أفضل تطابق' : 'Best Match',
                   result.personName!,
                   Icons.search,
                 ),
               _buildInfoRow(
-                'Confidence',
+                languageProvider.isArabic ? 'الثقة' : 'Confidence',
                 '${(result.confidence * 100).toStringAsFixed(1)}%',
                 Icons.analytics,
               ),
@@ -506,14 +589,16 @@ class _CameraScreenState extends State<CameraScreen> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.orange.shade200),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.orange, size: 20),
-                    SizedBox(width: 8),
+                    const Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Person not found in database',
-                        style: TextStyle(fontSize: 13, color: Colors.orange),
+                        languageProvider.isArabic
+                            ? 'الشخص غير موجود في قاعدة البيانات'
+                            : 'Person not found in database',
+                        style: const TextStyle(fontSize: 13, color: Colors.orange),
                       ),
                     ),
                   ],
@@ -525,7 +610,7 @@ class _CameraScreenState extends State<CameraScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(languageProvider.isArabic ? 'إغلاق' : 'Close'),
           ),
           if (result.recognized)
             ElevatedButton(
@@ -534,7 +619,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: const Text('Done'),
+              child: Text(languageProvider.isArabic ? 'تم' : 'Done'),
             ),
         ],
       ),
@@ -591,15 +676,17 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   String get _getModeDescription {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     switch (_processingMode) {
       case 'text':
-        return 'Text Reading Mode';
+        return languageProvider.isArabic ? 'وضع قراءة النصوص' : 'Text Reading Mode';
       case 'color':
-        return 'Color Detection Mode';
+        return languageProvider.isArabic ? 'وضع اكتشاف الألوان' : 'Color Detection Mode';
       case 'face':
-        return 'Face Recognition Mode';
+        return languageProvider.isArabic ? 'وضع التعرف على الوجوه' : 'Face Recognition Mode';
       default:
-        return 'Unknown mode';
+        return languageProvider.isArabic ? 'وضع غير معروف' : 'Unknown mode';
     }
   }
 
@@ -627,6 +714,7 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final languageProvider = Provider.of<LanguageProvider>(context);
 
     return Scaffold(
       body: _controller == null || !_controller!.value.isInitialized
@@ -653,7 +741,7 @@ class _CameraScreenState extends State<CameraScreen> {
                         ),
                 ),
 
-                // Face Detection Frame (only for face mode)
+                // Face Detection Frame
                 if (_processingMode == 'face' && _selectedImagePath == null)
                   Center(
                     child: Container(
@@ -674,7 +762,6 @@ class _CameraScreenState extends State<CameraScreen> {
                       ),
                       child: Stack(
                         children: [
-                          // Corner indicators
                           Positioned(
                             top: -2,
                             left: -2,
@@ -721,8 +808,10 @@ class _CameraScreenState extends State<CameraScreen> {
                         color: Colors.black.withOpacity(0.3),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.arrow_back,
+                      child: Icon(
+                        languageProvider.isArabic
+                            ? Icons.arrow_forward
+                            : Icons.arrow_back,
                         color: Colors.white,
                         size: 28,
                       ),
@@ -778,18 +867,18 @@ class _CameraScreenState extends State<CameraScreen> {
                           color: Colors.black.withOpacity(0.6),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.camera_alt,
                               color: Colors.white,
                               size: 20,
                             ),
-                            SizedBox(width: 4),
+                            const SizedBox(width: 4),
                             Text(
-                              'New Photo',
-                              style: TextStyle(
+                              languageProvider.isArabic ? 'صورة جديدة' : 'New Photo',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
                               ),
@@ -819,9 +908,9 @@ class _CameraScreenState extends State<CameraScreen> {
                         children: [
                           if (_processingMode == 'text' &&
                               _extractedText.isNotEmpty) ...[
-                            const Text(
-                              'Extracted Text:',
-                              style: TextStyle(
+                            Text(
+                              languageProvider.isArabic ? 'النص المستخرج:' : 'Extracted Text:',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -840,9 +929,9 @@ class _CameraScreenState extends State<CameraScreen> {
                           ],
                           if (_processingMode == 'color' &&
                               _detectedColor.isNotEmpty) ...[
-                            const Text(
-                              'Detected Color:',
-                              style: TextStyle(
+                            Text(
+                              languageProvider.isArabic ? 'اللون المكتشف:' : 'Detected Color:',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -860,7 +949,9 @@ class _CameraScreenState extends State<CameraScreen> {
                           if (_processingMode == 'face' &&
                               _faceResult != null) ...[
                             Text(
-                              _faceResult!.recognized ? 'Recognized:' : 'Status:',
+                              _faceResult!.recognized
+                                  ? (languageProvider.isArabic ? 'تم التعرف:' : 'Recognized:')
+                                  : (languageProvider.isArabic ? 'الحالة:' : 'Status:'),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -871,7 +962,7 @@ class _CameraScreenState extends State<CameraScreen> {
                             Text(
                               _faceResult!.recognized && _faceResult!.personName != null
                                   ? _faceResult!.personName!
-                                  : 'Unknown Person',
+                                  : (languageProvider.isArabic ? 'شخص غير معروف' : 'Unknown Person'),
                               style: TextStyle(
                                 color: _faceResult!.recognized
                                     ? Colors.greenAccent
@@ -882,7 +973,7 @@ class _CameraScreenState extends State<CameraScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Confidence: ${(_faceResult!.confidence * 100).toStringAsFixed(1)}%',
+                              '${languageProvider.isArabic ? 'الثقة' : 'Confidence'}: ${(_faceResult!.confidence * 100).toStringAsFixed(1)}%',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14,
@@ -892,9 +983,7 @@ class _CameraScreenState extends State<CameraScreen> {
                         ],
                       ),
                     ),
-                  ),
-
-                // Bottom controls
+                  ),// Bottom controls
                 Positioned(
                   bottom: 40,
                   left: 32,
@@ -1005,10 +1094,16 @@ class _CameraScreenState extends State<CameraScreen> {
                             const SizedBox(height: 16),
                             Text(
                               _processingMode == 'color'
-                                  ? 'Detecting color...'
+                                  ? (languageProvider.isArabic
+                                      ? 'اكتشاف اللون...'
+                                      : 'Detecting color...')
                                   : _processingMode == 'face'
-                                      ? 'Recognizing face...'
-                                      : 'Processing text...',
+                                      ? (languageProvider.isArabic
+                                          ? 'التعرف على الوجه...'
+                                          : 'Recognizing face...')
+                                      : (languageProvider.isArabic
+                                          ? 'معالجة النص...'
+                                          : 'Processing text...'),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,

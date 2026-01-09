@@ -8,6 +8,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 
 class FaceRotationCaptureScreen extends StatefulWidget {
   const FaceRotationCaptureScreen({super.key});
@@ -27,7 +29,6 @@ class _FaceRotationCaptureScreenState
   int _currentStep = 0;
   bool _isCapturing = false;
   
-  // Face Detection
   late FaceDetector _faceDetector;
   Timer? _detectionTimer;
   bool _isDetecting = false;
@@ -36,15 +37,14 @@ class _FaceRotationCaptureScreenState
   Color _statusColor = const Color(0xFF8E3A95);
   int _stableFrames = 0;
   
-  // ✅ للتحقق من التعليمات الصوتية
   String _lastSpokenMessage = '';
 
-  final List<String> _instructions = [
-    'Look straight at the camera',
-    'Turn your face to the left',
-    'Turn your face to the right',
-    'Look up slightly',
-    'Look down slightly',
+  final List<Map<String, String>> _instructions = [
+    {'en': 'Look straight at the camera', 'ar': 'انظر مباشرة للكاميرا'},
+    {'en': 'Turn your face to the left', 'ar': 'لف وجهك لليسار'},
+    {'en': 'Turn your face to the right', 'ar': 'لف وجهك لليمين'},
+    {'en': 'Look up slightly', 'ar': 'انظر للأعلى قليلاً'},
+    {'en': 'Look down slightly', 'ar': 'انظر للأسفل قليلاً'},
   ];
 
   final List<IconData> _icons = [
@@ -76,7 +76,8 @@ class _FaceRotationCaptureScreenState
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -86,7 +87,6 @@ class _FaceRotationCaptureScreenState
     await _tts.speak(text);
   }
   
-  // ✅ تحدث فقط إذا الرسالة مختلفة
   Future<void> _speakIfDifferent(String text) async {
     if (_lastSpokenMessage != text) {
       _lastSpokenMessage = text;
@@ -97,7 +97,7 @@ class _FaceRotationCaptureScreenState
   void _initFaceDetector() {
     final options = FaceDetectorOptions(
       enableLandmarks: false,
-      enableClassification: true, // ✅ مهم للتحقق من دوران الوجه
+      enableClassification: true,
       minFaceSize: 0.2,
       performanceMode: FaceDetectorMode.accurate,
     );
@@ -105,6 +105,8 @@ class _FaceRotationCaptureScreenState
   }
 
   Future<void> _initCamera() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     _cameras = await availableCameras();
     if (_cameras != null && _cameras!.isNotEmpty) {
       final frontCameraIndex = _cameras!
@@ -121,7 +123,7 @@ class _FaceRotationCaptureScreenState
       if (mounted) {
         setState(() {});
         await Future.delayed(const Duration(milliseconds: 500));
-        _speak(_instructions[0]);
+        _speak(_instructions[0][languageProvider.languageCode]!);
         _startFaceDetection();
       }
     }
@@ -139,6 +141,8 @@ class _FaceRotationCaptureScreenState
   }
 
   Future<void> _checkForFace() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (_controller?.value.isInitialized != true) return;
     
     _isDetecting = true;
@@ -146,7 +150,6 @@ class _FaceRotationCaptureScreenState
     try {
       final image = await _controller!.takePicture();
       
-      // فحص الإضاءة
       final brightness = await _checkBrightness(image.path);
       
       if (brightness < 50) {
@@ -156,15 +159,18 @@ class _FaceRotationCaptureScreenState
         
         setState(() {
           _faceDetected = false;
-          _statusMessage = 'Too dark - Turn on lights';
+          _statusMessage = languageProvider.isArabic
+              ? 'مظلم جداً - شغّل الإضاءة'
+              : 'Too dark - Turn on lights';
           _statusColor = Colors.red;
           _stableFrames = 0;
         });
-        await _speakIfDifferent('Too dark. Turn on lights');
+        await _speakIfDifferent(languageProvider.isArabic
+            ? 'مظلم جداً. شغّل الإضاءة'
+            : 'Too dark. Turn on lights');
         return;
       }
       
-      // فحص الوجه
       final inputImage = InputImage.fromFilePath(image.path);
       final faces = await _faceDetector.processImage(inputImage);
       
@@ -175,36 +181,46 @@ class _FaceRotationCaptureScreenState
       if (faces.isEmpty) {
         setState(() {
           _faceDetected = false;
-          _statusMessage = 'No face detected';
+          _statusMessage = languageProvider.isArabic
+              ? 'لم يتم اكتشاف وجه'
+              : 'No face detected';
           _statusColor = Colors.red;
           _stableFrames = 0;
         });
-        await _speakIfDifferent('No face detected');
+        await _speakIfDifferent(languageProvider.isArabic
+            ? 'لم يتم اكتشاف وجه'
+            : 'No face detected');
       } else {
         final face = faces.first;
         final faceWidth = face.boundingBox.width;
         
-        // ✅ فحص المسافة
         if (faceWidth < 200) {
           setState(() {
             _faceDetected = true;
-            _statusMessage = 'Move closer';
+            _statusMessage = languageProvider.isArabic
+                ? 'اقترب أكثر'
+                : 'Move closer';
             _statusColor = Colors.orange;
             _stableFrames = 0;
           });
-          await _speakIfDifferent('Move closer');
+          await _speakIfDifferent(languageProvider.isArabic
+              ? 'اقترب أكثر'
+              : 'Move closer');
         } else if (faceWidth > 500) {
           setState(() {
             _faceDetected = true;
-            _statusMessage = 'Move back';
+            _statusMessage = languageProvider.isArabic
+                ? 'ابتعد قليلاً'
+                : 'Move back';
             _statusColor = Colors.orange;
             _stableFrames = 0;
           });
-          await _speakIfDifferent('Move back');
+          await _speakIfDifferent(languageProvider.isArabic
+              ? 'ابتعد قليلاً'
+              : 'Move back');
         } else {
-          // ✅ فحص دوران الوجه
-          final headYaw = face.headEulerAngleY ?? 0; // يسار/يمين
-          final headPitch = face.headEulerAngleX ?? 0; // فوق/تحت
+          final headYaw = face.headEulerAngleY ?? 0;
+          final headPitch = face.headEulerAngleX ?? 0;
           
           bool correctPosition = _checkFacePosition(headYaw, headPitch);
           
@@ -219,13 +235,15 @@ class _FaceRotationCaptureScreenState
           } else {
             setState(() {
               _faceDetected = true;
-              _statusMessage = 'Perfect! Hold still...';
+              _statusMessage = languageProvider.isArabic
+                  ? 'ممتاز! اثبت...'
+                  : 'Perfect! Hold still...';
               _statusColor = Colors.green;
               _stableFrames++;
             });
 
             if (_stableFrames == 1) {
-              await _speak('Perfect');
+              await _speak(languageProvider.isArabic ? 'ممتاز' : 'Perfect');
             }
 
             if (_stableFrames >= 3) {
@@ -242,22 +260,21 @@ class _FaceRotationCaptureScreenState
     }
   }
   
-  // ✅ فحص إذا الوجه في الوضع الصحيح
   bool _checkFacePosition(double yaw, double pitch) {
     switch (_currentStep) {
-      case 0: // Front - الوجه مستقيم
+      case 0:
         return yaw.abs() < 15 && pitch.abs() < 15;
       
-      case 1: // Left - الوجه لليسار
+      case 1:
         return yaw > 20 && yaw < 50 && pitch.abs() < 15;
       
-      case 2: // Right - الوجه لليمين
+      case 2:
         return yaw < -20 && yaw > -50 && pitch.abs() < 15;
       
-      case 3: // Up - النظر للأعلى
+      case 3:
        return pitch > 10 && pitch < 35 && yaw.abs() < 20; 
       
-      case 4: // Down - النظر للأسفل
+      case 4:
         return pitch < -10 && pitch > -35 && yaw.abs() < 20;
       
       default:
@@ -265,42 +282,67 @@ class _FaceRotationCaptureScreenState
     }
   }
   
-  // ✅ رسالة توجيهية حسب الوضع الحالي
   String _getPositionMessage(double yaw, double pitch) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     switch (_currentStep) {
       case 0:
-        return 'Look straight ahead';
+        return languageProvider.isArabic
+            ? 'انظر مباشرة للأمام'
+            : 'Look straight ahead';
       
       case 1:
         if (yaw < 10) {
-          return 'Turn more to your left';
+          return languageProvider.isArabic
+              ? 'لف أكثر لليسار'
+              : 'Turn more to your left';
         } else if (yaw > 50) {
-          return 'Turn less to the left';
+          return languageProvider.isArabic
+              ? 'لف أقل لليسار'
+              : 'Turn less to the left';
         }
-        return 'Almost there, turn left';
+        return languageProvider.isArabic
+            ? 'تقريباً، لف لليسار'
+            : 'Almost there, turn left';
       
       case 2:
         if (yaw > -10) {
-          return 'Turn more to your right';
+          return languageProvider.isArabic
+              ? 'لف أكثر لليمين'
+              : 'Turn more to your right';
         } else if (yaw < -50) {
-          return 'Turn less to the right';
+          return languageProvider.isArabic
+              ? 'لف أقل لليمين'
+              : 'Turn less to the right';
         }
-        return 'Almost there, turn right';
+        return languageProvider.isArabic
+            ? 'تقريباً، لف لليمين'
+            : 'Almost there, turn right';
       
       case 3:
-        if (pitch < 10) { // ✅ عكسناها
-          return 'Look up more';
-      }
-      return 'Almost there, look up';
+        if (pitch < 10) {
+          return languageProvider.isArabic
+              ? 'انظر للأعلى أكثر'
+              : 'Look up more';
+        }
+        return languageProvider.isArabic
+            ? 'تقريباً، انظر للأعلى'
+            : 'Almost there, look up';
 
       case 4:
-       if (pitch > -10) { // ✅ عكسناها
-        return 'Look down more';
-      }
-  return 'Almost there, look down';
+        if (pitch > -10) {
+          return languageProvider.isArabic
+              ? 'انظر للأسفل أكثر'
+              : 'Look down more';
+        }
+        return languageProvider.isArabic
+            ? 'تقريباً، انظر للأسفل'
+            : 'Almost there, look down';
       
       default:
-        return 'Adjust your position';
+        return languageProvider.isArabic
+            ? 'اضبط وضعك'
+            : 'Adjust your position';
     }
   }
 
@@ -340,13 +382,15 @@ class _FaceRotationCaptureScreenState
   }
 
   Future<void> _capturePhoto() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (_controller?.value.isInitialized != true || _isCapturing) return;
 
     setState(() => _isCapturing = true);
 
     try {
       HapticFeedback.mediumImpact();
-      await _speak('Captured'); // ✅ تأكيد التصوير
+      await _speak(languageProvider.isArabic ? 'تم التقاط الصورة' : 'Captured');
       
       final image = await _controller!.takePicture();
       final directory = await getTemporaryDirectory();
@@ -356,29 +400,31 @@ class _FaceRotationCaptureScreenState
       await File(image.path).copy(targetPath);
       _capturedImages.add(File(targetPath));
 
-      // ✅ إذا خلصنا 5 صور، نرجع مباشرة
       if (_capturedImages.length >= 5) {
-        await _speak('All photos captured successfully. Processing now.');
+        await _speak(languageProvider.isArabic
+            ? 'تم التقاط جميع الصور بنجاح. جاري المعالجة الآن'
+            : 'All photos captured successfully. Processing now.');
         await Future.delayed(const Duration(milliseconds: 1000));
         
         if (mounted) {
           Navigator.pop(context, _capturedImages);
         }
-        return; // ✅ مهم! نوقف هنا
+        return;
       }
 
-      // ✅ ننتقل للخطوة التالية
       setState(() {
         _currentStep++;
         _stableFrames = 0;
-        _lastSpokenMessage = ''; // نعيد تعيين عشان يتكلم بالتعليمة الجديدة
+        _lastSpokenMessage = '';
       });
 
       await Future.delayed(const Duration(milliseconds: 500));
-      await _speak(_instructions[_currentStep]);
+      await _speak(_instructions[_currentStep][languageProvider.languageCode]!);
       
       setState(() {
-        _statusMessage = 'Position your face';
+        _statusMessage = languageProvider.isArabic
+            ? 'ضع وجهك في الإطار'
+            : 'Position your face';
         _statusColor = vibrantPurple;
       });
       
@@ -386,7 +432,9 @@ class _FaceRotationCaptureScreenState
       
     } catch (e) {
       print('Error capturing photo: $e');
-      await _speak('Failed to capture photo. Please try again.');
+      await _speak(languageProvider.isArabic
+          ? 'فشل التقاط الصورة. حاول مرة أخرى'
+          : 'Failed to capture photo. Please try again.');
       _startFaceDetection();
     } finally {
       if (mounted) {
@@ -397,6 +445,8 @@ class _FaceRotationCaptureScreenState
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     if (_controller == null || !_controller!.value.isInitialized) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -417,7 +467,6 @@ class _FaceRotationCaptureScreenState
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Camera Preview
             Positioned.fill(
               child: ClipRect(
                 child: OverflowBox(
@@ -434,7 +483,6 @@ class _FaceRotationCaptureScreenState
               ),
             ),
 
-            // Oval Face Guide
             Center(
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
@@ -451,7 +499,6 @@ class _FaceRotationCaptureScreenState
               ),
             ),
 
-            // Progress & Status
             Positioned(
               top: safePadding.top + 10,
               left: 12,
@@ -466,7 +513,9 @@ class _FaceRotationCaptureScreenState
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Step ${_currentStep + 1}/${_instructions.length}',
+                      languageProvider.isArabic
+                          ? 'الخطوة ${_currentStep + 1}/${_instructions.length}'
+                          : 'Step ${_currentStep + 1}/${_instructions.length}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -504,7 +553,7 @@ class _FaceRotationCaptureScreenState
                     const SizedBox(height: 6),
                     
                     Text(
-                      _instructions[_currentStep],
+                      _instructions[_currentStep][languageProvider.languageCode]!,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 15,
@@ -560,7 +609,6 @@ class _FaceRotationCaptureScreenState
               ),
             ),
 
-            // Processing Indicator
             if (_isCapturing)
               Center(
                 child: Container(
@@ -581,14 +629,13 @@ class _FaceRotationCaptureScreenState
                 ),
               ),
 
-            // Cancel button
             Positioned(
               top: safePadding.top + 10,
               left: 12,
               child: GestureDetector(
                 onTap: () {
                   _detectionTimer?.cancel();
-                  _speak('Cancelled');
+                  _speak(languageProvider.isArabic ? 'تم الإلغاء' : 'Cancelled');
                   Navigator.pop(context);
                 },
                 child: Container(
@@ -612,7 +659,6 @@ class _FaceRotationCaptureScreenState
   }
 }
 
-// Oval Face Guide Painter
 class OvalFaceGuidePainter extends CustomPainter {
   final Color color;
   final bool isAnimating;

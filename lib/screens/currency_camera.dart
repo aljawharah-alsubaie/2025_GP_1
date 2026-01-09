@@ -8,6 +8,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 
 class CurrencyCameraScreen extends StatefulWidget {
   const CurrencyCameraScreen({super.key});
@@ -49,8 +51,9 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     _initializeApp();
   }
 
-  // ================== TTS ==================
   Future<void> _initTts() async {
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    
     _tts.setStartHandler(() => print('🔊 TTS start'));
     _tts.setCompletionHandler(() => print('🔊 TTS complete'));
     _tts.setErrorHandler((msg) => print('🔊 TTS error: $msg'));
@@ -60,29 +63,46 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     await _tts.setVolume(1.0);
     await _tts.awaitSpeakCompletion(true);
 
-    await _ensureTtsLanguage();
+    await _ensureTtsLanguage(languageCode);
   }
 
-  Future<void> _ensureTtsLanguage() async {
-    final candidates = ['en-US', 'en-GB', 'en'];
-    for (final lang in candidates) {
-      try {
-        final ok = await _tts.isLanguageAvailable(lang);
-        print('🌐 Check TTS "$lang": $ok');
-        if (ok == true) {
-          await _tts.setLanguage(lang);
-          _effectiveTtsLang = lang;
-          print('✅ Using TTS language: $_effectiveTtsLang');
-          return;
-        }
-      } catch (_) {}
+  Future<void> _ensureTtsLanguage(String languageCode) async {
+    if (languageCode == 'ar') {
+      final candidates = ['ar-SA', 'ar'];
+      for (final lang in candidates) {
+        try {
+          final ok = await _tts.isLanguageAvailable(lang);
+          print('🌐 Check TTS "$lang": $ok');
+          if (ok == true) {
+            await _tts.setLanguage(lang);
+            _effectiveTtsLang = lang;
+            print('✅ Using TTS language: $_effectiveTtsLang');
+            return;
+          }
+        } catch (_) {}
+      }
+      await _tts.setLanguage('ar-SA');
+      _effectiveTtsLang = 'ar-SA';
+    } else {
+      final candidates = ['en-US', 'en-GB', 'en'];
+      for (final lang in candidates) {
+        try {
+          final ok = await _tts.isLanguageAvailable(lang);
+          print('🌐 Check TTS "$lang": $ok');
+          if (ok == true) {
+            await _tts.setLanguage(lang);
+            _effectiveTtsLang = lang;
+            print('✅ Using TTS language: $_effectiveTtsLang');
+            return;
+          }
+        } catch (_) {}
+      }
+      await _tts.setLanguage('en-US');
+      _effectiveTtsLang = 'en-US';
     }
-    await _tts.setLanguage('en-US');
-    _effectiveTtsLang = 'en-US';
-    print('⚠️ Falling back to en-US for TTS');
+    print('⚠️ Falling back to $_effectiveTtsLang for TTS');
   }
 
-  // ================== Init model + camera ==================
   Future<void> _initializeApp() async {
     try {
       await _loadModel();
@@ -90,8 +110,12 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     } catch (e) {
       print('❌ Init error: $e');
       if (mounted) {
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(languageProvider.isArabic ? 'خطأ: $e' : 'Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -115,7 +139,6 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   Future<void> _initCamera() async {
     _cameras = await availableCameras();
     if (_cameras != null && _cameras!.isNotEmpty) {
-      // نستخدم الكاميرا الخلفية للعملة
       _controller = CameraController(
         _cameras![0],
         ResolutionPreset.high,
@@ -138,7 +161,6 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     if (mounted) setState(() {});
   }
 
-  // ================== Preprocess & Predict ==================
   Future<List<List<List<List<double>>>>> _preprocessImage(
     String imagePath,
   ) async {
@@ -190,23 +212,37 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     return {'currency': CURRENCY_LABELS[maxIndex], 'confidence': maxVal};
   }
 
-  // ================== TTS for result (بدون نسبة) ==================
   Future<void> _announceResult(String currency, double confidence) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final number = currency.split(' ').first.trim();
 
-    final Map<String, String> enNames = {
-      '5': 'five riyals',
-      '10': 'ten riyals',
-      '50': 'fifty riyals',
-      '100': 'one hundred riyals',
-      '200': 'two hundred riyals',
-      '500': 'five hundred riyals',
-    };
+    String phrase;
+    
+    if (languageProvider.isArabic) {
+      final Map<String, String> arNames = {
+        '5': 'خمسة ريالات',
+        '10': 'عشرة ريالات',
+        '50': 'خمسون ريالاً',
+        '100': 'مئة ريال',
+        '200': 'مئتا ريال',
+        '500': 'خمسمئة ريال',
+      };
+      
+      final spoken = arNames[number] ?? '$number ريال';
+      phrase = 'هذه $spoken.';
+    } else {
+      final Map<String, String> enNames = {
+        '5': 'five riyals',
+        '10': 'ten riyals',
+        '50': 'fifty riyals',
+        '100': 'one hundred riyals',
+        '200': 'two hundred riyals',
+        '500': 'five hundred riyals',
+      };
 
-    final spoken = enNames[number] ?? '$number riyals';
-
-    // 👇 لا نذكر النسبة ولا نقول "maybe" أو "likely"
-    final phrase = 'This is $spoken.';
+      final spoken = enNames[number] ?? '$number riyals';
+      phrase = 'This is $spoken.';
+    }
 
     try {
       await _tts.stop();
@@ -216,8 +252,9 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     }
   }
 
-  // ================== Full recognition flow ==================
   Future<void> _recognizeCurrency(String path) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (!_modelLoaded) return;
     setState(() => _busy = true);
 
@@ -237,7 +274,9 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Detected Currency: $currency'),
+            content: Text(languageProvider.isArabic
+                ? 'العملة المكتشفة: $currency'
+                : 'Detected Currency: $currency'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 2),
           ),
@@ -245,11 +284,13 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
       }
     } catch (e) {
       print('❌ Recognition error: $e');
-      setState(() => _detectedCurrency = 'Error: ${e.toString()}');
+      setState(() => _detectedCurrency = (languageProvider.isArabic
+          ? 'خطأ: ${e.toString()}'
+          : 'Error: ${e.toString()}'));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text(languageProvider.isArabic ? 'خطأ: $e' : 'Error: $e'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 3),
           ),
@@ -269,12 +310,10 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     }
   }
 
-  // ================== Camera actions ==================
   Future<void> _captureImage() async {
     if (_controller?.value.isInitialized != true) return;
     final file = await _controller!.takePicture();
 
-    // لو حابة بعد التصوير يعرض الصورة بدل الكاميرا، خلي السطر تحت مفعّل
     setState(() {
       _selectedImagePath = file.path;
     });
@@ -297,8 +336,10 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
     });
   }
 
-  // ================== Helpers ==================
-  String get _modeDescription => 'Currency Detection Mode';
+  String get _modeDescription {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    return languageProvider.isArabic ? 'وضع اكتشاف العملات' : 'Currency Detection Mode';
+  }
 
   IconData get _modeIcon => Icons.payments;
 
@@ -314,13 +355,13 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final languageProvider = Provider.of<LanguageProvider>(context);
 
     return Scaffold(
       body: _controller == null || !_controller!.value.isInitialized
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                // ======= Camera Preview or Selected Image (نفس ستايل CameraScreen) =======
                 Positioned.fill(
                   child: _selectedImagePath != null
                       ? Image.file(File(_selectedImagePath!), fit: BoxFit.cover)
@@ -340,7 +381,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                         ),
                 ),
 
-                // ======= Back button =======
+                // Back button
                 Positioned(
                   top: 40,
                   left: 16,
@@ -352,8 +393,10 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                         color: Colors.black.withOpacity(0.3),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.arrow_back,
+                      child: Icon(
+                        languageProvider.isArabic
+                            ? Icons.arrow_forward
+                            : Icons.arrow_back,
                         color: Colors.white,
                         size: 28,
                       ),
@@ -361,7 +404,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                   ),
                 ),
 
-                // ======= Mode info (زي اللي فوق يمين في CameraScreen) =======
+                // Mode info
                 Positioned(
                   top: 40,
                   right: 16,
@@ -396,7 +439,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                   ),
                 ),
 
-                // ======= Return to camera when using gallery image =======
+                // Return to camera button
                 if (_selectedImagePath != null)
                   Positioned(
                     top: 100,
@@ -409,18 +452,18 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                           color: Colors.black.withOpacity(0.6),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.camera_alt,
                               color: Colors.white,
                               size: 20,
                             ),
-                            SizedBox(width: 4),
+                            const SizedBox(width: 4),
                             Text(
-                              'New Photo',
-                              style: TextStyle(
+                              languageProvider.isArabic ? 'صورة جديدة' : 'New Photo',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
                               ),
@@ -431,7 +474,7 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                     ),
                   ),
 
-                // ======= Result card (زي الكرت حق اللون/النص) =======
+                // Result display
                 if (_detectedCurrency.isNotEmpty)
                   Positioned(
                     top: 140,
@@ -445,39 +488,30 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
+                        children: [
                           Text(
-                            'Detected Currency:',
-                            style: TextStyle(
+                            languageProvider.isArabic ? 'العملة المكتشفة:' : 'Detected Currency:',
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          SizedBox(height: 8),
-                          // نعرض العملة نفسها من state
+                          const SizedBox(height: 8),
+                          Text(
+                            _detectedCurrency,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
 
-                if (_detectedCurrency.isNotEmpty)
-                  Positioned(
-                    top: 170,
-                    left: 32,
-                    right: 32,
-                    child: Text(
-                      _detectedCurrency,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-
-                // ======= Bottom controls (نفس ستايل CameraScreen) =======
+                // Bottom controls
                 Positioned(
                   bottom: 40,
                   left: 32,
@@ -572,23 +606,25 @@ class _CurrencyCameraScreenState extends State<CurrencyCameraScreen> {
                   ),
                 ),
 
-                // ======= Busy overlay =======
+                // Busy overlay
                 if (_busy)
                   Positioned.fill(
                     child: Container(
                       color: Colors.black.withOpacity(0.25),
-                      child: const Center(
+                      child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            CircularProgressIndicator(
+                            const CircularProgressIndicator(
                               strokeWidth: 3,
                               color: Colors.white,
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             Text(
-                              'Recognizing currency...',
-                              style: TextStyle(
+                              languageProvider.isArabic
+                                  ? 'التعرف على العملة...'
+                                  : 'Recognizing currency...',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,

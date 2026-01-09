@@ -6,12 +6,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image/image.dart' as img;
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import '../services/insightface_pipeline.dart';
-
-// ✅ استبدلنا image_picker بـ face_rotation_capture_screen
 import 'face_rotation_capture_screen.dart';
-
-// 👇 نفس الصفحات المستخدمة في الفوتر
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
@@ -37,7 +35,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
   bool _isUploading = false;
   bool _isProcessing = false;
 
-  // 🎨 Purple color scheme
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -50,10 +47,12 @@ class _EditPersonPageState extends State<EditPersonPage> {
     _nameController.text = widget.person['name'] ?? '';
     _initTts();
 
-    // 🗣️ يتكلم لما الفيلد ياخذ فوكس
     _nameFocusNode.addListener(() {
       if (_nameFocusNode.hasFocus) {
-        _speak('Name field, edit the person name');
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+        _speak(languageProvider.isArabic
+            ? 'حقل الاسم، عدّل اسم الشخص'
+            : 'Name field, edit the person name');
       }
     });
   }
@@ -67,13 +66,14 @@ class _EditPersonPageState extends State<EditPersonPage> {
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
 
   Future<void> _speak(String text) async {
-    await _tts.stop(); // عشان ما تتداخل الأصوات
+    await _tts.stop();
     await _tts.speak(text);
   }
 
@@ -81,12 +81,14 @@ class _EditPersonPageState extends State<EditPersonPage> {
     HapticFeedback.mediumImpact();
   }
 
-  // ✅ معدلة لتستخدم Face Rotation Capture
   Future<void> _pickImages() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
-      _speak('Opening camera for face rotation capture');
+      _speak(languageProvider.isArabic
+          ? 'فتح الكاميرا لالتقاط دوران الوجه'
+          : 'Opening camera for face rotation capture');
       
-      // ✅ فتح صفحة Face Rotation Capture
       final List<File>? capturedImages = await Navigator.push<List<File>>(
         context,
         MaterialPageRoute(
@@ -100,21 +102,33 @@ class _EditPersonPageState extends State<EditPersonPage> {
         });
 
         _showSnackBar(
-          '${capturedImages.length} rotation photos captured successfully',
+          languageProvider.isArabic
+              ? 'تم التقاط ${capturedImages.length} صور دوران بنجاح'
+              : '${capturedImages.length} rotation photos captured successfully',
           Colors.green,
         );
         
         _speak(
-          '${capturedImages.length} photos captured successfully. These photos will replace the existing ones.',
+          languageProvider.isArabic
+              ? 'تم التقاط ${capturedImages.length} صور بنجاح. هذه الصور ستستبدل الصور الموجودة'
+              : '${capturedImages.length} photos captured successfully. These photos will replace the existing ones.',
         );
       }
     } catch (e) {
-      _showSnackBar('Failed to capture images: $e', Colors.red);
-      _speak('Failed to capture images, please try again.');
+      _showSnackBar(
+        languageProvider.isArabic
+            ? 'فشل التقاط الصور: $e'
+            : 'Failed to capture images: $e',
+        Colors.red,
+      );
+      _speak(languageProvider.isArabic
+          ? 'فشل التقاط الصور، حاول مرة أخرى'
+          : 'Failed to capture images, please try again.');
     }
   }
 
   Future<void> _saveChanges() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -132,7 +146,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
     try {
       final personName = nameChanged ? newName : widget.person['name'];
 
-      // تحديث الاسم إذا تغير
       if (nameChanged) {
         await FirebaseFirestore.instance
             .collection('users')
@@ -141,7 +154,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
             .doc(widget.person['id'])
             .update({'name': newName});
 
-        // Update embeddings with new name
         final oldEmbeddings = await FirebaseFirestore.instance
             .collection('users')
             .doc(user.uid)
@@ -170,12 +182,10 @@ class _EditPersonPageState extends State<EditPersonPage> {
         await _loadStoredEmbeddings();
       }
 
-      // إضافة/استبدال الصور الجديدة
       int successCount = 0;
       List<String> newPhotoUrls = [];
 
       if (hasNewPhotos) {
-        // حذف الصور القديمة من Storage
         List<String> existingUrls = List<String>.from(
           widget.person['photoUrls'] ?? [],
         );
@@ -246,7 +256,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
         }
 
         if (successCount > 0) {
-          // حذف embeddings القديمة
           InsightFacePipeline.removeFaceEmbedding(personName);
 
           await FirebaseFirestore.instance
@@ -256,7 +265,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
               .doc(personName)
               .delete();
 
-          // تحديث الصور في Firestore
           await FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
@@ -268,11 +276,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
                 'embeddingCount': successCount,
               });
 
-          // حفظ embeddings الجديدة
           await _saveEmbeddingsToFirestore(personName);
           await _loadStoredEmbeddings();
 
-          // ✅ تحديث البيانات المحلية
           widget.person['photoUrls'] = newPhotoUrls;
           widget.person['photoCount'] = newPhotoUrls.length;
         }
@@ -281,13 +287,17 @@ class _EditPersonPageState extends State<EditPersonPage> {
       if (mounted) {
         String message = '';
         if (nameChanged && hasNewPhotos && successCount > 0) {
-          message =
-              'Name updated and replaced with $successCount photo${successCount > 1 ? 's' : ''} successfully';
+          message = languageProvider.isArabic
+              ? 'تم تحديث الاسم واستبدال $successCount ${successCount > 1 ? 'صور' : 'صورة'} بنجاح'
+              : 'Name updated and replaced with $successCount photo${successCount > 1 ? 's' : ''} successfully';
         } else if (nameChanged && !hasNewPhotos) {
-          message = 'Name updated successfully to $newName';
+          message = languageProvider.isArabic
+              ? 'تم تحديث الاسم بنجاح إلى $newName'
+              : 'Name updated successfully to $newName';
         } else if (!nameChanged && hasNewPhotos && successCount > 0) {
-          message =
-              'Replaced with $successCount photo${successCount > 1 ? 's' : ''} successfully';
+          message = languageProvider.isArabic
+              ? 'تم الاستبدال بـ $successCount ${successCount > 1 ? 'صور' : 'صورة'} بنجاح'
+              : 'Replaced with $successCount photo${successCount > 1 ? 's' : ''} successfully';
         }
 
         if (message.isNotEmpty) {
@@ -295,7 +305,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
           await _speak(message);
           await Future.delayed(const Duration(milliseconds: 2000));
 
-          // ✅ تحديث الاسم المحلي
           if (nameChanged) {
             widget.person['name'] = newName;
           }
@@ -304,15 +313,21 @@ class _EditPersonPageState extends State<EditPersonPage> {
             _newImages.clear();
           });
 
-          // ✅ إرجاع true للإشارة بأن في تحديث
           Navigator.pop(context, true);
         }
       }
     } catch (e) {
       print('Error saving changes: $e');
       if (mounted) {
-        _showSnackBar('Error saving changes: $e', Colors.red);
-        _speak('Error saving changes, please try again.');
+        _showSnackBar(
+          languageProvider.isArabic
+              ? 'خطأ في حفظ التغييرات: $e'
+              : 'Error saving changes: $e',
+          Colors.red,
+        );
+        _speak(languageProvider.isArabic
+            ? 'خطأ في حفظ التغييرات، حاول مرة أخرى'
+            : 'Error saving changes, please try again.');
       }
     } finally {
       if (mounted) {
@@ -381,7 +396,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
     }
   }
 
-  // 🔔 SnackBar ستايل SettingsPage / AddPersonPage
   void _showSnackBar(String message, Color color) {
     if (!mounted) return;
 
@@ -462,6 +476,8 @@ class _EditPersonPageState extends State<EditPersonPage> {
   }
 
   Widget _buildHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Container(
       padding: const EdgeInsets.fromLTRB(25, 50, 25, 30),
       decoration: BoxDecoration(
@@ -483,7 +499,7 @@ class _EditPersonPageState extends State<EditPersonPage> {
             button: true,
             child: GestureDetector(
               onTap: () {
-                _speak('Going back');
+                _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                 Future.delayed(const Duration(milliseconds: 800), () {
                   Navigator.pop(context);
                 });
@@ -504,9 +520,11 @@ class _EditPersonPageState extends State<EditPersonPage> {
                     ),
                   ],
                 ),
-                child: const Center(
+                child: Center(
                   child: Icon(
-                    Icons.arrow_back_ios_new,
+                    languageProvider.isArabic
+                        ? Icons.arrow_forward_ios
+                        : Icons.arrow_back_ios_new,
                     color: Colors.white,
                     size: 20,
                   ),
@@ -517,7 +535,7 @@ class _EditPersonPageState extends State<EditPersonPage> {
           const SizedBox(width: 16),
           Expanded(
             child: Text(
-              'Edit Person',
+              languageProvider.isArabic ? 'تعديل الشخص' : 'Edit Person',
               style: TextStyle(
                 fontSize: 25,
                 fontWeight: FontWeight.w900,
@@ -535,6 +553,7 @@ class _EditPersonPageState extends State<EditPersonPage> {
   }
 
   Widget _buildForm() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     final String originalName = widget.person['name'] ?? '';
     final bool hasChanges =
         _nameController.text.trim() != originalName || _newImages.isNotEmpty;
@@ -543,7 +562,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // 🔲 الكارد
           Container(
             decoration: BoxDecoration(
               color: Colors.white,
@@ -560,7 +578,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // عنوان Name
                 Row(
                   children: [
                     Container(
@@ -576,9 +593,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
                       ),
                     ),
                     const SizedBox(width: 9),
-                    const Text(
-                      "Name",
-                      style: TextStyle(
+                    Text(
+                      languageProvider.isArabic ? 'الاسم' : "Name",
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 19.5,
                         color: deepPurple,
@@ -587,7 +604,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
                   ],
                 ),
                 const SizedBox(height: 13),
-                // فيلد الاسم
                 Container(
                   decoration: BoxDecoration(
                     color: ultraLightPurple.withOpacity(0.38),
@@ -607,7 +623,7 @@ class _EditPersonPageState extends State<EditPersonPage> {
                       fontWeight: FontWeight.w600,
                     ),
                     decoration: InputDecoration(
-                      hintText: "Enter name",
+                      hintText: languageProvider.isArabic ? 'ادخل الاسم' : "Enter name",
                       hintStyle: const TextStyle(
                         color: Color.fromARGB(255, 79, 79, 79),
                         fontSize: 16.5,
@@ -631,7 +647,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
                 ),
                 const SizedBox(height: 33),
 
-                // عنوان Photo
                 Row(
                   children: [
                     Container(
@@ -647,9 +662,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
                       ),
                     ),
                     const SizedBox(width: 9),
-                    const Text(
-                      "Photo",
-                      style: TextStyle(
+                    Text(
+                      languageProvider.isArabic ? 'الصورة' : "Photo",
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 19.5,
                         color: deepPurple,
@@ -659,7 +674,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
                 ),
                 const SizedBox(height: 15),
 
-                // رفع الصور - معدلة للـ rotation
                 Container(
                   height: 140,
                   decoration: BoxDecoration(
@@ -679,9 +693,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
                         ? null
                         : () {
                             _speak(
-                              'Photo section. Tap to start face rotation capture. '
-                              'The camera will guide you to take 5 photos from different angles. '
-                              'These photos will replace the existing ones.',
+                              languageProvider.isArabic
+                                  ? 'قسم الصورة. اضغط لبدء التقاط دوران الوجه. الكاميرا ستوجهك لالتقاط 5 صور من زوايا مختلفة. هذه الصور ستستبدل الصور الموجودة'
+                                  : 'Photo section. Tap to start face rotation capture. The camera will guide you to take 5 photos from different angles. These photos will replace the existing ones.',
                             );
                             _pickImages();
                           },
@@ -702,8 +716,12 @@ class _EditPersonPageState extends State<EditPersonPage> {
                           const SizedBox(height: 11),
                           Text(
                             _newImages.isNotEmpty
-                                ? '${_newImages.length} rotation photos captured'
-                                : 'Tap to capture face rotation',
+                                ? (languageProvider.isArabic
+                                    ? 'تم التقاط ${_newImages.length} صور دوران'
+                                    : '${_newImages.length} rotation photos captured')
+                                : (languageProvider.isArabic
+                                    ? 'اضغط لالتقاط دوران الوجه'
+                                    : 'Tap to capture face rotation'),
                             style: const TextStyle(
                               fontSize: 17.5,
                               fontWeight: FontWeight.w600,
@@ -713,8 +731,12 @@ class _EditPersonPageState extends State<EditPersonPage> {
                           const SizedBox(height: 5),
                           Text(
                             _newImages.isNotEmpty
-                                ? 'Will replace existing photos'
-                                : 'Front, Left, Right, Up, Down',
+                                ? (languageProvider.isArabic
+                                    ? 'ستستبدل الصور الموجودة'
+                                    : 'Will replace existing photos')
+                                : (languageProvider.isArabic
+                                    ? 'أمام، يسار، يمين، أعلى، أسفل'
+                                    : 'Front, Left, Right, Up, Down'),
                             style: const TextStyle(
                               fontSize: 14.5,
                               color: deepPurple,
@@ -733,7 +755,6 @@ class _EditPersonPageState extends State<EditPersonPage> {
 
           const SizedBox(height: 12),
 
-          // زر الحفظ
           SizedBox(
             width: double.infinity,
             height: 66,
@@ -747,7 +768,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
                   : () {
                       _hapticFeedback();
                       _speak(
-                        'Save changes button, saving your updates, please wait.',
+                        languageProvider.isArabic
+                            ? 'زر حفظ التغييرات، جاري حفظ التحديثات، انتظر من فضلك'
+                            : 'Save changes button, saving your updates, please wait.',
                       );
                       _saveChanges();
                     },
@@ -765,9 +788,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
                       size: 27,
                       color: Colors.white,
                     ),
-              label: const Text(
-                "Save Changes",
-                style: TextStyle(
+              label: Text(
+                languageProvider.isArabic ? 'حفظ التغييرات' : "Save Changes",
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 17.5,
                   fontWeight: FontWeight.w700,
@@ -788,8 +811,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
     );
   }
 
-  // 🔻 نفس الفوتر حق FaceManagementPage
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
@@ -829,12 +853,14 @@ class _EditPersonPageState extends State<EditPersonPage> {
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
                       description: 'Navigate to Homepage',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigate to Homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -845,12 +871,14 @@ class _EditPersonPageState extends State<EditPersonPage> {
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                       description: 'Manage your reminders and notifications',
                       isActive: false,
                       onTap: () {
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -863,12 +891,14 @@ class _EditPersonPageState extends State<EditPersonPage> {
                     const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
                       description:
                           'Manage your emergency contacts and important people',
                       isActive: false,
                       onTap: () {
-                        _speak('Contact, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، تخزين وإدارة جهات اتصال الطوارئ'
+                            : 'Contact, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -879,12 +909,14 @@ class _EditPersonPageState extends State<EditPersonPage> {
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                       description: 'Adjust app settings and preferences',
                       isActive: false,
                       onTap: () {
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -907,7 +939,9 @@ class _EditPersonPageState extends State<EditPersonPage> {
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+                languageProvider.isArabic
+                    ? 'طوارئ، إرسال تنبيه طوارئ لجهات الاتصال الموثوقة عندما تحتاج المساعدة'
+                    : 'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
               );
               Navigator.push(
                 context,

@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import 'profile.dart';
 import 'package:munir_app/screens/signup_screen.dart';
 import './sos_screen.dart';
@@ -56,7 +58,8 @@ class _AccountInfoPageState extends State<AccountInfoPage>
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
     await _tts.awaitSpeakCompletion(false);
@@ -97,9 +100,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
   Future<void> _speakAwait(String text) async {
     try {
       await _tts.stop();
-
       await _tts.speak(text);
-
       await Future.delayed(const Duration(seconds: 4));
     } catch (_) {}
   }
@@ -275,8 +276,12 @@ class _AccountInfoPageState extends State<AccountInfoPage>
     try {
       return await action();
     } catch (e) {
-      _showErrorSnackBar('Unexpected error, please try again');
-      _speak('Unexpected error, please try again');
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+      final errorMsg = languageProvider.isArabic
+          ? 'خطأ غير متوقع، حاول مرة أخرى'
+          : 'Unexpected error, please try again';
+      _showErrorSnackBar(errorMsg);
+      _speak(errorMsg);
       return null;
     } finally {
       _hideBlockingOverlay();
@@ -443,6 +448,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
   }
 
   Future<bool> _showPasswordDialog(String email) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final TextEditingController passwordController = TextEditingController();
     bool isPasswordVisible = false;
 
@@ -462,7 +468,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                 announced = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _speakNow(
-                    'Password confirmation. Please enter your password. Buttons: Confirm on the top, Cancel at the bottom.',
+                    languageProvider.isArabic
+                        ? 'تأكيد كلمة المرور. من فضلك ادخل كلمة المرور. الأزرار: تأكيد في الأعلى، إلغاء في الأسفل'
+                        : 'Password confirmation. Please enter your password. Buttons: Confirm on the top, Cancel at the bottom.',
                   );
                 });
               }
@@ -490,9 +498,11 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Text(
-                      'Confirm Your Password',
-                      style: TextStyle(
+                    Text(
+                      languageProvider.isArabic
+                          ? 'أكد كلمة المرور'
+                          : 'Confirm Your Password',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
                         fontSize: 26,
@@ -505,9 +515,11 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'Please enter your password to continue.',
-                      style: TextStyle(
+                    Text(
+                      languageProvider.isArabic
+                          ? 'من فضلك ادخل كلمة المرور للمتابعة.'
+                          : 'Please enter your password to continue.',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 19,
                         height: 1.5,
@@ -543,7 +555,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                             size: 30,
                           ),
                         ),
-                        hintText: 'Enter your password',
+                        hintText: languageProvider.isArabic
+                            ? 'ادخل كلمة المرور'
+                            : 'Enter your password',
                         hintStyle: TextStyle(
                           color: const Color(0xFFD32F2F).withOpacity(0.4),
                           fontWeight: FontWeight.w500,
@@ -580,27 +594,24 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                                     final text = passwordController.text.trim();
 
                                     if (text.isEmpty) {
-                                      _showFrontError('Password is required');
-
-                                      _speakNow('Password is required');
+                                      final msg = languageProvider.isArabic
+                                          ? 'كلمة المرور مطلوبة'
+                                          : 'Password is required';
+                                      _showFrontError(msg);
+                                      _speakNow(msg);
                                       return;
                                     }
 
                                     setState(() => isLoading = true);
-                                    final ok = await _verifyPassword(
-                                      email,
-                                      text,
-                                    );
+                                    final ok = await _verifyPassword(email, text);
                                     setState(() => isLoading = false);
 
                                     if (!ok) {
-                                      _showFrontError(
-                                        'Invalid password. Please try again',
-                                      );
-
-                                      _speakNow(
-                                        'Invalid password. Please try again',
-                                      );
+                                      final msg = languageProvider.isArabic
+                                          ? 'كلمة مرور غير صحيحة. حاول مرة أخرى'
+                                          : 'Invalid password. Please try again';
+                                      _showFrontError(msg);
+                                      _speakNow(msg);
                                       return;
                                     }
 
@@ -613,7 +624,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                               ),
                             ),
                             child: Text(
-                              isLoading ? 'Please wait...' : 'Confirm',
+                              isLoading
+                                  ? (languageProvider.isArabic ? 'انتظر...' : 'Please wait...')
+                                  : (languageProvider.isArabic ? 'تأكيد' : 'Confirm'),
                               style: const TextStyle(
                                 color: Color(0xFFD32F2F),
                                 fontWeight: FontWeight.w700,
@@ -645,9 +658,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                                 borderRadius: BorderRadius.circular(18),
                               ),
                             ),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
+                            child: Text(
+                              languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w900,
                                 fontSize: 19,
@@ -668,9 +681,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
     );
 
     return result ?? false;
-  }
-
-  Future<bool> _verifyPassword(String email, String password) async {
+  }Future<bool> _verifyPassword(String email, String password) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
       final cred = EmailAuthProvider.credential(
         email: email,
@@ -681,32 +694,46 @@ class _AccountInfoPageState extends State<AccountInfoPage>
           .timeout(const Duration(seconds: 12));
       return true;
     } on TimeoutException {
-      _showErrorSnackBar('Network timeout while verifying password.');
-      _speak('Network timeout while verifying password.');
+      final msg = languageProvider.isArabic
+          ? 'انتهت مهلة الشبكة أثناء التحقق من كلمة المرور'
+          : 'Network timeout while verifying password.';
+      _showErrorSnackBar(msg);
+      _speak(msg);
       return false;
     } on FirebaseAuthException catch (e) {
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
         return false;
       }
-      _showErrorSnackBar('Auth error: ${e.code}');
-      _speak('Authentication error.');
+      final msg = languageProvider.isArabic
+          ? 'خطأ في المصادقة: ${e.code}'
+          : 'Auth error: ${e.code}';
+      _showErrorSnackBar(msg);
+      _speak(languageProvider.isArabic ? 'خطأ في المصادقة' : 'Authentication error.');
       return false;
     } catch (_) {
-      _showErrorSnackBar('Unexpected error during verification.');
-      _speak('Unexpected error during verification.');
+      final msg = languageProvider.isArabic
+          ? 'خطأ غير متوقع أثناء التحقق'
+          : 'Unexpected error during verification.';
+      _showErrorSnackBar(msg);
+      _speak(msg);
       return false;
     }
   }
 
   Future<bool> _reauthenticateWithGoogle() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
       final googleSignIn = GoogleSignIn();
       await googleSignIn.signOut();
 
       final googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
-        _showErrorSnackBar('Reauthentication cancelled');
-        await _speakNow('Reauthentication cancelled.');
+        final msg = languageProvider.isArabic
+            ? 'تم إلغاء إعادة المصادقة'
+            : 'Reauthentication cancelled';
+        _showErrorSnackBar(msg);
+        await _speakNow(msg);
         return false;
       }
       final googleAuth = await googleUser.authentication;
@@ -719,18 +746,29 @@ class _AccountInfoPageState extends State<AccountInfoPage>
           .timeout(const Duration(seconds: 12));
       return true;
     } on TimeoutException {
-      _showErrorSnackBar('Network timeout while reauthenticating with Google.');
-      await _speakNow('Network timeout while reauthenticating with Google.');
+      final msg = languageProvider.isArabic
+          ? 'انتهت مهلة الشبكة أثناء إعادة المصادقة بـ Google'
+          : 'Network timeout while reauthenticating with Google.';
+      _showErrorSnackBar(msg);
+      await _speakNow(msg);
       return false;
     } on FirebaseAuthException catch (e) {
-      _showErrorSnackBar('Auth error: ${e.code}');
+      final msg = languageProvider.isArabic
+          ? 'خطأ في المصادقة: ${e.code}'
+          : 'Auth error: ${e.code}';
+      _showErrorSnackBar(msg);
       await _speakNow(
-        'Authentication error while reauthenticating with Google.',
+        languageProvider.isArabic
+            ? 'خطأ في المصادقة أثناء إعادة المصادقة بـ Google'
+            : 'Authentication error while reauthenticating with Google.',
       );
       return false;
     } catch (_) {
-      _showErrorSnackBar('Unexpected error during Google reauthentication.');
-      await _speakNow('Unexpected error during Google reauthentication.');
+      final msg = languageProvider.isArabic
+          ? 'خطأ غير متوقع أثناء إعادة المصادقة بـ Google'
+          : 'Unexpected error during Google reauthentication.';
+      _showErrorSnackBar(msg);
+      await _speakNow(msg);
       return false;
     }
   }
@@ -785,19 +823,25 @@ class _AccountInfoPageState extends State<AccountInfoPage>
   }
 
   Future<void> _deleteAccount() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     final confirmed = await _showDangerConfirmDialog(
       icon: Icons.delete_forever,
-      title: 'Delete Account',
-      body:
-          'Are you sure you want to delete your account? This action cannot be undone',
-      confirmLabel: 'Confirm',
-      cancelLabel: 'Cancel',
-      ttsIntro:
-          'Delete account. Are you sure you want to delete your account? This action cannot be undone. Buttons: Confirm on the top, Cancel at the bottom.',
+      title: languageProvider.isArabic ? 'حذف الحساب' : 'Delete Account',
+      body: languageProvider.isArabic
+          ? 'هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه'
+          : 'Are you sure you want to delete your account? This action cannot be undone',
+      confirmLabel: languageProvider.isArabic ? 'تأكيد' : 'Confirm',
+      cancelLabel: languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+      ttsIntro: languageProvider.isArabic
+          ? 'حذف الحساب. هل أنت متأكد من حذف حسابك؟ هذا الإجراء لا يمكن التراجع عنه. الأزرار: تأكيد في الأعلى، إلغاء في الأسفل'
+          : 'Delete account. Are you sure you want to delete your account? This action cannot be undone. Buttons: Confirm on the top, Cancel at the bottom.',
     );
+    
     if (confirmed != true) {
-      _showErrorSnackBar('Deletion cancelled');
-      await _speakNow('Deletion cancelled');
+      final msg = languageProvider.isArabic ? 'تم إلغاء الحذف' : 'Deletion cancelled';
+      _showErrorSnackBar(msg);
+      await _speakNow(msg);
       return;
     }
 
@@ -805,8 +849,11 @@ class _AccountInfoPageState extends State<AccountInfoPage>
 
     final user = _auth.currentUser;
     if (user == null) {
-      _showErrorSnackBar('No user is currently signed in');
-      await _speakNow('No user is currently signed in');
+      final msg = languageProvider.isArabic
+          ? 'لا يوجد مستخدم مسجل حالياً'
+          : 'No user is currently signed in';
+      _showErrorSnackBar(msg);
+      await _speakNow(msg);
       return;
     }
 
@@ -815,6 +862,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         providers.length == 1 && providers.contains('google.com');
     final bool hasPasswordProvider = providers.contains('password');
     String? email;
+    
     if (hasPasswordProvider && !isGoogleOnly) {
       email = user.email;
       if (email == null || email.isEmpty) {
@@ -826,30 +874,35 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         }
       }
       if (email == null || email.isEmpty) {
-        _showErrorSnackBar('Email not found. Please log in again.');
-        await _speakNow('Email not found. Please log in again.');
+        final msg = languageProvider.isArabic
+            ? 'البريد غير موجود. من فضلك سجّل الدخول مرة أخرى'
+            : 'Email not found. Please log in again.';
+        _showErrorSnackBar(msg);
+        await _speakNow(msg);
         return;
       }
 
       final ok = await _showPasswordDialog(email);
       if (!ok) {
-        _showErrorSnackBar('Deletion cancelled');
-        await _speakNow('Deletion cancelled');
+        final msg = languageProvider.isArabic ? 'تم إلغاء الحذف' : 'Deletion cancelled';
+        _showErrorSnackBar(msg);
+        await _speakNow(msg);
         return;
       }
     } else if (!isGoogleOnly) {
-      _showErrorSnackBar(
-        'This sign-in method is not supported for in-app deletion. Please contact support.',
-      );
-      await _speakNow(
-        'This sign-in method is not supported for in-app deletion. Please contact support.',
-      );
+      final msg = languageProvider.isArabic
+          ? 'طريقة تسجيل الدخول هذه غير مدعومة للحذف داخل التطبيق. من فضلك تواصل مع الدعم'
+          : 'This sign-in method is not supported for in-app deletion. Please contact support.';
+      _showErrorSnackBar(msg);
+      await _speakNow(msg);
       return;
     }
 
     if (isGoogleOnly) {
       await _speakNow(
-        'Reauthenticating with Google. Please choose your Google account to confirm deletion.',
+        languageProvider.isArabic
+            ? 'إعادة المصادقة بـ Google. من فضلك اختر حساب Google لتأكيد الحذف'
+            : 'Reauthenticating with Google. Please choose your Google account to confirm deletion.',
       );
     }
 
@@ -880,12 +933,18 @@ class _AccountInfoPageState extends State<AccountInfoPage>
           await userDoc.delete().timeout(const Duration(seconds: 8));
         }
       } on TimeoutException {
-        _showErrorSnackBar('Network timeout while deleting your data.');
-        await _speakNow('Network timeout while deleting your data.');
+        final msg = languageProvider.isArabic
+            ? 'انتهت مهلة الشبكة أثناء حذف بياناتك'
+            : 'Network timeout while deleting your data.';
+        _showErrorSnackBar(msg);
+        await _speakNow(msg);
         return;
       } catch (_) {
-        _showErrorSnackBar('Error while deleting your data.');
-        await _speakNow('Error while deleting your data.');
+        final msg = languageProvider.isArabic
+            ? 'خطأ أثناء حذف بياناتك'
+            : 'Error while deleting your data.';
+        _showErrorSnackBar(msg);
+        await _speakNow(msg);
         return;
       }
 
@@ -893,20 +952,32 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         await user.delete().timeout(const Duration(seconds: 10));
       } on FirebaseAuthException catch (e) {
         if (e.code == 'requires-recent-login') {
-          _showErrorSnackBar('Please log out and log back in, then try again.');
-          await _speakNow('Please log out and log back in, then try again.');
+          final msg = languageProvider.isArabic
+              ? 'من فضلك سجّل الخروج ثم سجّل الدخول مرة أخرى، ثم حاول مرة أخرى'
+              : 'Please log out and log back in, then try again.';
+          _showErrorSnackBar(msg);
+          await _speakNow(msg);
           return;
         }
-        _showErrorSnackBar('Auth error: ${e.code}');
-        await _speakNow('Authentication error.');
+        final msg = languageProvider.isArabic
+            ? 'خطأ في المصادقة: ${e.code}'
+            : 'Auth error: ${e.code}';
+        _showErrorSnackBar(msg);
+        await _speakNow(languageProvider.isArabic ? 'خطأ في المصادقة' : 'Authentication error.');
         return;
       } on TimeoutException {
-        _showErrorSnackBar('Network timeout while deleting account.');
-        await _speakNow('Network timeout while deleting account.');
+        final msg = languageProvider.isArabic
+            ? 'انتهت مهلة الشبكة أثناء حذف الحساب'
+            : 'Network timeout while deleting account.';
+        _showErrorSnackBar(msg);
+        await _speakNow(msg);
         return;
       } catch (_) {
-        _showErrorSnackBar('Unexpected error while deleting account.');
-        await _speakNow('Unexpected error while deleting account.');
+        final msg = languageProvider.isArabic
+            ? 'خطأ غير متوقع أثناء حذف الحساب'
+            : 'Unexpected error while deleting account.';
+        _showErrorSnackBar(msg);
+        await _speakNow(msg);
         return;
       }
 
@@ -921,11 +992,20 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         print('Error sending account deletion email: $e');
       }
 
-      _showSuccessSnackBar('Account deleted successfully');
+      final successMsg = languageProvider.isArabic
+          ? 'تم حذف الحساب بنجاح'
+          : 'Account deleted successfully';
+      _showSuccessSnackBar(successMsg);
+      
       await Future.delayed(const Duration(seconds: 1));
       await _tts.stop();
 
-      await _speakAwait('Account deleted successfully. Redirecting to sign up');
+      await _speakAwait(
+        languageProvider.isArabic
+            ? 'تم حذف الحساب بنجاح. جاري التوجيه لإنشاء حساب'
+            : 'Account deleted successfully. Redirecting to sign up'
+      );
+      
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const SignupScreen()),
@@ -973,6 +1053,8 @@ class _AccountInfoPageState extends State<AccountInfoPage>
   }
 
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
@@ -998,7 +1080,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                 onTap: () {
                   _hapticFeedback();
                   _tts.stop();
-                  _speak('Going back');
+                  _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                   Future.delayed(const Duration(milliseconds: 800), () {
                     Navigator.pop(context);
                   });
@@ -1021,7 +1103,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                   ),
                   child: Center(
                     child: Icon(
-                      Icons.arrow_back_ios_new,
+                      languageProvider.isArabic
+                          ? Icons.arrow_forward_ios
+                          : Icons.arrow_back_ios_new,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -1035,7 +1119,7 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Account Info',
+                    languageProvider.isArabic ? 'معلومات الحساب' : 'Account Info',
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.w900,
@@ -1048,7 +1132,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Manage your account settings',
+                    languageProvider.isArabic
+                        ? 'إدارة إعدادات حسابك'
+                        : 'Manage your account settings',
                     style: TextStyle(
                       fontSize: 14,
                       color: deepPurple.withOpacity(0.6),
@@ -1066,6 +1152,8 @@ class _AccountInfoPageState extends State<AccountInfoPage>
   }
 
   Widget _buildContentList() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
           .animate(
@@ -1078,13 +1166,15 @@ class _AccountInfoPageState extends State<AccountInfoPage>
         padding: const EdgeInsets.fromLTRB(16, 35, 16, 16),
         children: [
           _buildInfoCard(
-            title: 'Personal Information',
-            subtitle: 'Edit your account information',
+            title: languageProvider.isArabic ? 'المعلومات الشخصية' : 'Personal Information',
+            subtitle: languageProvider.isArabic
+                ? 'تعديل معلومات حسابك'
+                : 'Edit your account information',
             icon: Icons.person_outline,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
             onTap: () {
               _hapticFeedback();
-              _speak('Personal Information');
+              _speak(languageProvider.isArabic ? 'المعلومات الشخصية' : 'Personal Information');
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const ProfilePage()),
@@ -1092,8 +1182,10 @@ class _AccountInfoPageState extends State<AccountInfoPage>
             },
           ),
           _buildInfoCard(
-            title: 'Delete My Account',
-            subtitle: 'Permanently delete your account',
+            title: languageProvider.isArabic ? 'حذف حسابي' : 'Delete My Account',
+            subtitle: languageProvider.isArabic
+                ? 'حذف حسابك نهائياً'
+                : 'Permanently delete your account',
             icon: Icons.delete_forever_outlined,
             gradient: const LinearGradient(
               colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
@@ -1236,6 +1328,8 @@ class _AccountInfoPageState extends State<AccountInfoPage>
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
@@ -1275,12 +1369,16 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
-                      description: 'Navigate to Homepage',
+                      description: languageProvider.isArabic
+                          ? 'الانتقال للصفحة الرئيسية'
+                          : 'Navigate to Homepage',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigate to Homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1291,11 +1389,15 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
-                      description: 'Manage your reminders and notifications',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
+                      description: languageProvider.isArabic
+                          ? 'إدارة التذكيرات والإشعارات'
+                          : 'Manage your reminders and notifications',
                       onTap: () {
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -1308,11 +1410,14 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                     const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
-                      description:
-                          'Manage your emergency contacts and important people',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
+                      description: languageProvider.isArabic
+                          ? 'إدارة جهات الاتصال الطارئة'
+                          : 'Manage your emergency contacts and important people',
                       onTap: () {
-                        _speak('Contact, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، احفظ وأدر جهات الاتصال الطارئة'
+                            : 'Contact, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1323,11 +1428,15 @@ class _AccountInfoPageState extends State<AccountInfoPage>
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
-                      description: 'Adjust app settings and preferences',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
+                      description: languageProvider.isArabic
+                          ? 'ضبط إعدادات التطبيق'
+                          : 'Adjust app settings and preferences',
                       onTap: () {
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -1349,7 +1458,9 @@ class _AccountInfoPageState extends State<AccountInfoPage>
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+                languageProvider.isArabic
+                    ? 'طوارئ، يرسل تنبيه طوارئ لجهات الاتصال الموثوقة عندما تحتاج مساعدة'
+                    : 'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
               );
               Navigator.push(
                 context,

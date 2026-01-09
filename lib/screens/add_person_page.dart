@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import '../services/face_recognition_api.dart';
 import 'face_rotation_capture_screen.dart';
 import 'home_page.dart';
@@ -41,7 +43,10 @@ class _AddPersonPageState extends State<AddPersonPage> {
     _initTts();
     _nameFocusNode.addListener(() {
       if (_nameFocusNode.hasFocus) {
-        _speak('Name field, enter the person name');
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+        _speak(languageProvider.isArabic
+            ? 'حقل الاسم، ادخل اسم الشخص'
+            : 'Name field, enter the person name');
       }
     });
   }
@@ -55,7 +60,8 @@ class _AddPersonPageState extends State<AddPersonPage> {
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -69,25 +75,18 @@ class _AddPersonPageState extends State<AddPersonPage> {
     HapticFeedback.mediumImpact();
   }
 
-  // ============================================================
-  // 🔐 تشفير الصورة بـ AES + IV عشوائي
-  // ============================================================
   Future<File?> _encryptThumbnail(File imageFile, String userId) async {
     try {
       print('🔐 Starting thumbnail encryption...');
 
-      // 1️⃣ قراءة bytes الصورة
       final imageBytes = await imageFile.readAsBytes();
       print('📸 Image size: ${imageBytes.length} bytes');
 
-      // 2️⃣ إنشاء Key من user_id (32 characters for AES-256)
       final keyString = userId.padRight(32).substring(0, 32);
       final key = encrypt.Key.fromUtf8(keyString);
 
-      // 3️⃣ إنشاء IV عشوائي (16 bytes)
       final iv = encrypt.IV.fromSecureRandom(16);
 
-      // 4️⃣ تشفير البيانات باستخدام AES-CBC مع PKCS7
       final encrypter = encrypt.Encrypter(
         encrypt.AES(
           key,
@@ -98,12 +97,10 @@ class _AddPersonPageState extends State<AddPersonPage> {
 
       final encrypted = encrypter.encryptBytes(imageBytes, iv: iv);
 
-      // 5️⃣ دمج IV مع البيانات المشفرة
       final combinedBytes = <int>[];
       combinedBytes.addAll(iv.bytes);
       combinedBytes.addAll(encrypted.bytes);
 
-      // 6️⃣ حفظ في ملف مؤقت
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final encryptedFile = File('${tempDir.path}/encrypted_thumb_$timestamp.enc');
@@ -125,15 +122,21 @@ class _AddPersonPageState extends State<AddPersonPage> {
   }
 
   Future<void> _pickImages() async {
-    // ✅ تحقق من الاسم قبل فتح الكاميرا
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (_nameController.text.trim().isEmpty) {
-      _showSnackBar('Please enter a name first', Colors.red);
-      _speak('Please enter a name first');
+      final msg = languageProvider.isArabic
+          ? 'من فضلك ادخل الاسم أولاً'
+          : 'Please enter a name first';
+      _showSnackBar(msg, Colors.red);
+      _speak(msg);
       return;
     }
 
     try {
-      _speak('Opening camera for face rotation capture');
+      _speak(languageProvider.isArabic
+          ? 'فتح الكاميرا لالتقاط دوران الوجه'
+          : 'Opening camera for face rotation capture');
 
       final List<File>? capturedImages = await Navigator.push<List<File>>(
         context,
@@ -146,28 +149,38 @@ class _AddPersonPageState extends State<AddPersonPage> {
         setState(() {
           _selectedImages = capturedImages;
         });
-        _showSnackBar(
-          '${capturedImages.length} photos captured successfully',
-          Colors.green,
-        );
-        _speak('${capturedImages.length} photos captured successfully');
+        
+        final msg = languageProvider.isArabic
+            ? 'تم التقاط ${capturedImages.length} صور بنجاح'
+            : '${capturedImages.length} photos captured successfully';
+        _showSnackBar(msg, Colors.green);
+        _speak(msg);
       }
     } catch (e) {
-      _showSnackBar('Failed to capture images: $e', Colors.red);
-      _speak('Failed to capture images');
+      final msg = languageProvider.isArabic
+          ? 'فشل التقاط الصور: $e'
+          : 'Failed to capture images: $e';
+      _showSnackBar(msg, Colors.red);
+      _speak(languageProvider.isArabic ? 'فشل التقاط الصور' : 'Failed to capture images');
     }
   }
 
   Future<void> _addPerson() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (_nameController.text.trim().isEmpty) {
-      _showSnackBar('Please enter a name', Colors.red);
-      _speak('Please enter a name');
+      final msg = languageProvider.isArabic ? 'من فضلك ادخل اسماً' : 'Please enter a name';
+      _showSnackBar(msg, Colors.red);
+      _speak(msg);
       return;
     }
 
     if (_selectedImages.length < 3) {
-      _showSnackBar('Please capture face rotation photos first', Colors.red);
-      _speak('Please capture face rotation photos first');
+      final msg = languageProvider.isArabic
+          ? 'من فضلك التقط صور دوران الوجه أولاً'
+          : 'Please capture face rotation photos first';
+      _showSnackBar(msg, Colors.red);
+      _speak(msg);
       return;
     }
 
@@ -184,9 +197,10 @@ class _AddPersonPageState extends State<AddPersonPage> {
     File? encryptedThumbnail;
     try {
       final personName = _nameController.text.trim();
-      _speak('Encrypting and uploading photos. Please wait.');
+      _speak(languageProvider.isArabic
+          ? 'تشفير ورفع الصور. انتظر من فضلك'
+          : 'Encrypting and uploading photos. Please wait.');
 
-      // 🔐 تشفير الصورة الأمامية (أول صورة) كـ thumbnail
       if (_selectedImages.isNotEmpty) {
         print('');
         print('════════════════════════════════════════');
@@ -206,7 +220,6 @@ class _AddPersonPageState extends State<AddPersonPage> {
         print('');
       }
 
-      // 📤 رفع البيانات إلى Backend
       print('📤 Uploading to backend...');
       final result = await FaceRecognitionAPI.enrollPerson(
         name: personName,
@@ -217,32 +230,40 @@ class _AddPersonPageState extends State<AddPersonPage> {
 
       if (mounted) {
         if (result.success) {
-          _showSnackBar(
-            'Person $personName added successfully with ${result.successfulImages} photo${result.successfulImages > 1 ? 's' : ''}',
-            Colors.green,
-          );
-          await _speak(
-            'Person $personName added successfully with ${result.successfulImages} photos',
-          );
+          final msg = languageProvider.isArabic
+              ? 'تمت إضافة $personName بنجاح مع ${result.successfulImages} صورة'
+              : 'Person $personName added successfully with ${result.successfulImages} photo${result.successfulImages > 1 ? 's' : ''}';
+          
+          _showSnackBar(msg, Colors.green);
+          
+          await _speak(languageProvider.isArabic
+              ? 'تمت إضافة $personName بنجاح مع ${result.successfulImages} صور'
+              : 'Person $personName added successfully with ${result.successfulImages} photos');
 
           await Future.delayed(const Duration(milliseconds: 2000));
           Navigator.pop(context, true);
         } else {
-          _showSnackBar(
-            result.message ?? 'Failed to add person',
-            Colors.red,
-          );
-          _speak('Failed to add person. ${result.message}');
+          final msg = result.message ?? (languageProvider.isArabic
+              ? 'فشلت إضافة الشخص'
+              : 'Failed to add person');
+          _showSnackBar(msg, Colors.red);
+          _speak(languageProvider.isArabic
+              ? 'فشلت إضافة الشخص. ${result.message}'
+              : 'Failed to add person. ${result.message}');
         }
       }
     } catch (e) {
       print('❌ Error adding person: $e');
       if (mounted) {
-        _showSnackBar('Error adding person: $e', Colors.red);
-        _speak('Error adding person, please try again');
+        final msg = languageProvider.isArabic
+            ? 'خطأ في إضافة الشخص: $e'
+            : 'Error adding person: $e';
+        _showSnackBar(msg, Colors.red);
+        _speak(languageProvider.isArabic
+            ? 'خطأ في إضافة الشخص، حاول مرة أخرى'
+            : 'Error adding person, please try again');
       }
     } finally {
-      // 🗑️ حذف الملف المؤقت المشفر
       if (encryptedThumbnail != null) {
         try {
           await encryptedThumbnail.delete();
@@ -341,6 +362,8 @@ class _AddPersonPageState extends State<AddPersonPage> {
   }
 
   Widget _buildHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Container(
       padding: const EdgeInsets.fromLTRB(25, 50, 25, 30),
       decoration: BoxDecoration(
@@ -362,7 +385,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
             button: true,
             child: GestureDetector(
               onTap: () {
-                _speak('Going back');
+                _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                 Future.delayed(const Duration(milliseconds: 800), () {
                   Navigator.pop(context);
                 });
@@ -383,9 +406,11 @@ class _AddPersonPageState extends State<AddPersonPage> {
                     ),
                   ],
                 ),
-                child: const Center(
+                child: Center(
                   child: Icon(
-                    Icons.arrow_back_ios_new,
+                    languageProvider.isArabic
+                        ? Icons.arrow_forward_ios
+                        : Icons.arrow_back_ios_new,
                     color: Colors.white,
                     size: 21,
                   ),
@@ -396,7 +421,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
           const SizedBox(width: 16),
           Expanded(
             child: Text(
-              'Add New Person',
+              languageProvider.isArabic ? 'إضافة شخص جديد' : 'Add New Person',
               style: TextStyle(
                 fontSize: 27,
                 fontWeight: FontWeight.w900,
@@ -414,6 +439,8 @@ class _AddPersonPageState extends State<AddPersonPage> {
   }
 
   Widget _buildForm() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -450,9 +477,9 @@ class _AddPersonPageState extends State<AddPersonPage> {
                       ),
                     ),
                     const SizedBox(width: 9),
-                    const Text(
-                      "Name",
-                      style: TextStyle(
+                    Text(
+                      languageProvider.isArabic ? 'الاسم' : "Name",
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 19.5,
                         color: deepPurple,
@@ -480,7 +507,7 @@ class _AddPersonPageState extends State<AddPersonPage> {
                       fontWeight: FontWeight.w600,
                     ),
                     decoration: InputDecoration(
-                      hintText: "Enter name",
+                      hintText: languageProvider.isArabic ? 'ادخل الاسم' : "Enter name",
                       hintStyle: const TextStyle(
                         color: Color.fromARGB(255, 79, 79, 79),
                         fontSize: 16.5,
@@ -520,9 +547,9 @@ class _AddPersonPageState extends State<AddPersonPage> {
                       ),
                     ),
                     const SizedBox(width: 9),
-                    const Text(
-                      "Photo",
-                      style: TextStyle(
+                    Text(
+                      languageProvider.isArabic ? 'الصورة' : "Photo",
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 19.5,
                         color: deepPurple,
@@ -552,10 +579,11 @@ class _AddPersonPageState extends State<AddPersonPage> {
                         ? null
                         : () {
                             _speak(
-                              'Photo section. Tap to start face rotation capture. '
-                              'The camera will guide you to take 5 photos from different angles.',
+                              languageProvider.isArabic
+                                  ? 'قسم الصورة. اضغط لبدء التقاط دوران الوجه. الكاميرا ستوجهك لالتقاط 5 صور من زوايا مختلفة'
+                                  : 'Photo section. Tap to start face rotation capture. The camera will guide you to take 5 photos from different angles.',
                             );
-                            _pickImages(); // ✅ هنا التحقق من الاسم
+                            _pickImages();
                           },
                     borderRadius: BorderRadius.circular(15),
                     child: Center(
@@ -575,8 +603,12 @@ class _AddPersonPageState extends State<AddPersonPage> {
                           const SizedBox(height: 11),
                           Text(
                             _selectedImages.isNotEmpty
-                                ? '${_selectedImages.length} rotation photos captured'
-                                : 'Tap to capture face rotation',
+                                ? (languageProvider.isArabic
+                                    ? 'تم التقاط ${_selectedImages.length} صور دوران'
+                                    : '${_selectedImages.length} rotation photos captured')
+                                : (languageProvider.isArabic
+                                    ? 'اضغط لالتقاط دوران الوجه'
+                                    : 'Tap to capture face rotation'),
                             style: const TextStyle(
                               fontSize: 17.5,
                               fontWeight: FontWeight.w600,
@@ -586,8 +618,12 @@ class _AddPersonPageState extends State<AddPersonPage> {
                           const SizedBox(height: 5),
                           Text(
                             _selectedImages.isNotEmpty
-                                ? 'Tap to retake'
-                                : 'Front, Left, Right, Up, Down',
+                                ? (languageProvider.isArabic
+                                    ? 'اضغط لإعادة الالتقاط'
+                                    : 'Tap to retake')
+                                : (languageProvider.isArabic
+                                    ? 'أمام، يسار، يمين، أعلى، أسفل'
+                                    : 'Front, Left, Right, Up, Down'),
                             style: const TextStyle(
                               fontSize: 14.5,
                               color: deepPurple,
@@ -619,7 +655,9 @@ class _AddPersonPageState extends State<AddPersonPage> {
                   : () {
                       _hapticFeedback();
                       _speak(
-                        'Add new person button, processing photos. Please wait.',
+                        languageProvider.isArabic
+                            ? 'زر إضافة شخص جديد، معالجة الصور. انتظر من فضلك'
+                            : 'Add new person button, processing photos. Please wait.',
                       );
                       _addPerson();
                     },
@@ -639,8 +677,10 @@ class _AddPersonPageState extends State<AddPersonPage> {
                     ),
               label: Text(
                 _isUploading
-                    ? 'Processing ${_selectedImages.length} photo${_selectedImages.length > 1 ? 's' : ''}...'
-                    : "Add New Person",
+                    ? (languageProvider.isArabic
+                        ? 'معالجة ${_selectedImages.length} صورة...'
+                        : 'Processing ${_selectedImages.length} photo${_selectedImages.length > 1 ? 's' : ''}...')
+                    : (languageProvider.isArabic ? 'إضافة شخص جديد' : "Add New Person"),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 17.5,
@@ -663,6 +703,8 @@ class _AddPersonPageState extends State<AddPersonPage> {
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
@@ -702,12 +744,16 @@ class _AddPersonPageState extends State<AddPersonPage> {
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
-                      description: 'Navigate to Homepage',
+                      description: languageProvider.isArabic
+                          ? 'الانتقال للصفحة الرئيسية'
+                          : 'Navigate to Homepage',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigate to Homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -718,12 +764,16 @@ class _AddPersonPageState extends State<AddPersonPage> {
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
-                      description: 'Manage your reminders and notifications',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
+                      description: languageProvider.isArabic
+                          ? 'إدارة التذكيرات والإشعارات'
+                          : 'Manage your reminders and notifications',
                       isActive: false,
                       onTap: () {
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -736,12 +786,15 @@ class _AddPersonPageState extends State<AddPersonPage> {
                     const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
-                      description:
-                          'Manage your emergency contacts and important people',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
+                      description: languageProvider.isArabic
+                          ? 'إدارة جهات الاتصال الطارئة'
+                          : 'Manage your emergency contacts and important people',
                       isActive: false,
                       onTap: () {
-                        _speak('Contacts, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، احفظ وأدر جهات الاتصال الطارئة'
+                            : 'Contacts, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -752,12 +805,16 @@ class _AddPersonPageState extends State<AddPersonPage> {
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
-                      description: 'Adjust app settings and preferences',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
+                      description: languageProvider.isArabic
+                          ? 'ضبط إعدادات التطبيق'
+                          : 'Adjust app settings and preferences',
                       isActive: false,
                       onTap: () {
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -779,7 +836,9 @@ class _AddPersonPageState extends State<AddPersonPage> {
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+                languageProvider.isArabic
+                    ? 'طوارئ، يرسل تنبيه طوارئ لجهات الاتصال الموثوقة عندما تحتاج مساعدة'
+                    : 'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
               );
               Navigator.push(
                 context,

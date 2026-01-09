@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import 'home_page.dart';
 import 'accountinfopage.dart';
 import 'DeviceAlertsPage .dart';
@@ -25,14 +27,12 @@ class _SettingsPageState extends State<SettingsPage>
   late AnimationController _fadeController;
   late AnimationController _slideController;
 
-  // 🎨 نظام ألوان موحد
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
   static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
   static const Color ultraLightPurple = Color(0xFFF3E5F5);
 
-  // ✅ تحكم في ظهور خيار تغيير الباسوورد
   bool _canChangePassword = false;
   bool _providerLoaded = false;
 
@@ -51,12 +51,12 @@ class _SettingsPageState extends State<SettingsPage>
       duration: const Duration(milliseconds: 800),
     )..forward();
 
-    // ✅ تحديد ما إذا كان المستخدم يستخدم Email/Password أو لا
     _checkUserProvider();
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -69,7 +69,6 @@ class _SettingsPageState extends State<SettingsPage>
     HapticFeedback.mediumImpact();
   }
 
-  // ✅ فحص مزوّد تسجيل الدخول (Google ولا Email/Password)
   Future<void> _checkUserProvider() async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -88,14 +87,13 @@ class _SettingsPageState extends State<SettingsPage>
 
       final hasPasswordProvider = providers.any(
         (p) => p.providerId == 'password',
-      ); // Email/Password
+      );
 
       setState(() {
         _canChangePassword = hasPasswordProvider;
         _providerLoaded = true;
       });
     } catch (e) {
-      // لو صار خطأ نخفي الخيار احتياطياً
       setState(() {
         _canChangePassword = false;
         _providerLoaded = true;
@@ -112,7 +110,8 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Future<void> _logout(BuildContext context) async {
-    final outerContext = context; // نستخدمه لإظهار SnackBar فوق كل شيء
+    final outerContext = context;
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     await showDialog<bool>(
       context: context,
@@ -135,9 +134,9 @@ class _SettingsPageState extends State<SettingsPage>
               child: const Icon(Icons.logout, color: Colors.white, size: 52),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Logout',
-              style: TextStyle(
+            Text(
+              languageProvider.isArabic ? 'تسجيل الخروج' : 'Logout',
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
                 fontSize: 26,
@@ -147,9 +146,11 @@ class _SettingsPageState extends State<SettingsPage>
             ),
           ],
         ),
-        content: const Text(
-          'Are you sure you want to log out from your account?',
-          style: TextStyle(
+        content: Text(
+          languageProvider.isArabic
+              ? 'هل أنت متأكد من تسجيل الخروج من حسابك؟'
+              : 'Are you sure you want to log out from your account?',
+          style: const TextStyle(
             color: Colors.white,
             fontSize: 19,
             height: 1.5,
@@ -160,7 +161,7 @@ class _SettingsPageState extends State<SettingsPage>
         actions: [
           Column(
             children: [
-              // Confirm (أبيض بنص أحمر)
+              // Confirm
               SizedBox(
                 width: double.infinity,
                 height: 75,
@@ -173,10 +174,8 @@ class _SettingsPageState extends State<SettingsPage>
                     onPressed: () async {
                       _hapticFeedback();
 
-                      // 1) سكّر الدايلوج فوراً عشان المسج تطلع فوق الخلفية
                       Navigator.pop(context, true);
 
-                      // 2) أظهر المسج فوراً على Scaffold الخارجي
                       ScaffoldMessenger.of(outerContext)
                         ..clearSnackBars()
                         ..showSnackBar(
@@ -192,17 +191,19 @@ class _SettingsPageState extends State<SettingsPage>
                             content: SizedBox(
                               height: 40,
                               child: Row(
-                                children: const [
-                                  Icon(
+                                children: [
+                                  const Icon(
                                     Icons.check_circle,
                                     color: Colors.white,
                                     size: 26,
                                   ),
-                                  SizedBox(width: 12),
+                                  const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
-                                      'Logout successfully',
-                                      style: TextStyle(
+                                      languageProvider.isArabic
+                                          ? 'تم تسجيل الخروج بنجاح'
+                                          : 'Logout successfully',
+                                      style: const TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w800,
                                         color: Colors.white,
@@ -216,18 +217,20 @@ class _SettingsPageState extends State<SettingsPage>
                           ),
                         );
 
-                      // 3) يتكلم
                       try {
                         await _tts.stop();
-                        await _tts.setLanguage('en-US');
+                        await _tts.setLanguage(
+                          languageProvider.languageCode == 'ar' ? 'ar-SA' : 'en-US'
+                        );
                         await _tts.setSpeechRate(0.5);
                         await _tts.speak(
-                          'Logout successfully. Redirecting to login.',
+                          languageProvider.isArabic
+                              ? 'تم تسجيل الخروج بنجاح. جاري التوجيه لتسجيل الدخول'
+                              : 'Logout successfully. Redirecting to login.',
                         );
                         await Future.delayed(const Duration(milliseconds: 200));
                       } catch (_) {}
 
-                      // 4) نفّذ اللوق آوت ثم انتقل
                       try {
                         const storage = FlutterSecureStorage();
                         await storage.deleteAll();
@@ -244,9 +247,11 @@ class _SettingsPageState extends State<SettingsPage>
                       } catch (e) {
                         if (mounted) {
                           ScaffoldMessenger.of(outerContext).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
-                                'Failed to logout. Please try again.',
+                                languageProvider.isArabic
+                                    ? 'فشل تسجيل الخروج. حاول مرة أخرى'
+                                    : 'Failed to logout. Please try again.',
                               ),
                               backgroundColor: Colors.red,
                             ),
@@ -260,9 +265,9 @@ class _SettingsPageState extends State<SettingsPage>
                         borderRadius: BorderRadius.circular(18),
                       ),
                     ),
-                    child: const Text(
-                      'Confirm',
-                      style: TextStyle(
+                    child: Text(
+                      languageProvider.isArabic ? 'تأكيد' : 'Confirm',
+                      style: const TextStyle(
                         color: Color(0xFFD32F2F),
                         fontWeight: FontWeight.w700,
                         fontSize: 20,
@@ -290,9 +295,13 @@ class _SettingsPageState extends State<SettingsPage>
                       () async {
                         try {
                           await _tts.stop();
-                          await _tts.setLanguage('en-US');
+                          await _tts.setLanguage(
+                            languageProvider.languageCode == 'ar' ? 'ar-SA' : 'en-US'
+                          );
                           await _tts.setSpeechRate(0.5);
-                          await _tts.speak('Cancel');
+                          await _tts.speak(
+                            languageProvider.isArabic ? 'إلغاء' : 'Cancel'
+                          );
                         } catch (_) {}
                       }();
                       Navigator.pop(context, false);
@@ -303,9 +312,9 @@ class _SettingsPageState extends State<SettingsPage>
                         borderRadius: BorderRadius.circular(18),
                       ),
                     ),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
+                    child: Text(
+                      languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
                         fontSize: 19,
@@ -357,99 +366,107 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Widget _buildModernHeader() {
-    return FadeTransition(
-      opacity: _fadeController,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(25, 50, 25, 45),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.white.withOpacity(0.9),
-              Colors.white.withOpacity(0.7),
-              const Color.fromARGB(198, 255, 255, 255),
-              const Color.fromARGB(195, 240, 224, 245),
-            ],
-          ),
+  final languageProvider = Provider.of<LanguageProvider>(context);
+  
+  return FadeTransition(
+    opacity: _fadeController,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(25, 50, 25, 45),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.white.withOpacity(0.9),
+            Colors.white.withOpacity(0.7),
+            const Color.fromARGB(198, 255, 255, 255),
+            const Color.fromARGB(195, 240, 224, 245),
+          ],
         ),
-        child: Row(
-          children: [
-            Semantics(
-              label: 'Go back to previous page',
-              button: true,
-              child: GestureDetector(
-                onTap: () {
-                  _hapticFeedback();
-                  _tts.stop();
-                  _speak('Going back');
-                  Future.delayed(const Duration(milliseconds: 800), () {
-                    Navigator.pop(context);
-                  });
-                },
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [vibrantPurple, primaryPurple],
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: vibrantPurple.withOpacity(0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+      ),
+      child: Row(
+        children: [
+          Semantics(
+            label: 'Go back to previous page',
+            button: true,
+            child: GestureDetector(
+              onTap: () {
+                _hapticFeedback();
+                _tts.stop();
+                _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
+                Future.delayed(const Duration(milliseconds: 800), () {
+                  Navigator.pop(context);
+                });
+              },
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [vibrantPurple, primaryPurple],
                   ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.arrow_back_ios_new,
-                      color: Colors.white,
-                      size: 20,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: vibrantPurple.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
+                  ],
+                ),
+                child: Center(
+                  child: Icon(
+                    languageProvider.isArabic
+                        ? Icons.arrow_forward_ios  // ← صححت هنا
+                        : Icons.arrow_back_ios_new,
+                    color: Colors.white,
+                    size: 20,
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Settings',
-                    style: TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.w900,
-                      foreground: Paint()
-                        ..shader = const LinearGradient(
-                          colors: [deepPurple, vibrantPurple],
-                        ).createShader(const Rect.fromLTWH(0, 0, 200, 70)),
-                    ),
-                    overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  languageProvider.isArabic ? 'الإعدادات' : 'Settings',
+                  style: TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w900,
+                    foreground: Paint()
+                      ..shader = const LinearGradient(
+                        colors: [deepPurple, vibrantPurple],
+                      ).createShader(const Rect.fromLTWH(0, 0, 200, 70)),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Manage your preferences',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: deepPurple.withOpacity(0.6),
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                    ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  languageProvider.isArabic
+                      ? 'إدارة تفضيلاتك'
+                      : 'Manage your preferences',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: deepPurple.withOpacity(0.6),
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSettingsList() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
           .animate(
@@ -462,14 +479,18 @@ class _SettingsPageState extends State<SettingsPage>
         padding: const EdgeInsets.fromLTRB(16, 35, 16, 16),
         children: [
           _buildSettingCard(
-            title: 'Account Info',
-            subtitle: 'Edit personal info or delete your account',
+            title: languageProvider.isArabic ? 'معلومات الحساب' : 'Account Info',
+            subtitle: languageProvider.isArabic
+                ? 'تعديل المعلومات الشخصية أو حذف حسابك'
+                : 'Edit personal info or delete your account',
             icon: Icons.person_outline,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Account Info. Edit your personal details, or delete your account permanently',
+                languageProvider.isArabic
+                    ? 'معلومات الحساب. عدّل معلوماتك الشخصية، أو احذف حسابك نهائياً'
+                    : 'Account Info. Edit your personal details, or delete your account permanently',
               );
               Navigator.push(
                 context,
@@ -480,8 +501,10 @@ class _SettingsPageState extends State<SettingsPage>
             },
           ),
           _buildSettingCard(
-            title: 'Device & Alerts',
-            subtitle: 'Set up connections and notifications',
+            title: languageProvider.isArabic ? 'الجهاز والتنبيهات' : 'Device & Alerts',
+            subtitle: languageProvider.isArabic
+                ? 'إعداد الاتصالات والإشعارات'
+                : 'Set up connections and notifications',
             icon: Icons.notifications_active_outlined,
             gradient: const LinearGradient(
               colors: [vibrantPurple, primaryPurple],
@@ -489,7 +512,9 @@ class _SettingsPageState extends State<SettingsPage>
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Device and Alerts. Manage connected devices and customize your notifications',
+                languageProvider.isArabic
+                    ? 'الجهاز والتنبيهات. إدارة الأجهزة المتصلة وتخصيص الإشعارات'
+                    : 'Device and Alerts. Manage connected devices and customize your notifications',
               );
               Navigator.push(
                 context,
@@ -500,18 +525,23 @@ class _SettingsPageState extends State<SettingsPage>
             },
           ),
 
-          // ✅ يظهر فقط إذا المستخدم مسجل Email/Password
           if (_providerLoaded && _canChangePassword)
             _buildSettingCard(
-              title: 'Change Password',
-              subtitle: 'Manage your password',
+              title: languageProvider.isArabic ? 'تغيير كلمة المرور' : 'Change Password',
+              subtitle: languageProvider.isArabic
+                  ? 'إدارة كلمة المرور'
+                  : 'Manage your password',
               icon: Icons.lock_outline,
               gradient: const LinearGradient(
                 colors: [deepPurple, vibrantPurple],
               ),
               onTap: () {
                 _hapticFeedback();
-                _speak('Change Password. Update your password securely');
+                _speak(
+                  languageProvider.isArabic
+                      ? 'تغيير كلمة المرور. حدّث كلمة المرور بشكل آمن'
+                      : 'Change Password. Update your password securely'
+                );
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -521,10 +551,11 @@ class _SettingsPageState extends State<SettingsPage>
               },
             ),
 
-          // 🔴 كرت الـ Logout
           _buildSettingCard(
-            title: 'Logout',
-            subtitle: 'Sign out of your account',
+            title: languageProvider.isArabic ? 'تسجيل الخروج' : 'Logout',
+            subtitle: languageProvider.isArabic
+                ? 'الخروج من حسابك'
+                : 'Sign out of your account',
             icon: Icons.logout_outlined,
             gradient: const LinearGradient(
               colors: [Color(0xFFE53935), Color(0xFFD32F2F)],
@@ -533,7 +564,9 @@ class _SettingsPageState extends State<SettingsPage>
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Logout. Are you sure you want to log out? Buttons: Confirm on the top, Cancel at the bottom',
+                languageProvider.isArabic
+                    ? 'تسجيل الخروج. هل أنت متأكد من تسجيل الخروج؟ الأزرار: تأكيد في الأعلى، إلغاء في الأسفل'
+                    : 'Logout. Are you sure you want to log out? Buttons: Confirm on the top, Cancel at the bottom',
               );
               _logout(context);
             },
@@ -670,6 +703,8 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
@@ -709,11 +744,13 @@ class _SettingsPageState extends State<SettingsPage>
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigate to Homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -724,12 +761,14 @@ class _SettingsPageState extends State<SettingsPage>
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -742,11 +781,13 @@ class _SettingsPageState extends State<SettingsPage>
                     const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Contacts, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، احفظ وأدر جهات الاتصال الطارئة'
+                            : 'Contacts, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -757,11 +798,13 @@ class _SettingsPageState extends State<SettingsPage>
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                       isActive: true,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('You are already on Settings page');
+                        _speak(languageProvider.isArabic
+                            ? 'أنت بالفعل في صفحة الإعدادات'
+                            : 'You are already on Settings page');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -785,7 +828,7 @@ class _SettingsPageState extends State<SettingsPage>
             child: GestureDetector(
               onTap: () {
                 _hapticFeedback();
-                _speak('Emergency SOS');
+                _speak(languageProvider.isArabic ? 'طوارئ' : 'Emergency SOS');
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const SosScreen()),

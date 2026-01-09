@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import './settings.dart';
 import './home_page.dart';
 import './contact_info_page.dart';
@@ -27,7 +29,6 @@ class _RemindersPageState extends State<RemindersPage>
   bool isLoading = true;
   bool _isListening = false;
 
-  // Voice control state
   int _voiceStep = 0;
   String _voiceTitle = '';
   String _voiceDate = '';
@@ -39,7 +40,6 @@ class _RemindersPageState extends State<RemindersPage>
   late AnimationController _slideController;
   late AnimationController _pulseController;
 
-  // 🎨 نظام ألوان موحد
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -70,7 +70,8 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
     _tts.setCompletionHandler(() {
@@ -79,16 +80,15 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   Future<void> _initSpeech() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     _speech = stt.SpeechToText();
     bool available = await _speech.initialize(
       onError: (error) {
         print('Speech error: $error');
 
-        // 🔍 التعامل مع أنواع الأخطاء المختلفة
         String errorMsg = error.errorMsg.toLowerCase();
 
         if (errorMsg.contains('no_match') || errorMsg.contains('no match')) {
-          // ❌ لم يتم التعرف على أي كلام
           print('No speech detected - cancelling voice mode');
           if (mounted && _isVoiceMode) {
             setState(() {
@@ -96,7 +96,9 @@ class _RemindersPageState extends State<RemindersPage>
               _isListening = false;
               _voiceStep = 0;
             });
-            _speak('Could not hear you clearly. Voice reminder cancelled');
+            _speak(languageProvider.isArabic
+                ? 'لم أتمكن من سماعك بوضوح. تم إلغاء التذكير الصوتي'
+                : 'Could not hear you clearly. Voice reminder cancelled');
           }
         } else if (errorMsg.contains('network')) {
           if (mounted && _isVoiceMode) {
@@ -105,7 +107,9 @@ class _RemindersPageState extends State<RemindersPage>
               _isListening = false;
               _voiceStep = 0;
             });
-            _speak('Network error. Voice reminder cancelled');
+            _speak(languageProvider.isArabic
+                ? 'خطأ في الشبكة. تم إلغاء التذكير الصوتي'
+                : 'Network error. Voice reminder cancelled');
           }
         } else if (errorMsg.contains('permission')) {
           if (mounted && _isVoiceMode) {
@@ -114,24 +118,26 @@ class _RemindersPageState extends State<RemindersPage>
               _isListening = false;
               _voiceStep = 0;
             });
-            _speak('Microphone permission denied. Voice reminder cancelled');
+            _speak(languageProvider.isArabic
+                ? 'تم رفض إذن الميكروفون. تم إلغاء التذكير الصوتي'
+                : 'Microphone permission denied. Voice reminder cancelled');
           }
         } else {
-          // خطأ عام - نلغي الـ voice mode
           if (mounted && _isVoiceMode) {
             setState(() {
               _isVoiceMode = false;
               _isListening = false;
               _voiceStep = 0;
             });
-            _speak('Speech recognition error. Voice reminder cancelled');
+            _speak(languageProvider.isArabic
+                ? 'خطأ في التعرف على الكلام. تم إلغاء التذكير الصوتي'
+                : 'Speech recognition error. Voice reminder cancelled');
           }
         }
       },
       onStatus: (status) {
         print('Speech status: $status');
 
-        // 📊 تتبع حالة الاستماع
         if (status == 'done' || status == 'notListening') {
           print('Listening session ended');
         }
@@ -141,7 +147,9 @@ class _RemindersPageState extends State<RemindersPage>
     if (!available) {
       print('Speech recognition not available');
       _speak(
-        'Speech recognition is not available on this device. Please install Google Speech Services from Play Store',
+        languageProvider.isArabic
+            ? 'التعرف على الكلام غير متاح على هذا الجهاز. من فضلك ثبت خدمات Google Speech من متجر Play'
+            : 'Speech recognition is not available on this device. Please install Google Speech Services from Play Store',
       );
     } else {
       print('Speech recognition initialized successfully');
@@ -187,21 +195,26 @@ class _RemindersPageState extends State<RemindersPage>
     }
   }
 
-  // 🎤 Voice Control Methods
   Future<void> _startVoiceReminder() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (!_speech.isAvailable) {
       _speak(
-        'Speech recognition is not available. Please install Google Speech Services from Play Store',
+        languageProvider.isArabic
+            ? 'التعرف على الكلام غير متاح. من فضلك ثبت خدمات Google Speech من متجر Play'
+            : 'Speech recognition is not available. Please install Google Speech Services from Play Store',
       );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Speech recognition not available. Install Google Speech Services',
+            languageProvider.isArabic
+                ? 'التعرف على الكلام غير متاح. ثبت خدمات Google Speech'
+                : 'Speech recognition not available. Install Google Speech Services',
           ),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 5),
+          duration: const Duration(seconds: 5),
           action: SnackBarAction(
-            label: 'OK',
+            label: languageProvider.isArabic ? 'حسناً' : 'OK',
             textColor: Colors.white,
             onPressed: () {},
           ),
@@ -221,15 +234,21 @@ class _RemindersPageState extends State<RemindersPage>
 
     _hapticFeedback();
     await _speak(
-      'Starting voice reminder. Please tell me the title of your reminder',
+      languageProvider.isArabic
+          ? 'بدء التذكير الصوتي. من فضلك أخبرني بعنوان التذكير'
+          : 'Starting voice reminder. Please tell me the title of your reminder',
     );
     await Future.delayed(const Duration(milliseconds: 3000));
     _listenForVoiceInput();
   }
 
   Future<void> _listenForVoiceInput() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (!_speech.isAvailable) {
-      _speak('Speech recognition is not available');
+      _speak(languageProvider.isArabic
+          ? 'التعرف على الكلام غير متاح'
+          : 'Speech recognition is not available');
       setState(() {
         _isVoiceMode = false;
         _isListening = false;
@@ -248,17 +267,20 @@ class _RemindersPageState extends State<RemindersPage>
       },
       listenFor: const Duration(seconds: 30),
       pauseFor: const Duration(seconds: 10),
-      localeId: 'en_US',
+      localeId: languageProvider.languageCode == 'ar' ? 'ar_SA' : 'en_US',
       cancelOnError: false,
       partialResults: false,
     );
   }
 
   Future<void> _processVoiceInput(String input) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     setState(() => _isListening = false);
 
     if (input.isEmpty) {
-      await _speak('Could not hear you clearly. Voice reminder cancelled');
+      await _speak(languageProvider.isArabic
+          ? 'لم أتمكن من سماعك بوضوح. تم إلغاء التذكير الصوتي'
+          : 'Could not hear you clearly. Voice reminder cancelled');
       setState(() {
         _isVoiceMode = false;
         _voiceStep = 0;
@@ -270,7 +292,9 @@ class _RemindersPageState extends State<RemindersPage>
       case 0: // Title
         _voiceTitle = input;
         await _speak(
-          'Got it. Title is: $input. Now, when would you like to be reminded? Say the date and time',
+          languageProvider.isArabic
+              ? 'حسناً. العنوان هو: $input. الآن، متى تريد أن يتم تذكيرك؟ قل التاريخ والوقت'
+              : 'Got it. Title is: $input. Now, when would you like to be reminded? Say the date and time',
         );
         setState(() => _voiceStep = 1);
         await Future.delayed(const Duration(milliseconds: 4000));
@@ -283,14 +307,18 @@ class _RemindersPageState extends State<RemindersPage>
           _voiceDate = '${dateTime.day}/${dateTime.month}/${dateTime.year}';
           _voiceTime = _formatTime(dateTime);
           await _speak(
-            'Perfect. Reminder set for ${_formatDateForSpeech(dateTime)} at ${_voiceTime}. Would you like this reminder to repeat? Say one time, daily, or weekly',
+            languageProvider.isArabic
+                ? 'ممتاز. تم تعيين التذكير لـ ${_formatDateForSpeech(dateTime)} في ${_voiceTime}. هل تريد تكرار هذا التذكير؟ قل مرة واحدة أو يومياً أو أسبوعياً'
+                : 'Perfect. Reminder set for ${_formatDateForSpeech(dateTime)} at ${_voiceTime}. Would you like this reminder to repeat? Say one time, daily, or weekly',
           );
           setState(() => _voiceStep = 2);
           await Future.delayed(const Duration(milliseconds: 4000));
           _listenForVoiceInput();
         } else {
           await _speak(
-            'Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM',
+            languageProvider.isArabic
+                ? 'آسف، لم أتمكن من فهم التاريخ والوقت. حاول مرة أخرى. على سبيل المثال، قل: غداً الساعة 5 مساءً، أو الاثنين القادم الساعة 3 مساءً'
+                : 'Sorry, I could not understand the date and time. Please try again. For example, say: tomorrow at 5 PM, or next Monday at 3 PM',
           );
           await Future.delayed(const Duration(milliseconds: 3500));
           _listenForVoiceInput();
@@ -298,16 +326,18 @@ class _RemindersPageState extends State<RemindersPage>
         break;
 
       case 2: // Frequency
-        if (input.toLowerCase().contains('daily')) {
-          _voiceFrequency = 'Daily';
-        } else if (input.toLowerCase().contains('weekly')) {
-          _voiceFrequency = 'Weekly';
+        if (input.toLowerCase().contains('daily') || input.contains('يومي')) {
+          _voiceFrequency = languageProvider.isArabic ? 'يومياً' : 'Daily';
+        } else if (input.toLowerCase().contains('weekly') || input.contains('أسبوعي')) {
+          _voiceFrequency = languageProvider.isArabic ? 'أسبوعياً' : 'Weekly';
         } else {
-          _voiceFrequency = 'One time';
+          _voiceFrequency = languageProvider.isArabic ? 'مرة واحدة' : 'One time';
         }
 
         await _speak(
-          'Understood. Frequency is ${_voiceFrequency}. Creating your reminder now',
+          languageProvider.isArabic
+              ? 'مفهوم. التكرار هو $_voiceFrequency. جاري إنشاء التذكير الآن'
+              : 'Understood. Frequency is $_voiceFrequency. Creating your reminder now',
         );
         await Future.delayed(const Duration(milliseconds: 2000));
         await _saveVoiceReminder();
@@ -322,42 +352,49 @@ class _RemindersPageState extends State<RemindersPage>
     TimeOfDay? time;
 
     // Parse date
-    if (lowerInput.contains('today')) {
+    if (lowerInput.contains('today') || lowerInput.contains('اليوم')) {
       date = now;
-    } else if (lowerInput.contains('tomorrow')) {
+    } else if (lowerInput.contains('tomorrow') || lowerInput.contains('غد')) {
       date = now.add(const Duration(days: 1));
     } else if (lowerInput.contains('next monday') ||
-        lowerInput.contains('monday')) {
+        lowerInput.contains('monday') ||
+        lowerInput.contains('الاثنين')) {
       int daysToAdd = (DateTime.monday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
     } else if (lowerInput.contains('next tuesday') ||
-        lowerInput.contains('tuesday')) {
+        lowerInput.contains('tuesday') ||
+        lowerInput.contains('الثلاثاء')) {
       int daysToAdd = (DateTime.tuesday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
     } else if (lowerInput.contains('next wednesday') ||
-        lowerInput.contains('wednesday')) {
+        lowerInput.contains('wednesday') ||
+        lowerInput.contains('الأربعاء')) {
       int daysToAdd = (DateTime.wednesday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
     } else if (lowerInput.contains('next thursday') ||
-        lowerInput.contains('thursday')) {
+        lowerInput.contains('thursday') ||
+        lowerInput.contains('الخميس')) {
       int daysToAdd = (DateTime.thursday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
     } else if (lowerInput.contains('next friday') ||
-        lowerInput.contains('friday')) {
+        lowerInput.contains('friday') ||
+        lowerInput.contains('الجمعة')) {
       int daysToAdd = (DateTime.friday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
     } else if (lowerInput.contains('next saturday') ||
-        lowerInput.contains('saturday')) {
+        lowerInput.contains('saturday') ||
+        lowerInput.contains('السبت')) {
       int daysToAdd = (DateTime.saturday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
     } else if (lowerInput.contains('next sunday') ||
-        lowerInput.contains('sunday')) {
+        lowerInput.contains('sunday') ||
+        lowerInput.contains('الأحد')) {
       int daysToAdd = (DateTime.sunday - now.weekday + 7) % 7;
       if (daysToAdd == 0) daysToAdd = 7;
       date = now.add(Duration(days: daysToAdd));
@@ -367,7 +404,7 @@ class _RemindersPageState extends State<RemindersPage>
 
     // Parse time
     final timeRegex = RegExp(
-      r'(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)?',
+      r'(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.|صباح|مساء)?',
       caseSensitive: false,
     );
     final match = timeRegex.firstMatch(lowerInput);
@@ -376,13 +413,13 @@ class _RemindersPageState extends State<RemindersPage>
       int hour = int.parse(match.group(1)!);
       final period = match.group(2)?.toLowerCase() ?? '';
 
-      if (period.contains('pm') && hour != 12) {
+      if (period.contains('pm') || period.contains('مساء') && hour != 12) {
         hour += 12;
-      } else if (period.contains('am') && hour == 12) {
+      } else if ((period.contains('am') || period.contains('صباح')) && hour == 12) {
         hour = 0;
       } else if (period.isEmpty &&
           hour < 12 &&
-          lowerInput.contains('evening')) {
+          (lowerInput.contains('evening') || lowerInput.contains('مساء'))) {
         hour += 12;
       } else if (period.isEmpty && hour < 8) {
         hour += 12;
@@ -407,34 +444,50 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   String _formatDateForSpeech(DateTime date) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final now = DateTime.now();
     if (date.year == now.year &&
         date.month == now.month &&
         date.day == now.day) {
-      return 'today';
+      return languageProvider.isArabic ? 'اليوم' : 'today';
     } else if (date.year == now.year &&
         date.month == now.month &&
         date.day == now.day + 1) {
-      return 'tomorrow';
+      return languageProvider.isArabic ? 'غداً' : 'tomorrow';
     } else {
       return '${_getWeekdayName(date.weekday)}, ${_getMonthName(date.month)} ${date.day}';
     }
   }
 
   String _getWeekdayName(int weekday) {
-    const weekdays = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
-    ];
-    return weekdays[weekday - 1];
-  }
-
-  Future<void> _saveVoiceReminder() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
+    if (languageProvider.isArabic) {
+      const weekdays = [
+        'الاثنين',
+        'الثلاثاء',
+        'الأربعاء',
+        'الخميس',
+        'الجمعة',
+        'السبت',
+        'الأحد',
+      ];
+      return weekdays[weekday - 1];
+    } else {
+      const weekdays = [
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+        'Sunday',
+      ];
+      return weekdays[weekday - 1];
+    }
+  }Future<void> _saveVoiceReminder() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
       final user = _auth.currentUser;
       if (user == null) return;
@@ -477,12 +530,16 @@ class _RemindersPageState extends State<RemindersPage>
 
       _hapticFeedback();
       await _speak(
-        'Reminder created successfully. Title: $_voiceTitle, Time: $_voiceTime, Frequency: $_voiceFrequency',
+        languageProvider.isArabic
+            ? 'تم إنشاء التذكير بنجاح. العنوان: $_voiceTitle، الوقت: $_voiceTime، التكرار: $_voiceFrequency'
+            : 'Reminder created successfully. Title: $_voiceTitle, Time: $_voiceTime, Frequency: $_voiceFrequency',
       );
     } catch (e) {
       print('Error saving voice reminder: $e');
       await _speak(
-        'Sorry, there was an error creating your reminder. Please try again',
+        languageProvider.isArabic
+            ? 'آسف، حدث خطأ في إنشاء التذكير. حاول مرة أخرى'
+            : 'Sorry, there was an error creating your reminder. Please try again',
       );
       setState(() {
         _isVoiceMode = false;
@@ -492,6 +549,8 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   Future<void> _deleteReminderFromFirestore(String reminderId) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
       final user = _auth.currentUser;
       if (user == null) return;
@@ -507,7 +566,7 @@ class _RemindersPageState extends State<RemindersPage>
         reminders.removeWhere((reminder) => reminder.id == reminderId);
       });
 
-      _speak('Reminder deleted');
+      _speak(languageProvider.isArabic ? 'تم حذف التذكير' : 'Reminder deleted');
       _hapticFeedback();
     } catch (e) {
       print('Error deleting reminder: $e');
@@ -571,6 +630,8 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
@@ -594,7 +655,7 @@ class _RemindersPageState extends State<RemindersPage>
               button: true,
               child: GestureDetector(
                 onTap: () {
-                  _speak('Going back');
+                  _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                   Future.delayed(const Duration(milliseconds: 800), () {
                     Navigator.pop(context);
                   });
@@ -603,7 +664,7 @@ class _RemindersPageState extends State<RemindersPage>
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
+                    gradient: const LinearGradient(
                       colors: [vibrantPurple, primaryPurple],
                     ),
                     borderRadius: BorderRadius.circular(18),
@@ -615,9 +676,11 @@ class _RemindersPageState extends State<RemindersPage>
                       ),
                     ],
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Icon(
-                      Icons.arrow_back_ios_new,
+                      languageProvider.isArabic
+                          ? Icons.arrow_forward_ios
+                          : Icons.arrow_back_ios_new,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -631,7 +694,7 @@ class _RemindersPageState extends State<RemindersPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'My Reminders',
+                    languageProvider.isArabic ? 'تذكيراتي' : 'My Reminders',
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.w900,
@@ -644,7 +707,9 @@ class _RemindersPageState extends State<RemindersPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${reminders.length} Active Reminders',
+                    languageProvider.isArabic
+                        ? '${reminders.length} ${reminders.length == 1 ? 'تذكير نشط' : 'تذكيرات نشطة'}'
+                        : '${reminders.length} Active Reminder${reminders.length == 1 ? '' : 's'}',
                     style: TextStyle(
                       fontSize: 14,
                       color: deepPurple.withOpacity(0.6),
@@ -696,6 +761,7 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   Widget _buildReminderCard(ReminderItem reminder, int index) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     final isToday = _isToday(reminder.date);
 
     return Semantics(
@@ -750,7 +816,7 @@ class _RemindersPageState extends State<RemindersPage>
                         children: [
                           Text(
                             '${reminder.date.day}',
-                            style: TextStyle(
+                            style: const TextStyle(
                               color: deepPurple,
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
@@ -797,9 +863,9 @@ class _RemindersPageState extends State<RemindersPage>
                                   ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: const Text(
-                                  'TODAY',
-                                  style: TextStyle(
+                                child: Text(
+                                  languageProvider.isArabic ? 'اليوم' : 'TODAY',
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
@@ -878,6 +944,8 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   Widget _buildEmptyState() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -903,9 +971,11 @@ class _RemindersPageState extends State<RemindersPage>
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'No reminders added yet',
-              style: TextStyle(
+            Text(
+              languageProvider.isArabic
+                  ? 'لم تتم إضافة تذكيرات بعد'
+                  : 'No reminders added yet',
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: deepPurple,
@@ -913,7 +983,9 @@ class _RemindersPageState extends State<RemindersPage>
             ),
             const SizedBox(height: 8),
             Text(
-              'Tap the button below to add your first reminder',
+              languageProvider.isArabic
+                  ? 'اضغط على الزر أدناه لإضافة أول تذكير'
+                  : 'Tap the button below to add your first reminder',
               style: TextStyle(
                 fontSize: 14,
                 color: deepPurple.withOpacity(0.5),
@@ -927,6 +999,8 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   Widget _buildVoiceOverlay() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Container(
       color: Colors.black.withOpacity(0.85),
       child: Center(
@@ -979,7 +1053,9 @@ class _RemindersPageState extends State<RemindersPage>
               ),
               const SizedBox(height: 30),
               Text(
-                _isListening ? 'Listening...' : _getVoiceStepText(),
+                _isListening
+                    ? (languageProvider.isArabic ? 'جاري الاستماع...' : 'Listening...')
+                    : _getVoiceStepText(),
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -1004,7 +1080,7 @@ class _RemindersPageState extends State<RemindersPage>
                 child: OutlinedButton(
                   onPressed: () {
                     _hapticFeedback();
-                    _speak('Cancelled');
+                    _speak(languageProvider.isArabic ? 'تم الإلغاء' : 'Cancelled');
                     _speech.stop();
                     setState(() {
                       _isVoiceMode = false;
@@ -1022,9 +1098,9 @@ class _RemindersPageState extends State<RemindersPage>
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
+                  child: Text(
+                    languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: vibrantPurple,
@@ -1040,32 +1116,48 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   String _getVoiceStepText() {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     switch (_voiceStep) {
       case 0:
-        return 'What\'s the reminder title?';
+        return languageProvider.isArabic
+            ? 'ما هو عنوان التذكير؟'
+            : 'What\'s the reminder title?';
       case 1:
-        return 'When to remind you?';
+        return languageProvider.isArabic
+            ? 'متى تريد التذكير؟'
+            : 'When to remind you?';
       case 2:
-        return 'How often to repeat?';
+        return languageProvider.isArabic
+            ? 'كم مرة تريد التكرار؟'
+            : 'How often to repeat?';
       default:
-        return 'Processing...';
+        return languageProvider.isArabic ? 'جاري المعالجة...' : 'Processing...';
     }
   }
 
   String _getVoiceStepHint() {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     switch (_voiceStep) {
       case 0:
-        return 'Say the title of your reminder';
+        return languageProvider.isArabic
+            ? 'قل عنوان التذكير'
+            : 'Say the title of your reminder';
       case 1:
-        return 'Say the date and time\nExample: "Tomorrow at 5 PM" or "Next Monday at 3 PM"';
+        return languageProvider.isArabic
+            ? 'قل التاريخ والوقت\nمثال: "غداً الساعة 5 مساءً" أو "الاثنين القادم الساعة 3 مساءً"'
+            : 'Say the date and time\nExample: "Tomorrow at 5 PM" or "Next Monday at 3 PM"';
       case 2:
-        return 'Say "One time", "Daily", or "Weekly"';
+        return languageProvider.isArabic
+            ? 'قل "مرة واحدة" أو "يومياً" أو "أسبوعياً"'
+            : 'Say "One time", "Daily", or "Weekly"';
       default:
         return '';
     }
-  }
-
-  Widget _buildVoiceAddButton() {
+  }Widget _buildVoiceAddButton() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 55),
       child: Semantics(
@@ -1102,9 +1194,11 @@ class _RemindersPageState extends State<RemindersPage>
                   child: const Icon(Icons.mic, color: Colors.white, size: 26),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Add Voice Reminder',
-                  style: TextStyle(
+                Text(
+                  languageProvider.isArabic
+                      ? 'إضافة تذكير صوتي'
+                      : 'Add Voice Reminder',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
                     fontSize: 20,
@@ -1120,7 +1214,9 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   void _deleteReminder(int index) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final reminder = reminders[index];
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -1152,9 +1248,9 @@ class _RemindersPageState extends State<RemindersPage>
                       ),
                     ),
                     const SizedBox(width: 13),
-                    const Text(
-                      'Delete Reminder',
-                      style: TextStyle(
+                    Text(
+                      languageProvider.isArabic ? 'حذف التذكير' : 'Delete Reminder',
+                      style: const TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
                         color: deepPurple,
@@ -1166,7 +1262,9 @@ class _RemindersPageState extends State<RemindersPage>
                 RichText(
                   textAlign: TextAlign.center,
                   text: TextSpan(
-                    text: 'Are you sure you want to delete ',
+                    text: languageProvider.isArabic
+                        ? 'هل أنت متأكد من حذف '
+                        : 'Are you sure you want to delete ',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -1181,7 +1279,7 @@ class _RemindersPageState extends State<RemindersPage>
                           fontSize: 17,
                         ),
                       ),
-                      const TextSpan(text: '?'),
+                      TextSpan(text: languageProvider.isArabic ? '؟' : '?'),
                     ],
                   ),
                 ),
@@ -1192,7 +1290,7 @@ class _RemindersPageState extends State<RemindersPage>
                       child: ElevatedButton(
                         onPressed: () {
                           _hapticFeedback();
-                          _speak('Cancelled');
+                          _speak(languageProvider.isArabic ? 'تم الإلغاء' : 'Cancelled');
                           Navigator.pop(context);
                         },
                         style: ElevatedButton.styleFrom(
@@ -1208,9 +1306,9 @@ class _RemindersPageState extends State<RemindersPage>
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
+                        child: Text(
+                          languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                           ),
@@ -1232,9 +1330,9 @@ class _RemindersPageState extends State<RemindersPage>
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Text(
-                          'Delete',
-                          style: TextStyle(
+                        child: Text(
+                          languageProvider.isArabic ? 'حذف' : 'Delete',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
@@ -1260,29 +1358,50 @@ class _RemindersPageState extends State<RemindersPage>
   }
 
   String _getMonthName(int month) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return months[month - 1];
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
+    if (languageProvider.isArabic) {
+      const months = [
+        'يناير',
+        'فبراير',
+        'مارس',
+        'أبريل',
+        'مايو',
+        'يونيو',
+        'يوليو',
+        'أغسطس',
+        'سبتمبر',
+        'أكتوبر',
+        'نوفمبر',
+        'ديسمبر',
+      ];
+      return months[month - 1];
+    } else {
+      const months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
+      return months[month - 1];
+    }
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
       children: [
-        // الفوتر الأساسي
         ClipRRect(
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
@@ -1318,13 +1437,14 @@ class _RemindersPageState extends State<RemindersPage>
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
                       onTap: () async {
                         _hapticFeedback();
-                        _speak('Navigating to Home page'); // بدون انتظار
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigating to Home page');
 
-                        // حطّي المهلة اللي تبينها (مثلاً 1500ms)
                         await Future.delayed(
                           const Duration(milliseconds: 1500),
                         );
@@ -1340,21 +1460,25 @@ class _RemindersPageState extends State<RemindersPage>
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                       isActive: true,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('You are already on reminders page');
+                        _speak(languageProvider.isArabic
+                            ? 'أنت بالفعل في صفحة التذكيرات'
+                            : 'You are already on reminders page');
                       },
                     ),
                     const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Contacts, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، تخزين وإدارة جهات اتصال الطوارئ'
+                            : 'Contacts, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1365,12 +1489,14 @@ class _RemindersPageState extends State<RemindersPage>
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -1387,7 +1513,6 @@ class _RemindersPageState extends State<RemindersPage>
           ),
         ),
 
-        // 🔴 الدائرة الكبيرة للطوارئ
         Positioned(
           bottom: 40,
           child: Transform.translate(
@@ -1399,8 +1524,9 @@ class _RemindersPageState extends State<RemindersPage>
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
-                  _speak('Emergency SOS. Contact emergency services quickly');
-                  // توديك لصفحة SOS
+                  _speak(languageProvider.isArabic
+                      ? 'طوارئ، الاتصال بخدمات الطوارئ بسرعة'
+                      : 'Emergency SOS. Contact emergency services quickly');
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const SosScreen()),
@@ -1447,7 +1573,6 @@ class _RemindersPageState extends State<RemindersPage>
     );
   }
 
-  // ✅ تأكد إن دالة _buildNavButton موجودة (هي موجودة عندك في الكود)
   Widget _buildNavButton({
     required IconData icon,
     required String label,

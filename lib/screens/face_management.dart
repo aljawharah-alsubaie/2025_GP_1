@@ -5,6 +5,8 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import '../services/face_recognition_api.dart';
 import 'home_page.dart';
 import 'reminders.dart';
@@ -35,7 +37,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   AnimationController? _fadeController;
   AnimationController? _slideController;
 
-  // 🎨 Purple color scheme matching HomePage
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -70,7 +71,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -93,6 +95,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Future<void> _loadPeople() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     setState(() => _isLoading = true);
 
     final user = FirebaseAuth.instance.currentUser;
@@ -104,7 +107,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     try {
       final persons = await FaceRecognitionAPI.listPersons(user.uid);
       
-      // 🔍 Debug: طباعة الـ response
       print('=====================================');
       print('📋 Total persons loaded: ${persons.length}');
       print('=====================================');
@@ -129,7 +131,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               'numPhotos': person.numPhotos,
             };
             
-            // 🔍 Debug: طباعة البيانات المحفوظة
             print('💾 Saved person data: $personData');
             
             return personData;
@@ -138,32 +139,40 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         });
 
         if (persons.isEmpty) {
-          _speak('No persons found. Add someone to get started.');
+          _speak(languageProvider.isArabic
+              ? 'لم يتم العثور على أشخاص. أضف شخصاً للبدء'
+              : 'No persons found. Add someone to get started.');
         } else {
-          _speak('${persons.length} person${persons.length > 1 ? 's' : ''} found');
+          _speak(languageProvider.isArabic
+              ? 'تم العثور على ${persons.length} ${persons.length > 1 ? 'أشخاص' : 'شخص'}'
+              : '${persons.length} person${persons.length > 1 ? 's' : ''} found');
         }
       }
     } catch (e) {
       print('❌ Error loading people: $e');
       if (mounted) {
         setState(() => _isLoading = false);
-        _showSnackBar('Error loading list: $e', Colors.red);
+        _showSnackBar(
+          languageProvider.isArabic
+              ? 'خطأ في تحميل القائمة: $e'
+              : 'Error loading list: $e',
+          Colors.red,
+        );
       }
     }
   }
 
   Future<String?> _deletePerson(String personId) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
 
     try {
-      // جلب اسم الشخص قبل الحذف
-      String personName = 'Unknown';
+      String personName = languageProvider.isArabic ? 'غير معروف' : 'Unknown';
       
-      // البحث عن الشخص في القائمة
       for (var p in _people) {
         if (p['id'] == personId) {
-          personName = p['name'] as String? ?? 'Unknown';
+          personName = p['name'] as String? ?? (languageProvider.isArabic ? 'غير معروف' : 'Unknown');
           break;
         }
       }
@@ -177,12 +186,22 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         await _loadPeople();
         return personName;
       } else {
-        _showSnackBar('Failed to delete person', Colors.red);
+        _showSnackBar(
+          languageProvider.isArabic
+              ? 'فشل حذف الشخص'
+              : 'Failed to delete person',
+          Colors.red,
+        );
         return null;
       }
     } catch (e) {
       print('❌ Error deleting person: $e');
-      _showSnackBar('Error deleting person: $e', Colors.red);
+      _showSnackBar(
+        languageProvider.isArabic
+            ? 'خطأ في حذف الشخص: $e'
+            : 'Error deleting person: $e',
+        Colors.red,
+      );
       return null;
     }
   }
@@ -205,9 +224,12 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     String personId,
     String personName,
   ) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     _hapticFeedback();
 
-    final safeName = (personName.isNotEmpty) ? personName : 'this person';
+    final safeName = (personName.isNotEmpty)
+        ? personName
+        : (languageProvider.isArabic ? 'هذا الشخص' : 'this person');
 
     await showDialog(
       context: context,
@@ -225,8 +247,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 announced = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _speakNow(
-                    'Delete person. Are you sure you want to delete $safeName? '
-                    'This action cannot be undone. Buttons: Confirm on the top, Cancel at the bottom.',
+                    languageProvider.isArabic
+                        ? 'حذف شخص. هل أنت متأكد من حذف $safeName؟ هذا الإجراء لا يمكن التراجع عنه. الأزرار: تأكيد في الأعلى، إلغاء في الأسفل'
+                        : 'Delete person. Are you sure you want to delete $safeName? This action cannot be undone. Buttons: Confirm on the top, Cancel at the bottom.',
                   );
                 });
               }
@@ -254,9 +277,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       ),
                     ),
                     const SizedBox(height: 20),
-                    const Text(
-                      'Delete Person',
-                      style: TextStyle(
+                    Text(
+                      languageProvider.isArabic ? 'حذف الشخص' : 'Delete Person',
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
                         fontSize: 26,
@@ -267,8 +290,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                   ],
                 ),
                 content: Text(
-                  'Are you sure you want to delete "$safeName"? '
-                  'This action cannot be undone.',
+                  languageProvider.isArabic
+                      ? 'هل أنت متأكد من حذف "$safeName"؟ هذا الإجراء لا يمكن التراجع عنه.'
+                      : 'Are you sure you want to delete "$safeName"? This action cannot be undone.',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 19,
@@ -296,7 +320,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                     setState(() => isDeleting = true);
 
                                     await _speakNow(
-                                      'Deleting $safeName, please wait.',
+                                      languageProvider.isArabic
+                                          ? 'جاري حذف $safeName، انتظر من فضلك'
+                                          : 'Deleting $safeName, please wait.',
                                     );
 
                                     final deletedName = await _deletePerson(
@@ -311,19 +337,25 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                           : safeName;
 
                                       _showSnackBar(
-                                        '$showName deleted successfully!',
+                                        languageProvider.isArabic
+                                            ? 'تم حذف $showName بنجاح!'
+                                            : '$showName deleted successfully!',
                                         Colors.green,
                                       );
 
                                       await _speak(
-                                        'Person $showName deleted successfully.',
+                                        languageProvider.isArabic
+                                            ? 'تم حذف $showName بنجاح'
+                                            : 'Person $showName deleted successfully.',
                                       );
 
                                       Navigator.pop(dialogContext);
                                     } else {
                                       setState(() => isDeleting = false);
                                       await _speak(
-                                        'Failed to delete $safeName, please try again.',
+                                        languageProvider.isArabic
+                                            ? 'فشل حذف $safeName، حاول مرة أخرى'
+                                            : 'Failed to delete $safeName, please try again.',
                                       );
                                     }
                                   },
@@ -336,8 +368,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                             child: isDeleting
                                 ? Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: const [
-                                      SizedBox(
+                                    children: [
+                                      const SizedBox(
                                         width: 24,
                                         height: 24,
                                         child: CircularProgressIndicator(
@@ -348,10 +380,10 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                               ),
                                         ),
                                       ),
-                                      SizedBox(width: 10),
+                                      const SizedBox(width: 10),
                                       Text(
-                                        'Deleting...',
-                                        style: TextStyle(
+                                        languageProvider.isArabic ? 'جاري الحذف...' : 'Deleting...',
+                                        style: const TextStyle(
                                           color: Color(0xFFD32F2F),
                                           fontWeight: FontWeight.w700,
                                           fontSize: 20,
@@ -360,9 +392,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                       ),
                                     ],
                                   )
-                                : const Text(
-                                    'Confirm',
-                                    style: TextStyle(
+                                : Text(
+                                    languageProvider.isArabic ? 'تأكيد' : 'Confirm',
+                                    style: const TextStyle(
                                       color: Color(0xFFD32F2F),
                                       fontWeight: FontWeight.w700,
                                       fontSize: 20,
@@ -389,10 +421,14 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                     _hapticFeedback();
                                     Navigator.pop(dialogContext);
                                     _showSnackBar(
-                                      'Deletion cancelled',
+                                      languageProvider.isArabic
+                                          ? 'تم إلغاء الحذف'
+                                          : 'Deletion cancelled',
                                       Colors.red,
                                     );
-                                    _speak('Deletion cancelled');
+                                    _speak(languageProvider.isArabic
+                                        ? 'تم إلغاء الحذف'
+                                        : 'Deletion cancelled');
                                   },
                             style: TextButton.styleFrom(
                               backgroundColor: Colors.transparent,
@@ -400,9 +436,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                                 borderRadius: BorderRadius.circular(18),
                               ),
                             ),
-                            child: const Text(
-                              'Cancel',
-                              style: TextStyle(
+                            child: Text(
+                              languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w900,
                                 fontSize: 19,
@@ -504,9 +540,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         .toList();
   }
 
-  // ============================================================
-  // 🔐 Build Encrypted & Decrypted Image Widget
-  // ============================================================
   Widget _buildEncryptedImage(String? thumbnailUrl) {
     if (thumbnailUrl == null || thumbnailUrl.isEmpty) {
       return Icon(
@@ -516,7 +549,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       );
     }
 
-    // تحميل وفك تشفير الصورة
     return FutureBuilder<Uint8List?>(
       future: _downloadAndDecryptImage(thumbnailUrl),
       builder: (context, snapshot) {
@@ -530,7 +562,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           );
         }
         
-        // Loading
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
             width: 32,
@@ -542,7 +573,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           );
         }
         
-        // Error or no data
         return Icon(
           Icons.person,
           color: deepPurple.withOpacity(0.5),
@@ -552,9 +582,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     );
   }
 
-  // ============================================================
-  // 🔽 Download and Decrypt Image
-  // ============================================================
   Future<Uint8List?> _downloadAndDecryptImage(String url) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -562,7 +589,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       
       print('🔽 Downloading encrypted image from: $url');
       
-      // 1️⃣ تحميل الملف المشفر
       final response = await http.get(Uri.parse(url));
       
       if (response.statusCode != 200) {
@@ -573,7 +599,6 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       final encryptedBytes = response.bodyBytes;
       print('📦 Downloaded ${encryptedBytes.length} bytes (encrypted)');
       
-      // 2️⃣ فك التشفير
       final decryptedBytes = _decryptThumbnail(encryptedBytes, user.uid);
       
       if (decryptedBytes != null) {
@@ -590,14 +615,10 @@ class _FaceManagementPageState extends State<FaceManagementPage>
     }
   }
 
-  // ============================================================
-  // 🔓 Decrypt Thumbnail (AES-256-CBC)
-  // ============================================================
   Uint8List? _decryptThumbnail(Uint8List encryptedBytes, String userId) {
     try {
       print('🔓 Starting decryption...');
       
-      // 1️⃣ فصل IV عن البيانات المشفرة
       if (encryptedBytes.length < 16) {
         print('❌ File too small (${encryptedBytes.length} bytes)');
         return null;
@@ -609,13 +630,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       print('📦 IV: ${iv.bytes.length} bytes');
       print('📦 Encrypted data: ${encryptedData.length} bytes');
       
-      // 2️⃣ إنشاء Key من user_id (نفس الطريقة في التشفير)
       final keyString = userId.padRight(32).substring(0, 32);
       final key = encrypt.Key.fromUtf8(keyString);
       
       print('🔑 Key (first 8 chars): ${keyString.substring(0, 8)}...');
       
-      // 3️⃣ فك التشفير باستخدام AES-CBC
       final encrypter = encrypt.Encrypter(
         encrypt.AES(
           key,
@@ -634,9 +653,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
       print('❌ Decryption error: $e');
       return null;
     }
-  }
-
-  @override
+  }@override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
       key: _scaffoldMessengerKey,
@@ -677,6 +694,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController ?? const AlwaysStoppedAnimation(1.0),
       child: Container(
@@ -702,7 +721,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                   button: true,
                   child: GestureDetector(
                     onTap: () {
-                      _speak('Going back');
+                      _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                       Future.delayed(const Duration(milliseconds: 800), () {
                         Navigator.pop(context);
                       });
@@ -723,9 +742,11 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                           ),
                         ],
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Icon(
-                          Icons.arrow_back_ios_new,
+                          languageProvider.isArabic
+                              ? Icons.arrow_forward_ios
+                              : Icons.arrow_back_ios_new,
                           color: Colors.white,
                           size: 20,
                         ),
@@ -739,7 +760,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Face Management',
+                        languageProvider.isArabic ? 'إدارة الوجوه' : 'Face Management',
                         style: TextStyle(
                           fontSize: 25,
                           fontWeight: FontWeight.w900,
@@ -752,7 +773,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Manage saved faces',
+                        languageProvider.isArabic ? 'إدارة الوجوه المحفوظة' : 'Manage saved faces',
                         style: TextStyle(
                           fontSize: 13,
                           color: deepPurple.withOpacity(0.8),
@@ -799,7 +820,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       onChanged: (value) =>
                           setState(() => _searchQuery = value),
                       decoration: InputDecoration(
-                        hintText: "Search people...",
+                        hintText: languageProvider.isArabic
+                            ? 'البحث عن الأشخاص...'
+                            : "Search people...",
                         border: InputBorder.none,
                         hintStyle: TextStyle(
                           color: deepPurple.withOpacity(0.7),
@@ -824,6 +847,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Widget _buildPeopleList() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SlideTransition(
       position: _slideController != null
           ? Tween<Offset>(
@@ -853,7 +878,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Widget _buildPersonCard(Map<String, dynamic> person) {
-    // 🔍 Debug: طباعة بيانات الشخص عند بناء الكارت
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     print('🎨 Building card for: ${person['name']}');
     print('🖼️ Photo URLs: ${person['photoUrls']}');
     
@@ -881,7 +907,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
           borderRadius: BorderRadius.circular(20),
           onTap: () async {
             _hapticFeedback();
-            _speak(person['name'] ?? 'Unknown');
+            _speak(person['name'] ?? (languageProvider.isArabic ? 'غير معروف' : 'Unknown'));
             await Navigator.push(
               context,
               MaterialPageRoute(
@@ -910,7 +936,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                   ),
                   padding: const EdgeInsets.all(3),
                   child: hasPhoto
-                      ? _buildEncryptedImage(person['photoUrls'][0])  // ✅ فك التشفير
+                      ? _buildEncryptedImage(person['photoUrls'][0])
                       : CircleAvatar(
                           radius: 32,
                           backgroundColor: Colors.white,
@@ -927,7 +953,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        person['name'] ?? 'Unknown',
+                        person['name'] ?? (languageProvider.isArabic ? 'غير معروف' : 'Unknown'),
                         style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w700,
@@ -936,7 +962,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${person['numPhotos'] ?? 0} photo${(person['numPhotos'] ?? 0) > 1 ? 's' : ''}',
+                        languageProvider.isArabic
+                            ? '${person['numPhotos'] ?? 0} ${(person['numPhotos'] ?? 0) > 1 ? 'صور' : 'صورة'}'
+                            : '${person['numPhotos'] ?? 0} photo${(person['numPhotos'] ?? 0) > 1 ? 's' : ''}',
                         style: TextStyle(
                           fontSize: 13,
                           color: deepPurple.withOpacity(0.6),
@@ -949,7 +977,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                 GestureDetector(
                   onTap: () async {
                     _hapticFeedback();
-                    _speak('Edit ${person['name']}');
+                    _speak(languageProvider.isArabic
+                        ? 'تعديل ${person['name']}'
+                        : 'Edit ${person['name']}');
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -982,7 +1012,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     _hapticFeedback();
                     _showDeleteConfirmation(
                       person['id'],
-                      person['name'] ?? 'Unknown',
+                      person['name'] ?? (languageProvider.isArabic ? 'غير معروف' : 'Unknown'),
                     );
                   },
                   child: Container(
@@ -1012,6 +1042,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Widget _buildEmptySearch() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -1024,9 +1056,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               color: deepPurple.withOpacity(0.3),
             ),
             const SizedBox(height: 16),
-            const Text(
-              "No people found",
-              style: TextStyle(
+            Text(
+              languageProvider.isArabic ? 'لم يتم العثور على أشخاص' : "No people found",
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: deepPurple,
@@ -1034,7 +1066,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             ),
             const SizedBox(height: 8),
             Text(
-              "Try a different search term",
+              languageProvider.isArabic ? 'جرب مصطلح بحث مختلف' : "Try a different search term",
               style: TextStyle(
                 fontSize: 14,
                 color: deepPurple.withOpacity(0.5),
@@ -1047,6 +1079,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Widget _buildEmptyState() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -1072,9 +1106,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              "No people added yet",
-              style: TextStyle(
+            Text(
+              languageProvider.isArabic ? 'لم تتم إضافة أشخاص بعد' : "No people added yet",
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: deepPurple,
@@ -1082,7 +1116,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             ),
             const SizedBox(height: 8),
             Text(
-              "Tap the button below to add your first person",
+              languageProvider.isArabic
+                  ? 'اضغط على الزر أدناه لإضافة أول شخص'
+                  : "Tap the button below to add your first person",
               style: TextStyle(
                 fontSize: 14,
                 color: deepPurple.withOpacity(0.5),
@@ -1096,6 +1132,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Widget _buildAddButton() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
       child: Semantics(
@@ -1105,7 +1143,7 @@ class _FaceManagementPageState extends State<FaceManagementPage>
         child: GestureDetector(
           onTap: () async {
             _hapticFeedback();
-            _speak('Add New Person');
+            _speak(languageProvider.isArabic ? 'إضافة شخص جديد' : 'Add New Person');
             await Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const AddPersonPage()),
@@ -1144,9 +1182,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Add New Person',
-                  style: TextStyle(
+                Text(
+                  languageProvider.isArabic ? 'إضافة شخص جديد' : 'Add New Person',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
                     fontSize: 20,
@@ -1162,6 +1200,8 @@ class _FaceManagementPageState extends State<FaceManagementPage>
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
@@ -1201,12 +1241,14 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
                       description: 'Navigate to Homepage',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigate to Homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1217,11 +1259,13 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                       description: 'Manage your reminders and notifications',
                       onTap: () {
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -1234,11 +1278,13 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
                       description:
                           'Manage your emergency contacts and important people',
                       onTap: () {
-                        _speak('Contact, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، تخزين وإدارة جهات اتصال الطوارئ'
+                            : 'Contact, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1249,11 +1295,13 @@ class _FaceManagementPageState extends State<FaceManagementPage>
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                       description: 'Adjust app settings and preferences',
                       onTap: () {
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -1275,7 +1323,9 @@ class _FaceManagementPageState extends State<FaceManagementPage>
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+                languageProvider.isArabic
+                    ? 'طوارئ، إرسال تنبيه طوارئ لجهات الاتصال الموثوقة عندما تحتاج المساعدة'
+                    : 'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
               );
               Navigator.push(
                 context,

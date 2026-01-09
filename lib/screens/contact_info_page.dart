@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import './reminders.dart';
 import './home_page.dart';
 import './settings.dart';
@@ -31,12 +33,11 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   String _searchQuery = '';
   bool _isListening = false;
 
-  // Voice control state
   int _voiceStep = 0;
   String _voiceName = '';
   String _voicePhone = '';
   bool _isVoiceMode = false;
-  String? _editingContactId; // For voice edit mode
+  String? _editingContactId;
 
   AnimationController? _fadeController;
   AnimationController? _slideController;
@@ -73,12 +74,15 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
 
   Future<void> _initSpeech() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     _speech = stt.SpeechToText();
     bool available = await _speech.initialize(
       onError: (error) {
@@ -95,7 +99,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               _voiceStep = 0;
               _editingContactId = null;
             });
-            _speak('Could not hear you clearly. Voice contact cancelled');
+            _speak(languageProvider.isArabic
+                ? 'لم نتمكن من سماعك بوضوح. تم إلغاء جهة الاتصال الصوتية'
+                : 'Could not hear you clearly. Voice contact cancelled');
           }
         } else if (errorMsg.contains('network')) {
           if (mounted && _isVoiceMode) {
@@ -105,7 +111,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               _voiceStep = 0;
               _editingContactId = null;
             });
-            _speak('Network error. Voice contact cancelled');
+            _speak(languageProvider.isArabic
+                ? 'خطأ في الشبكة. تم إلغاء جهة الاتصال الصوتية'
+                : 'Network error. Voice contact cancelled');
           }
         } else if (errorMsg.contains('permission')) {
           if (mounted && _isVoiceMode) {
@@ -115,7 +123,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               _voiceStep = 0;
               _editingContactId = null;
             });
-            _speak('Microphone permission denied. Voice contact cancelled');
+            _speak(languageProvider.isArabic
+                ? 'تم رفض إذن الميكروفون. تم إلغاء جهة الاتصال الصوتية'
+                : 'Microphone permission denied. Voice contact cancelled');
           }
         } else {
           if (mounted && _isVoiceMode) {
@@ -125,7 +135,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               _voiceStep = 0;
               _editingContactId = null;
             });
-            _speak('Speech recognition error. Voice contact cancelled');
+            _speak(languageProvider.isArabic
+                ? 'خطأ في التعرف على الصوت. تم إلغاء جهة الاتصال الصوتية'
+                : 'Speech recognition error. Voice contact cancelled');
           }
         }
       },
@@ -137,7 +149,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     if (!available) {
       print('Speech recognition not available');
       _speak(
-        'Speech recognition is not available on this device. Please install Google Speech Services from Play Store',
+        languageProvider.isArabic
+            ? 'التعرف على الصوت غير متاح على هذا الجهاز. من فضلك قم بتثبيت خدمات Google Speech من متجر Play'
+            : 'Speech recognition is not available on this device. Please install Google Speech Services from Play Store',
       );
     } else {
       print('Speech recognition initialized successfully');
@@ -231,9 +245,12 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading contacts: $e'),
+            content: Text(languageProvider.isArabic
+                ? 'خطأ في تحميل جهات الاتصال: $e'
+                : 'Error loading contacts: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -246,14 +263,20 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     String? currentName,
     String? currentPhone,
   }) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (!_speech.isAvailable) {
       _speak(
-        'Speech recognition is not available. Please install Google Speech Services from Play Store',
+        languageProvider.isArabic
+            ? 'التعرف على الصوت غير متاح. من فضلك قم بتثبيت خدمات Google Speech من متجر Play'
+            : 'Speech recognition is not available. Please install Google Speech Services from Play Store',
       );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Speech recognition not available. Install Google Speech Services',
+            languageProvider.isArabic
+                ? 'التعرف على الصوت غير متاح. قم بتثبيت خدمات Google Speech'
+                : 'Speech recognition not available. Install Google Speech Services',
           ),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 5),
@@ -279,13 +302,16 @@ class _ContactInfoPageState extends State<ContactInfoPage>
 
     if (editContactId != null) {
       await _speak(
-        'Starting voice edit for $currentName. Please tell me the new name, or say same to keep it',
+        languageProvider.isArabic
+            ? 'بدء التعديل الصوتي لـ $currentName. من فضلك قل الاسم الجديد، أو قل نفسه للإبقاء عليه'
+            : 'Starting voice edit for $currentName. Please tell me the new name, or say same to keep it',
       );
     } else {
-      await _speak('Starting voice contact. Please tell me the contact name');
+      await _speak(languageProvider.isArabic
+          ? 'بدء جهة الاتصال الصوتية. من فضلك قل اسم جهة الاتصال'
+          : 'Starting voice contact. Please tell me the contact name');
     }
 
-    // ✅ نعطي وقت أطول (4 ثواني) بعد الكلام قبل ما نبدأ الاستماع
     await Future.delayed(const Duration(milliseconds: 4000));
 
     if (!mounted || !_isVoiceMode) return;
@@ -294,8 +320,12 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Future<void> _listenForVoiceInput() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (!_speech.isAvailable) {
-      _speak('Speech recognition is not available');
+      _speak(languageProvider.isArabic
+          ? 'التعرف على الصوت غير متاح'
+          : 'Speech recognition is not available');
       setState(() {
         _isVoiceMode = false;
         _isListening = false;
@@ -307,7 +337,6 @@ class _ContactInfoPageState extends State<ContactInfoPage>
 
     setState(() => _isListening = true);
 
-    // ✅ نعطي اليوزر وقت قبل ما نبدأ الاستماع الفعلي
     await Future.delayed(const Duration(milliseconds: 500));
 
     if (!mounted || !_isVoiceMode) return;
@@ -318,23 +347,25 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           _processVoiceInput(result.recognizedWords);
         }
       },
-      listenFor: const Duration(seconds: 30), // ✅ إجمالي وقت الاستماع
-      pauseFor: const Duration(
-        seconds: 5,
-      ), // ✅ وقت السكوت قبل ما يقطع (4-5 ثواني)
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 5),
       localeId: 'en_US',
       cancelOnError: false,
       partialResults: false,
-      listenMode: stt.ListenMode.confirmation, // ✅ يعطي وقت أطول للتأكيد
+      listenMode: stt.ListenMode.confirmation,
     );
   }
 
   Future<void> _processVoiceInput(String input) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     setState(() => _isListening = false);
 
     if (input.isEmpty) {
-      await _speak('Could not hear you clearly. Please try again');
-      await Future.delayed(const Duration(milliseconds: 3000)); // ✅ 3 ثواني
+      await _speak(languageProvider.isArabic
+          ? 'لم نتمكن من سماعك بوضوح. حاول مرة أخرى'
+          : 'Could not hear you clearly. Please try again');
+      await Future.delayed(const Duration(milliseconds: 3000));
       if (!mounted || !_isVoiceMode) return;
       _listenForVoiceInput();
       return;
@@ -343,46 +374,48 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     switch (_voiceStep) {
       case 0: // Name
         if (_editingContactId != null && input.toLowerCase().contains('same')) {
-          // Keep the same name
           await _speak(
-            'Keeping the name as $_voiceName. Now, please say the phone number, or say same to keep it',
+            languageProvider.isArabic
+                ? 'الإبقاء على الاسم $_voiceName. الآن، من فضلك قل رقم الهاتف، أو قل نفسه للإبقاء عليه'
+                : 'Keeping the name as $_voiceName. Now, please say the phone number, or say same to keep it',
           );
         } else {
           _voiceName = input;
           await _speak(
-            'Got it. Name is: $input. Now, please say the phone number',
+            languageProvider.isArabic
+                ? 'تم. الاسم: $input. الآن، من فضلك قل رقم الهاتف'
+                : 'Got it. Name is: $input. Now, please say the phone number',
           );
         }
         setState(() => _voiceStep = 1);
-        await Future.delayed(const Duration(milliseconds: 4000)); // ✅ 4 ثواني
+        await Future.delayed(const Duration(milliseconds: 4000));
         if (!mounted || !_isVoiceMode) return;
         _listenForVoiceInput();
         break;
 
       case 1: // Phone
         if (_editingContactId != null && input.toLowerCase().contains('same')) {
-          // Keep the same phone
-          await _speak('Keeping the phone number. Updating contact now');
+          await _speak(languageProvider.isArabic
+              ? 'الإبقاء على رقم الهاتف. جاري التحديث الآن'
+              : 'Keeping the phone number. Updating contact now');
           await Future.delayed(const Duration(milliseconds: 2000));
           if (!mounted || !_isVoiceMode) return;
           await _saveVoiceContact();
         } else {
           final phoneNumber = _extractPhoneNumber(input);
 
-          // ✅ أولاً: نشيك إذا الرقم فاضي
           if (phoneNumber == null || phoneNumber.isEmpty) {
             await _speak(
-              'Sorry, I could not understand the phone number. Please say it again clearly. Say each digit separately. For example: zero five one two three four five six seven eight',
+              languageProvider.isArabic
+                  ? 'عذراً، لم أتمكن من فهم رقم الهاتف. من فضلك قله مرة أخرى بوضوح. قل كل رقم على حدة. مثلاً: صفر خمسة واحد اثنين ثلاثة أربعة خمسة ستة سبعة ثمانية'
+                  : 'Sorry, I could not understand the phone number. Please say it again clearly. Say each digit separately. For example: zero five one two three four five six seven eight',
             );
-            await Future.delayed(
-              const Duration(milliseconds: 5000),
-            ); // ✅ 5 ثواني
+            await Future.delayed(const Duration(milliseconds: 5000));
             if (!mounted || !_isVoiceMode) return;
             _listenForVoiceInput();
             return;
           }
 
-          // ✅ ثانياً: نشيك إذا فيه حروف
           String cleanPhone = phoneNumber.replaceAll(
             RegExp(r'[\s\-\(\)\+]'),
             '',
@@ -390,17 +423,16 @@ class _ContactInfoPageState extends State<ContactInfoPage>
 
           if (!RegExp(r'^[0-9]+$').hasMatch(cleanPhone)) {
             await _speak(
-              'I detected letters in the phone number. Please say only numbers. Say each digit separately. For example: zero five one two three four five six seven eight',
+              languageProvider.isArabic
+                  ? 'اكتشفت حروفاً في رقم الهاتف. من فضلك قل الأرقام فقط. قل كل رقم على حدة'
+                  : 'I detected letters in the phone number. Please say only numbers. Say each digit separately',
             );
-            await Future.delayed(
-              const Duration(milliseconds: 5000),
-            ); // ✅ 5 ثواني
+            await Future.delayed(const Duration(milliseconds: 5000));
             if (!mounted || !_isVoiceMode) return;
             _listenForVoiceInput();
             return;
           }
 
-          // ✅ ثالثاً: نشيك الفورمات
           bool isValidFormat = false;
           String errorMessage = '';
 
@@ -419,24 +451,26 @@ class _ContactInfoPageState extends State<ContactInfoPage>
             if (!cleanPhone.startsWith('05') &&
                 !cleanPhone.startsWith('5') &&
                 !cleanPhone.startsWith('966')) {
-              errorMessage =
-                  'The phone number must start with zero five. Please say it again. Say each digit clearly: zero five, then the remaining 8 digits';
+              errorMessage = languageProvider.isArabic
+                  ? 'يجب أن يبدأ رقم الهاتف بصفر خمسة. من فضلك قله مرة أخرى'
+                  : 'The phone number must start with zero five. Please say it again';
             } else if (cleanPhone.length < 9) {
-              errorMessage =
-                  'The phone number is too short. You said ${cleanPhone.length} digits. Saudi numbers must be 10 digits starting with zero five. Please say all 10 digits again';
+              errorMessage = languageProvider.isArabic
+                  ? 'رقم الهاتف قصير جداً. قلت ${cleanPhone.length} أرقام. أرقام السعودية يجب أن تكون 10 أرقام تبدأ بصفر خمسة'
+                  : 'The phone number is too short. You said ${cleanPhone.length} digits. Saudi numbers must be 10 digits';
             } else if (cleanPhone.length > 10 &&
                 !cleanPhone.startsWith('966')) {
-              errorMessage =
-                  'The phone number is too long. You said ${cleanPhone.length} digits. Saudi numbers must be 10 digits starting with zero five. Please say only 10 digits';
+              errorMessage = languageProvider.isArabic
+                  ? 'رقم الهاتف طويل جداً. قلت ${cleanPhone.length} رقماً. أرقام السعودية يجب أن تكون 10 أرقام فقط'
+                  : 'The phone number is too long. You said ${cleanPhone.length} digits. Saudi numbers must be 10 digits';
             } else {
-              errorMessage =
-                  'Invalid phone number format. Saudi numbers must start with zero five and be exactly 10 digits. Please say it again clearly. For example: zero five one two three four five six seven eight';
+              errorMessage = languageProvider.isArabic
+                  ? 'تنسيق رقم الهاتف غير صحيح. أرقام السعودية يجب أن تبدأ بصفر خمسة وتكون 10 أرقام بالضبط'
+                  : 'Invalid phone number format. Saudi numbers must start with zero five and be exactly 10 digits';
             }
 
             await _speak(errorMessage);
-            await Future.delayed(
-              const Duration(milliseconds: 6000),
-            ); // ✅ 6 ثواني للرسائل الطويلة
+            await Future.delayed(const Duration(milliseconds: 6000));
             if (!mounted || !_isVoiceMode) return;
             _listenForVoiceInput();
             return;
@@ -447,18 +481,20 @@ class _ContactInfoPageState extends State<ContactInfoPage>
 
             String readablePhone = cleanPhone.split('').join(' ');
             await _speak(
-              'Perfect. Phone number is: $readablePhone. ${_editingContactId != null ? "Updating" : "Creating"} contact now',
+              languageProvider.isArabic
+                  ? 'ممتاز. رقم الهاتف: $readablePhone. ${_editingContactId != null ? "جاري التحديث" : "جاري الإنشاء"} الآن'
+                  : 'Perfect. Phone number is: $readablePhone. ${_editingContactId != null ? "Updating" : "Creating"} contact now',
             );
             await Future.delayed(const Duration(milliseconds: 2000));
             if (!mounted || !_isVoiceMode) return;
             await _saveVoiceContact();
           } else {
             await _speak(
-              'Sorry, the phone number format is incorrect. Saudi numbers must start with zero five and be exactly 10 digits. Please say it again clearly',
+              languageProvider.isArabic
+                  ? 'عذراً، تنسيق رقم الهاتف غير صحيح. أرقام السعودية يجب أن تبدأ بصفر خمسة وتكون 10 أرقام بالضبط'
+                  : 'Sorry, the phone number format is incorrect. Saudi numbers must start with zero five and be exactly 10 digits',
             );
-            await Future.delayed(
-              const Duration(milliseconds: 5000),
-            ); // ✅ 5 ثواني
+            await Future.delayed(const Duration(milliseconds: 5000));
             if (!mounted || !_isVoiceMode) return;
             _listenForVoiceInput();
           }
@@ -468,10 +504,8 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   String? _extractPhoneNumber(String input) {
-    // Remove common words and convert to lowercase
     String cleaned = input.toLowerCase();
 
-    // ✅ نحول الكلمات للأرقام (باللغة الإنجليزية فقط عشان نتأكد)
     final Map<String, String> numberWords = {
       'zero': '0',
       'one': '1',
@@ -483,33 +517,29 @@ class _ContactInfoPageState extends State<ContactInfoPage>
       'seven': '7',
       'eight': '8',
       'nine': '9',
-      'oh': '0', // بعض الناس يقولون "oh" بدل "zero"
+      'oh': '0',
     };
 
-    // نستبدل كل كلمة برقمها
     numberWords.forEach((word, digit) {
       cleaned = cleaned.replaceAll(word, digit);
     });
 
-    // نشيل المسافات
     cleaned = cleaned.replaceAll(' ', '');
 
-    // ✅ Extract numbers only (نسمح فقط بالأرقام و + للكود الدولي)
     String numbers = cleaned.replaceAll(RegExp(r'[^0-9+]'), '');
 
-    // ✅ نشيك إذا طلع فاضي بعد التحويل
     if (numbers.isEmpty) return null;
 
-    // ✅ نشيك إذا فيه أكثر من + واحد (غلط)
     if (numbers.split('+').length > 2) return null;
 
-    // ✅ نشيك إذا + موجود بس مو في البداية (غلط)
     if (numbers.contains('+') && !numbers.startsWith('+')) return null;
 
     return numbers;
   }
 
   Future<void> _saveVoiceContact() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     try {
       final User? user = _auth.currentUser;
       if (user == null) return;
@@ -517,7 +547,6 @@ class _ContactInfoPageState extends State<ContactInfoPage>
       final formattedPhone = _formatPhoneNumber(_voicePhone);
 
       if (_editingContactId != null) {
-        // Update existing contact
         await _firestore
             .collection('users')
             .doc(user.uid)
@@ -535,10 +564,11 @@ class _ContactInfoPageState extends State<ContactInfoPage>
 
         _hapticFeedback();
         await _speak(
-          'Contact updated successfully. Name: $_voiceName, Phone: $formattedPhone',
+          languageProvider.isArabic
+              ? 'تم تحديث جهة الاتصال بنجاح. الاسم: $_voiceName، الهاتف: $formattedPhone'
+              : 'Contact updated successfully. Name: $_voiceName, Phone: $formattedPhone',
         );
       } else {
-        // Add new contact
         await _firestore
             .collection('users')
             .doc(user.uid)
@@ -558,10 +588,11 @@ class _ContactInfoPageState extends State<ContactInfoPage>
 
         _hapticFeedback();
         await _speak(
-          'Contact created successfully. Name: $_voiceName, Phone: $formattedPhone',
+          languageProvider.isArabic
+              ? 'تم إنشاء جهة الاتصال بنجاح. الاسم: $_voiceName، الهاتف: $formattedPhone'
+              : 'Contact created successfully. Name: $_voiceName, Phone: $formattedPhone',
         );
 
-        // ✅ إذا تم إضافة contact جديد، نرجع للصفحة اللي قبل مع result = true
         if (mounted) {
           Navigator.pop(context, true);
         }
@@ -569,7 +600,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     } catch (e) {
       print('Error saving voice contact: $e');
       await _speak(
-        'Sorry, there was an error saving the contact. Please try again',
+        languageProvider.isArabic
+            ? 'عذراً، حدث خطأ في حفظ جهة الاتصال. حاول مرة أخرى'
+            : 'Sorry, there was an error saving the contact. Please try again',
       );
       setState(() {
         _isVoiceMode = false;
@@ -577,14 +610,12 @@ class _ContactInfoPageState extends State<ContactInfoPage>
         _editingContactId = null;
       });
     }
-  }
-
-  Future<void> _deleteContact(String contactId) async {
+  }Future<void> _deleteContact(String contactId) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final User? user = _auth.currentUser;
     if (user == null) return;
 
     try {
-      // 1) نجيب بيانات الكونتاكت قبل نحذفه
       final doc = await _firestore
           .collection('users')
           .doc(user.uid)
@@ -593,14 +624,15 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           .get();
 
       if (!doc.exists) {
-        _showSnackBar('Contact not found', Colors.red);
+        _showSnackBar(
+          languageProvider.isArabic ? 'جهة الاتصال غير موجودة' : 'Contact not found',
+          Colors.red,
+        );
         return;
       }
 
-      // ناخذ الاسم من الدوكمنت
-      final contactName = doc.data()?['name'] ?? 'This contact';
+      final contactName = doc.data()?['name'] ?? (languageProvider.isArabic ? 'هذه جهة الاتصال' : 'This contact');
 
-      // 2) نحذف الكونتاكت
       await _firestore
           .collection('users')
           .doc(user.uid)
@@ -608,16 +640,24 @@ class _ContactInfoPageState extends State<ContactInfoPage>
           .doc(contactId)
           .delete();
 
-      // 3) نعيد تحميل الليستة
       await _loadContacts();
 
-      // 4) نطلع المسج
       if (mounted) {
-        _showSnackBar('$contactName deleted successfully!', Colors.green);
+        _showSnackBar(
+          languageProvider.isArabic
+              ? 'تم حذف $contactName بنجاح!'
+              : '$contactName deleted successfully!',
+          Colors.green,
+        );
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar('Error deleting contact: $e', Colors.red);
+        _showSnackBar(
+          languageProvider.isArabic
+              ? 'خطأ في حذف جهة الاتصال: $e'
+              : 'Error deleting contact: $e',
+          Colors.red,
+        );
       }
     }
   }
@@ -634,8 +674,10 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   void _showDeleteConfirmation(String contactId, String contactName) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     _hapticFeedback();
-    _speak('Delete $contactName');
+    _speak(languageProvider.isArabic ? 'حذف $contactName' : 'Delete $contactName');
 
     showDialog(
       context: context,
@@ -669,7 +711,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                     ),
                     const SizedBox(width: 13),
                     Text(
-                      'Delete Contact',
+                      languageProvider.isArabic ? 'حذف جهة الاتصال' : 'Delete Contact',
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
@@ -682,7 +724,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                 RichText(
                   textAlign: TextAlign.center,
                   text: TextSpan(
-                    text: 'Are you sure you want to delete ',
+                    text: languageProvider.isArabic
+                        ? 'هل أنت متأكد من حذف '
+                        : 'Are you sure you want to delete ',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -708,7 +752,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       child: ElevatedButton(
                         onPressed: () {
                           _hapticFeedback();
-                          _speak('Cancelled');
+                          _speak(languageProvider.isArabic ? 'تم الإلغاء' : 'Cancelled');
                           Navigator.pop(context);
                         },
                         style: ElevatedButton.styleFrom(
@@ -724,9 +768,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
+                        child: Text(
+                          languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                           ),
@@ -748,9 +792,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Text(
-                          'Delete',
-                          style: TextStyle(
+                        child: Text(
+                          languageProvider.isArabic ? 'حذف' : 'Delete',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
@@ -830,6 +874,8 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController ?? const AlwaysStoppedAnimation(1.0),
       child: Container(
@@ -855,7 +901,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                   button: true,
                   child: GestureDetector(
                     onTap: () {
-                      _speak('Going back');
+                      _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                       Future.delayed(const Duration(milliseconds: 800), () {
                         Navigator.pop(context);
                       });
@@ -876,9 +922,11 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                           ),
                         ],
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Icon(
-                          Icons.arrow_back_ios_new,
+                          languageProvider.isArabic
+                              ? Icons.arrow_forward_ios
+                              : Icons.arrow_back_ios_new,
                           color: Colors.white,
                           size: 20,
                         ),
@@ -892,7 +940,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Emergency Contacts',
+                        languageProvider.isArabic ? 'جهات الاتصال الطارئة' : 'Emergency Contacts',
                         style: TextStyle(
                           fontSize: 25,
                           fontWeight: FontWeight.w900,
@@ -905,7 +953,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${_contacts.length} Contacts',
+                        '${_contacts.length} ${languageProvider.isArabic ? 'جهات اتصال' : 'Contacts'}',
                         style: TextStyle(
                           fontSize: 14,
                           color: deepPurple.withOpacity(0.8),
@@ -952,7 +1000,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       onChanged: (value) =>
                           setState(() => _searchQuery = value),
                       decoration: InputDecoration(
-                        hintText: "Search contacts...",
+                        hintText: languageProvider.isArabic
+                            ? 'البحث عن جهات الاتصال...'
+                            : "Search contacts...",
                         border: InputBorder.none,
                         hintStyle: TextStyle(
                           color: deepPurple.withOpacity(0.7),
@@ -977,6 +1027,8 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Widget _buildContactsList() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SlideTransition(
       position: _slideController != null
           ? Tween<Offset>(
@@ -1006,6 +1058,8 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Widget _buildContactCard(Map<String, dynamic> contact) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Semantics(
       label:
           'Contact: ${contact['name']}. Phone: ${contact['phone']}. Double tap to edit',
@@ -1073,7 +1127,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          contact['name']?.toString() ?? 'Unknown',
+                          contact['name']?.toString() ?? (languageProvider.isArabic ? 'غير معروف' : 'Unknown'),
                           style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
@@ -1090,7 +1144,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              contact['phone']?.toString() ?? 'No phone',
+                              contact['phone']?.toString() ?? (languageProvider.isArabic ? 'لا يوجد هاتف' : 'No phone'),
                               style: TextStyle(
                                 fontSize: 13,
                                 color: deepPurple.withOpacity(0.5),
@@ -1105,7 +1159,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                   GestureDetector(
                     onTap: () {
                       _hapticFeedback();
-                      _speak('Edit ${contact['name']} with voice');
+                      _speak(languageProvider.isArabic
+                          ? 'تعديل ${contact['name']} بالصوت'
+                          : 'Edit ${contact['name']} with voice');
                       _startVoiceContact(
                         editContactId: contact['id'],
                         currentName: contact['name']?.toString(),
@@ -1136,7 +1192,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       _hapticFeedback();
                       _showDeleteConfirmation(
                         contact['id'],
-                        contact['name']?.toString() ?? 'Unknown',
+                        contact['name']?.toString() ?? (languageProvider.isArabic ? 'غير معروف' : 'Unknown'),
                       );
                     },
                     child: Container(
@@ -1167,6 +1223,8 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Widget _buildEmptySearch() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -1179,9 +1237,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               color: deepPurple.withOpacity(0.3),
             ),
             const SizedBox(height: 16),
-            const Text(
-              "No contacts found",
-              style: TextStyle(
+            Text(
+              languageProvider.isArabic ? 'لم يتم العثور على جهات اتصال' : "No contacts found",
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: deepPurple,
@@ -1189,7 +1247,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
             ),
             const SizedBox(height: 8),
             Text(
-              "Try a different search term",
+              languageProvider.isArabic ? 'جرب مصطلح بحث مختلف' : "Try a different search term",
               style: TextStyle(
                 fontSize: 14,
                 color: deepPurple.withOpacity(0.5),
@@ -1202,6 +1260,8 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Widget _buildEmptyState() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -1227,9 +1287,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              "No contacts added yet",
-              style: TextStyle(
+            Text(
+              languageProvider.isArabic ? 'لم تتم إضافة جهات اتصال بعد' : "No contacts added yet",
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: deepPurple,
@@ -1237,7 +1297,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
             ),
             const SizedBox(height: 8),
             Text(
-              "Tap the button below to add your first contact",
+              languageProvider.isArabic
+                  ? 'اضغط على الزر أدناه لإضافة أول جهة اتصال'
+                  : "Tap the button below to add your first contact",
               style: TextStyle(
                 fontSize: 14,
                 color: deepPurple.withOpacity(0.5),
@@ -1251,6 +1313,8 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Widget _buildVoiceOverlay() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Container(
       color: Colors.black.withOpacity(0.85),
       child: Center(
@@ -1303,7 +1367,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               ),
               const SizedBox(height: 30),
               Text(
-                _isListening ? 'Listening...' : _getVoiceStepText(),
+                _isListening
+                    ? (languageProvider.isArabic ? 'جاري الاستماع...' : 'Listening...')
+                    : _getVoiceStepText(),
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -1328,7 +1394,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                 child: OutlinedButton(
                   onPressed: () {
                     _hapticFeedback();
-                    _speak('Cancelled');
+                    _speak(languageProvider.isArabic ? 'تم الإلغاء' : 'Cancelled');
                     _speech.stop();
                     setState(() {
                       _isVoiceMode = false;
@@ -1347,9 +1413,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
+                  child: Text(
+                    languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: vibrantPurple,
@@ -1365,36 +1431,50 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   String _getVoiceStepText() {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     switch (_voiceStep) {
       case 0:
         return _editingContactId != null
-            ? 'Update contact name?'
-            : 'What\'s the contact name?';
+            ? (languageProvider.isArabic ? 'تحديث اسم جهة الاتصال؟' : 'Update contact name?')
+            : (languageProvider.isArabic ? 'ما هو اسم جهة الاتصال؟' : 'What\'s the contact name?');
       case 1:
         return _editingContactId != null
-            ? 'Update phone number?'
-            : 'What\'s the phone number?';
+            ? (languageProvider.isArabic ? 'تحديث رقم الهاتف؟' : 'Update phone number?')
+            : (languageProvider.isArabic ? 'ما هو رقم الهاتف؟' : 'What\'s the phone number?');
       default:
-        return 'Processing...';
+        return languageProvider.isArabic ? 'جاري المعالجة...' : 'Processing...';
     }
   }
 
   String _getVoiceStepHint() {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     switch (_voiceStep) {
       case 0:
         return _editingContactId != null
-            ? 'Say the new name or "same" to keep it\nCurrent: $_voiceName'
-            : 'Say the contact\'s full name';
+            ? (languageProvider.isArabic
+                ? 'قل الاسم الجديد أو "نفسه" للإبقاء عليه\nالحالي: $_voiceName'
+                : 'Say the new name or "same" to keep it\nCurrent: $_voiceName')
+            : (languageProvider.isArabic
+                ? 'قل الاسم الكامل لجهة الاتصال'
+                : 'Say the contact\'s full name');
       case 1:
         return _editingContactId != null
-            ? 'Say the new phone number or "same" to keep it\nExample: "zero five one two three..."\nCurrent: $_voicePhone'
-            : 'Say the phone number digit by digit\nExample: "zero five one two three four five six seven eight"';
+            ? (languageProvider.isArabic
+                ? 'قل رقم الهاتف الجديد أو "نفسه" للإبقاء عليه\nمثال: "صفر خمسة واحد اثنين ثلاثة..."\nالحالي: $_voicePhone'
+                : 'Say the new phone number or "same" to keep it\nExample: "zero five one two three..."\nCurrent: $_voicePhone')
+            : (languageProvider.isArabic
+                ? 'قل رقم الهاتف رقماً برقم\nمثال: "صفر خمسة واحد اثنين ثلاثة أربعة خمسة ستة سبعة ثمانية"'
+                : 'Say the phone number digit by digit\nExample: "zero five one two three four five six seven eight"');
       default:
         return '';
     }
   }
 
   Widget _buildVoiceAddButton() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 55),
       child: Semantics(
@@ -1434,9 +1514,9 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                   child: const Icon(Icons.mic, color: Colors.white, size: 26),
                 ),
                 const SizedBox(width: 12),
-                const Text(
-                  'Add Voice Contact',
-                  style: TextStyle(
+                Text(
+                  languageProvider.isArabic ? 'إضافة جهة اتصال صوتية' : 'Add Voice Contact',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
                     fontSize: 20,
@@ -1452,11 +1532,12 @@ class _ContactInfoPageState extends State<ContactInfoPage>
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
       children: [
-        // الفوتر الأساسي
         ClipRRect(
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
@@ -1492,11 +1573,13 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigating to Home page');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigating to Home page');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1507,12 +1590,14 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -1522,14 +1607,16 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                         );
                       },
                     ),
-                    const SizedBox(width: 60), // مساحة للدائرة
+                    const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
                       isActive: true,
                       onTap: () {
                         _hapticFeedback();
-                        _speak('You are already on Emergency Contacts page');
+                        _speak(languageProvider.isArabic
+                            ? 'أنت بالفعل في صفحة جهات الاتصال الطارئة'
+                            : 'You are already on Emergency Contacts page');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1540,12 +1627,14 @@ class _ContactInfoPageState extends State<ContactInfoPage>
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                       isActive: false,
                       onTap: () {
                         _hapticFeedback();
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -1573,7 +1662,7 @@ class _ContactInfoPageState extends State<ContactInfoPage>
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
-                  _speak('Emergency SOS');
+                  _speak(languageProvider.isArabic ? 'طوارئ' : 'Emergency SOS');
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const SosScreen()),
@@ -1620,7 +1709,6 @@ class _ContactInfoPageState extends State<ContactInfoPage>
     );
   }
 
-  // ✅ _buildNavButton (بحجم أصغر للمربع الأبيض)
   Widget _buildNavButton({
     required IconData icon,
     required String label,

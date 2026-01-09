@@ -30,7 +30,8 @@ dependencies:
   # 🔹 Auth
   google_sign_in: ^6.2.1
   local_auth: ^2.2.0
-
+  encrypt: ^5.0.3
+  
   # 🔹 Media & Camera
   image_picker: ^1.1.2
   camera: ^0.11.1
@@ -64,12 +65,6 @@ dependencies:
   # 🔹 Local DB
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-<<<<<<< HEAD
-=======
-  # Security -   
-  encrypt: ^5.0.3
-
->>>>>>> 4b28b4ea1d982c3c2693b59f80ce9477ad291deb
 
 dev_dependencies:
   flutter_test:

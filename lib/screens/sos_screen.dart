@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 
 import 'home_page.dart';
 import 'Reminders.dart';
@@ -18,8 +20,6 @@ class SosScreen extends StatefulWidget {
 }
 
 class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
-  // DEMO toggle (true = no real sending, just shows success)
-
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FlutterTts _tts = FlutterTts();
@@ -31,7 +31,6 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late AnimationController _slideController;
 
-  // Colors
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -58,7 +57,8 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
     await _tts.awaitSpeakCompletion(true);
@@ -138,24 +138,25 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   }
 
   void _onNavTap(BuildContext context, int index) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     _hapticFeedback();
+    
     if (index == 0) {
-      _speak('Home');
+      _speak(languageProvider.isArabic ? 'الرئيسية' : 'Home');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const HomePage()),
       );
     } else if (index == 1) {
-      _speak('Reminders');
+      _speak(languageProvider.isArabic ? 'التذكيرات' : 'Reminders');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const RemindersPage()),
       );
     } else if (index == 2) {
-      _speak('Emergency');
-      // Already here
+      _speak(languageProvider.isArabic ? 'الطوارئ' : 'Emergency');
     } else if (index == 3) {
-      _speak('Settings');
+      _speak(languageProvider.isArabic ? 'الإعدادات' : 'Settings');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const SettingsPage()),
@@ -198,6 +199,8 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
@@ -221,7 +224,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Hey!',
+                    languageProvider.isArabic ? 'مرحباً!' : 'Hey!',
                     style: TextStyle(
                       fontSize: 21,
                       color: deepPurple.withOpacity(0.7),
@@ -245,9 +248,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                             fontSize: 32,
                             fontWeight: FontWeight.w900,
                             foreground: Paint()
-                              ..shader = LinearGradient(
+                              ..shader = const LinearGradient(
                                 colors: [deepPurple, vibrantPurple],
-                              ).createShader(Rect.fromLTWH(0, 0, 200, 70)),
+                              ).createShader(const Rect.fromLTWH(0, 0, 200, 70)),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -261,6 +264,8 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildContent() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Padding(
       padding: const EdgeInsets.all(13),
       child: Column(
@@ -271,7 +276,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
             child: Column(
               children: [
                 Text(
-                  'Help is just a click away!',
+                  languageProvider.isArabic
+                      ? 'المساعدة على بُعد نقرة واحدة!'
+                      : 'Help is just a click away!',
                   style: TextStyle(
                     fontSize: 25,
                     fontWeight: FontWeight.w900,
@@ -288,7 +295,9 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Tap the SOS button to call for help.',
+                  languageProvider.isArabic
+                      ? 'اضغط على زر الطوارئ لطلب المساعدة.'
+                      : 'Tap the SOS button to call for help.',
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
@@ -308,7 +317,6 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 60),
           const Spacer(),
-          // SOS Button (demo mode shows success immediately)
           SosButton(onSuccess: _showSuccessDialog),
           const Spacer(),
         ],
@@ -317,6 +325,8 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return ClipRRect(
       borderRadius: const BorderRadius.only(
         topLeft: Radius.circular(24),
@@ -350,21 +360,23 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
               children: [
                 _buildNavButton(
                   icon: Icons.home_rounded,
-                  label: 'Home',
+                  label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                   isActive: true,
                   onTap: () => _onNavTap(context, 0),
                 ),
                 _buildNavButton(
                   icon: Icons.notifications_rounded,
-                  label: 'Reminders',
+                  label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                   onTap: () => _onNavTap(context, 1),
                 ),
                 _buildNavButton(
                   icon: Icons.contact_phone,
-                  label: 'Emergency',
+                  label: languageProvider.isArabic ? 'الطوارئ' : 'Emergency',
                   onTap: () {
                     _hapticFeedback();
-                    _speak('Emergency Contact');
+                    _speak(languageProvider.isArabic
+                        ? 'جهات اتصال الطوارئ'
+                        : 'Emergency Contact');
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -375,7 +387,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 ),
                 _buildNavButton(
                   icon: Icons.settings_rounded,
-                  label: 'Settings',
+                  label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                   onTap: () => _onNavTap(context, 3),
                 ),
               ],
@@ -439,11 +451,14 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
   }
 
   void _showSuccessDialog(BuildContext context) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     _hapticFeedback();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Emergency alert sent to all contacts'),
+        content: Text(languageProvider.isArabic
+            ? 'تم إرسال تنبيه الطوارئ لجميع جهات الاتصال'
+            : 'Emergency alert sent to all contacts'),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
@@ -492,8 +507,10 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Help is on the way!',
-                  style: TextStyle(
+                  languageProvider.isArabic
+                      ? 'المساعدة في الطريق!'
+                      : 'Help is on the way!',
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
                     color: deepPurple,
@@ -501,9 +518,11 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Emergency alert sent to all contacts',
-                  style: TextStyle(fontSize: 14, color: Color(0xFF5E275F)),
+                Text(
+                  languageProvider.isArabic
+                      ? 'تم إرسال تنبيه الطوارئ لجميع جهات الاتصال'
+                      : 'Emergency alert sent to all contacts',
+                  style: const TextStyle(fontSize: 14, color: Color(0xFF5E275F)),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -516,7 +535,7 @@ class _SosScreenState extends State<SosScreen> with TickerProviderStateMixin {
 }
 
 class SosButton extends StatefulWidget {
-  final Function(BuildContext) onSuccess; // callback to show dialog
+  final Function(BuildContext) onSuccess;
 
   const SosButton({super.key, required this.onSuccess});
 
@@ -546,7 +565,8 @@ class _SosButtonState extends State<SosButton>
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
     await _tts.awaitSpeakCompletion(true);
@@ -585,9 +605,10 @@ class _SosButtonState extends State<SosButton>
   }
 
   Future<void> _handleSosPress() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     if (_isProcessing) return;
 
-    // Triple haptic
     _hapticFeedback();
     await Future.delayed(const Duration(milliseconds: 100));
     _hapticFeedback();
@@ -597,29 +618,21 @@ class _SosButtonState extends State<SosButton>
     setState(() => _isProcessing = true);
 
     try {
-      // ===================== DEMO MODE =====================
-      // NO real sending, NO navigation. Just success UI + TTS.
-      await _speak('Emergency alert sent to all contacts');
+      await _speak(languageProvider.isArabic
+          ? 'تم إرسال تنبيه الطوارئ لجميع جهات الاتصال'
+          : 'Emergency alert sent to all contacts');
       await Future.delayed(const Duration(milliseconds: 250));
       if (mounted) widget.onSuccess(context);
-      // =================== END DEMO MODE ===================
-
-      // (Keep real logic commented for later)
-      /*
-      final User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        await _speak('Please sign in first');
-        setState(() => _isProcessing = false);
-        return;
-      }
-      // ... fetch contacts, open LocationSelectionPage, send, etc.
-      */
     } catch (e) {
       if (!mounted) return;
-      await _speak('Failed to send emergency alert');
+      await _speak(languageProvider.isArabic
+          ? 'فشل إرسال تنبيه الطوارئ'
+          : 'Failed to send emergency alert');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Failed to process request. Please try again.'),
+          content: Text(languageProvider.isArabic
+              ? 'فشلت معالجة الطلب. حاول مرة أخرى.'
+              : 'Failed to process request. Please try again.'),
           backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.all(16),
@@ -632,10 +645,16 @@ class _SosButtonState extends State<SosButton>
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Semantics(
-      label: 'Emergency SOS button. Press to send emergency alert',
+      label: languageProvider.isArabic
+          ? 'زر طوارئ. اضغط لإرسال تنبيه طوارئ'
+          : 'Emergency SOS button. Press to send emergency alert',
       button: true,
-      hint: 'Double tap to activate emergency SOS',
+      hint: languageProvider.isArabic
+          ? 'انقر نقراً مزدوجاً لتفعيل طوارئ'
+          : 'Double tap to activate emergency SOS',
       child: Center(
         child: AnimatedBuilder(
           animation: _pulseAnimation,
@@ -645,10 +664,7 @@ class _SosButtonState extends State<SosButton>
               children: [
                 if (!_isProcessing) ...[
                   _buildPulse(scale: _pulseAnimation.value * 1.2, opacity: 0.1),
-                  _buildPulse(
-                    scale: _pulseAnimation.value * 1.0,
-                    opacity: 0.15,
-                  ),
+                  _buildPulse(scale: _pulseAnimation.value * 1.0, opacity: 0.15),
                   _buildPulse(scale: _pulseAnimation.value * 0.8, opacity: 0.2),
                 ],
                 GestureDetector(

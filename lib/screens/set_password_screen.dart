@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // HapticFeedback
-import 'package:flutter/semantics.dart'; // SemanticsService
+import 'package:flutter/services.dart';
+import 'package:flutter/semantics.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import 'login_screen.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -19,11 +21,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   bool _loading = false;
   bool _emailSent = false;
 
-  // Error banner state (زي صفحة اللوق إن)
   String? _currentErrorMessage;
   bool _showErrorBanner = false;
 
-  // Animations
   late AnimationController _animationController;
   late AnimationController _successAnimationController;
   late AnimationController _buttonAnimationController;
@@ -33,7 +33,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   late Animation<double> _successScaleAnimation;
   late Animation<double> _buttonScaleAnimation;
 
-  // TTS
   final FlutterTts _tts = FlutterTts();
   bool _ttsReady = false;
 
@@ -47,17 +46,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
   Future<void> _initTts() async {
     try {
-      await _tts.setLanguage("en-US");
+      final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+      await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
       await _tts.setSpeechRate(0.5);
       await _tts.setPitch(1.0);
       await _tts.setVolume(1.0);
       await _tts.awaitSpeakCompletion(true);
       setState(() => _ttsReady = true);
 
-      // تعريف بسيط لأول ما تفتح الشاشة
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
         _speak(
-          "Forgot Password page. Please enter your email then press send reset link",
+          languageProvider.isArabic
+              ? "صفحة نسيت كلمة المرور. من فضلك أدخل بريدك الإلكتروني ثم اضغط إرسال رابط إعادة التعيين"
+              : "Forgot Password page. Please enter your email then press send reset link",
           interrupt: true,
         );
       });
@@ -148,7 +150,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  // ================== ERROR BANNER (زي اللوق إن) ==================
   Future<void> _showErrorWithSoundAndBanner(String errorMessage) async {
     setState(() {
       _currentErrorMessage = errorMessage;
@@ -157,16 +158,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
     await Future.delayed(const Duration(milliseconds: 50));
 
-    // إعلان للمستخدم القارئ شاشة
     SemanticsService.announce(errorMessage, TextDirection.ltr);
 
-    // صوت
-    await _speakForce("Error: $errorMessage");
+    await _speakForce("خطأ: $errorMessage" );
 
-    // هزة بسيطة
     HapticFeedback.heavyImpact();
 
-    // إخفاء بعد 8 ثواني
     Future.delayed(const Duration(seconds: 8), () {
       if (mounted) {
         setState(() {
@@ -193,7 +190,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFD32F2F), // أحمر نفس اللوق إن
+        color: const Color(0xFFD32F2F),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.3),
@@ -228,27 +225,32 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   }
 
   Future<void> _resetPassword() async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final email = _emailController.text.trim();
 
-    // نستخدم الفاليديشن + نطلّع البانر الأحمر بدل السنك بار
     final isValid = _formKey.currentState?.validate() ?? false;
 
     if (!isValid) {
       if (email.isEmpty) {
         await _showErrorWithSoundAndBanner(
-          "Email is required to send a reset link",
+          languageProvider.isArabic
+              ? "البريد الإلكتروني مطلوب لإرسال رابط إعادة التعيين"
+              : "Email is required to send a reset link",
         );
       } else {
         await _showErrorWithSoundAndBanner(
-          "Please enter a valid email address",
+          languageProvider.isArabic
+              ? "من فضلك أدخل عنوان بريد إلكتروني صحيح"
+              : "Please enter a valid email address",
         );
       }
       return;
     }
 
-    // هنا كل شيء صحيح
     await _speak(
-      "Send reset link button pressed. Sending reset link, please wait.",
+      languageProvider.isArabic
+          ? "تم الضغط على زر إرسال رابط إعادة التعيين. جاري إرسال الرابط، انتظر من فضلك."
+          : "Send reset link button pressed. Sending reset link, please wait.",
       interrupt: true,
     );
 
@@ -258,7 +260,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     });
 
     try {
-      // 🔥 نستدعي نفس الميثود حقّك في الكلاود فنكشن
       final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
         'sendCustomPasswordReset',
       );
@@ -274,18 +275,23 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         _successAnimationController.forward();
 
         _showSnackBar(
-          "Password reset link sent to $email",
+          languageProvider.isArabic
+              ? "تم إرسال رابط إعادة تعيين كلمة المرور إلى $email"
+              : "Password reset link sent to $email",
           Colors.green,
           Icons.check_circle,
         );
 
         await _speakForce(
-          "Password reset link has been sent to $email. Please check your inbox.",
+          languageProvider.isArabic
+              ? "تم إرسال رابط إعادة تعيين كلمة المرور إلى $email. من فضلك تحقق من صندوق الوارد."
+              : "Password reset link has been sent to $email. Please check your inbox.",
         );
 
-        await _speakForce("Returning to login page in 5 seconds");
+        await _speakForce(languageProvider.isArabic
+            ? "العودة لصفحة تسجيل الدخول خلال 5 ثواني"
+            : "Returning to login page in 5 seconds");
 
-        // Auto navigate back after 5 seconds
         Future.delayed(const Duration(seconds: 5), () {
           if (mounted) {
             Navigator.pushReplacement(
@@ -303,46 +309,54 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
           }
         });
       } else {
-        // في حال success رجعت false لأي سبب
         setState(() => _loading = false);
         await _showErrorWithSoundAndBanner(
-          "Something went wrong while sending the reset link",
+          languageProvider.isArabic
+              ? "حدث خطأ أثناء إرسال رابط إعادة التعيين"
+              : "Something went wrong while sending the reset link",
         );
       }
     } on FirebaseFunctionsException catch (e) {
       setState(() => _loading = false);
 
-      String errorMessage = "Something went wrong";
+      String errorMessage = languageProvider.isArabic
+          ? "حدث خطأ ما"
+          : "Something went wrong";
 
       switch (e.code) {
         case 'not-found':
-          // الإيميل مو مسجّل
-          errorMessage = "No account found with this email address";
+          errorMessage = languageProvider.isArabic
+              ? "لا يوجد حساب بهذا البريد الإلكتروني"
+              : "No account found with this email address";
           break;
 
         case 'invalid-argument':
-          // صيغة الإيميل غلط
-          errorMessage = "Please enter a valid email address";
+          errorMessage = languageProvider.isArabic
+              ? "من فضلك أدخل عنوان بريد إلكتروني صحيح"
+              : "Please enter a valid email address";
           break;
 
         case 'internal':
-          // حالياً الفنكشن ترجع INTERNAL → نترجمها لرسالة مفهومة
-          errorMessage = "No account found with this email address";
+          errorMessage = languageProvider.isArabic
+              ? "لا يوجد حساب بهذا البريد الإلكتروني"
+              : "No account found with this email address";
           break;
 
         default:
-          // أي خطأ ثاني عام
-          errorMessage = "Something went wrong. Please try again.";
+          errorMessage = languageProvider.isArabic
+              ? "حدث خطأ ما. حاول مرة أخرى."
+              : "Something went wrong. Please try again.";
       }
 
       await _showErrorWithSoundAndBanner(errorMessage);
     } catch (e) {
       setState(() => _loading = false);
-      await _showErrorWithSoundAndBanner("An unexpected error occurred");
+      await _showErrorWithSoundAndBanner(languageProvider.isArabic
+          ? "حدث خطأ غير متوقع"
+          : "An unexpected error occurred");
     }
   }
 
-  // سنك بار للنجاح فقط
   void _showSnackBar(String message, Color color, IconData icon) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -364,11 +378,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background
           Container(
             decoration: const BoxDecoration(
               image: DecorationImage(
@@ -391,7 +406,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             ),
           ),
 
-          // Main content
           SafeArea(
             child: FadeTransition(
               opacity: _fadeAnimation,
@@ -403,7 +417,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                     children: [
                       const SizedBox(height: 60),
 
-                      // Header section with animation
                       ScaleTransition(
                         scale: _scaleAnimation,
                         child: Container(
@@ -428,9 +441,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFF6B1D73,
-                                  ).withOpacity(0.2),
+                                  color: const Color(0xFF6B1D73).withOpacity(0.2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
@@ -444,8 +455,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                               const SizedBox(height: 16),
                               Text(
                                 _emailSent
-                                    ? "Check Your Email"
-                                    : "Forgot Password?",
+                                    ? (languageProvider.isArabic
+                                        ? "تحقق من بريدك الإلكتروني"
+                                        : "Check Your Email")
+                                    : (languageProvider.isArabic
+                                        ? "نسيت كلمة المرور؟"
+                                        : "Forgot Password?"),
                                 style: const TextStyle(
                                   fontSize: 28,
                                   fontWeight: FontWeight.bold,
@@ -456,8 +471,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                               const SizedBox(height: 12),
                               Text(
                                 _emailSent
-                                    ? "We've sent a password reset link to your email"
-                                    : "Don't worry! Enter your email and we'll send you a reset link",
+                                    ? (languageProvider.isArabic
+                                        ? "لقد أرسلنا رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني"
+                                        : "We've sent a password reset link to your email")
+                                    : (languageProvider.isArabic
+                                        ? "لا تقلق! أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة التعيين"
+                                        : "Don't worry! Enter your email and we'll send you a reset link"),
                                 style: TextStyle(
                                   fontSize: 16,
                                   color: Colors.white.withOpacity(0.9),
@@ -472,7 +491,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
                       const SizedBox(height: 40),
 
-                      // Success animation or form
                       if (_emailSent)
                         ScaleTransition(
                           scale: _successScaleAnimation,
@@ -493,9 +511,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                   color: Colors.green,
                                 ),
                                 const SizedBox(height: 16),
-                                const Text(
-                                  "Email Sent Successfully!",
-                                  style: TextStyle(
+                                Text(
+                                  languageProvider.isArabic
+                                      ? "تم إرسال البريد بنجاح!"
+                                      : "Email Sent Successfully!",
+                                  style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
@@ -503,7 +523,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  "Please check your inbox and click on the reset link",
+                                  languageProvider.isArabic
+                                      ? "من فضلك تحقق من صندوق الوارد واضغط على رابط إعادة التعيين"
+                                      : "Please check your inbox and click on the reset link",
                                   style: TextStyle(
                                     fontSize: 14,
                                     color: Colors.white.withOpacity(0.8),
@@ -528,14 +550,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          "Check your spam folder if you don't see the email",
+                                          languageProvider.isArabic
+                                              ? "تحقق من مجلد البريد المزعج إذا لم تجد البريد"
+                                              : "Check your spam folder if you don't see the email",
                                           style: TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w700,
-
-                                            color: Colors.white.withOpacity(
-                                              0.7,
-                                            ),
+                                            color: Colors.white.withOpacity(0.7),
                                           ),
                                         ),
                                       ),
@@ -544,7 +565,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  "Returning to login in 5 seconds...",
+                                  languageProvider.isArabic
+                                      ? "العودة لتسجيل الدخول خلال 5 ثواني..."
+                                      : "Returning to login in 5 seconds...",
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Colors.white.withOpacity(0.6),
@@ -561,26 +584,33 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                           key: _formKey,
                           child: Column(
                             children: [
-                              // Email input field
                               _buildEnhancedTextFormField(
                                 controller: _emailController,
-                                hint: "Enter your email address",
+                                hint: languageProvider.isArabic
+                                    ? "أدخل عنوان بريدك الإلكتروني"
+                                    : "Enter your email address",
                                 icon: Icons.email_outlined,
                                 keyboardType: TextInputType.emailAddress,
                                 onTap: () {
                                   _speakForce(
-                                    "Email field. Enter the email address you used to sign in, then press send reset link button.",
+                                    languageProvider.isArabic
+                                        ? "حقل البريد الإلكتروني. أدخل البريد الإلكتروني الذي استخدمته للتسجيل، ثم اضغط زر إرسال رابط إعادة التعيين."
+                                        : "Email field. Enter the email address you used to sign in, then press send reset link button.",
                                   );
                                 },
                                 validator: (value) {
                                   if (value == null || value.trim().isEmpty) {
-                                    return "Email is required";
+                                    return languageProvider.isArabic
+                                        ? "البريد الإلكتروني مطلوب"
+                                        : "Email is required";
                                   }
                                   final emailRegex = RegExp(
                                     r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
                                   );
                                   if (!emailRegex.hasMatch(value.trim())) {
-                                    return "Please enter a valid email address";
+                                    return languageProvider.isArabic
+                                        ? "من فضلك أدخل عنوان بريد إلكتروني صحيح"
+                                        : "Please enter a valid email address";
                                   }
                                   return null;
                                 },
@@ -588,7 +618,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
                               const SizedBox(height: 32),
 
-                              // Send reset link button
                               ScaleTransition(
                                 scale: _buttonScaleAnimation,
                                 child: SizedBox(
@@ -600,9 +629,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                       backgroundColor: const Color(0xFF6B1D73),
                                       foregroundColor: Colors.white,
                                       elevation: 12,
-                                      shadowColor: const Color(
-                                        0xFF6B1D73,
-                                      ).withOpacity(0.4),
+                                      shadowColor: const Color(0xFF6B1D73).withOpacity(0.4),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(16),
                                       ),
@@ -616,15 +643,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                               strokeWidth: 2,
                                             ),
                                           )
-                                        : const Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
+                                        : Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
                                             children: [
-                                              Icon(Icons.send, size: 20),
-                                              SizedBox(width: 8),
+                                              const Icon(Icons.send, size: 20),
+                                              const SizedBox(width: 8),
                                               Text(
-                                                "Send Reset Link",
-                                                style: TextStyle(
+                                                languageProvider.isArabic
+                                                    ? "إرسال رابط إعادة التعيين"
+                                                    : "Send Reset Link",
+                                                style: const TextStyle(
                                                   fontSize: 18,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -637,7 +665,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
                               const SizedBox(height: 24),
 
-                              // Instructions
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
@@ -657,7 +684,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Text(
-                                        "We'll send you a secure link to reset your password safely",
+                                        languageProvider.isArabic
+                                            ? "سنرسل لك رابطاً آمناً لإعادة تعيين كلمة المرور بأمان"
+                                            : "We'll send you a secure link to reset your password safely",
                                         style: TextStyle(
                                           color: Colors.white.withOpacity(0.8),
                                           fontSize: 14,
@@ -674,7 +703,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
 
                       const SizedBox(height: 40),
 
-                      // Back to login link
                       if (!_emailSent)
                         Container(
                           padding: const EdgeInsets.all(20),
@@ -689,7 +717,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                "Remember your password? ",
+                                languageProvider.isArabic
+                                    ? "تتذكر كلمة المرور؟ "
+                                    : "Remember your password? ",
                                 style: TextStyle(
                                   color: Colors.white.withOpacity(0.8),
                                   fontSize: 16,
@@ -698,39 +728,28 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                               ),
                               GestureDetector(
                                 onTap: () async {
-                                  // 🗣 يتكلم أول
                                   await _speak(
-                                    "Returning to login page",
+                                    languageProvider.isArabic
+                                        ? "العودة لصفحة تسجيل الدخول"
+                                        : "Returning to login page",
                                     interrupt: true,
                                   );
 
-                                  // ⏳ ينتظر ثانيتين
                                   await Future.delayed(
                                     const Duration(seconds: 1),
                                   );
 
                                   if (!mounted) return;
 
-                                  // 🎬 يرجع لشاشة اللوق إن بانيميشن سلايد
                                   Navigator.pushReplacement(
                                     context,
                                     PageRouteBuilder(
-                                      pageBuilder:
-                                          (
-                                            context,
-                                            animation,
-                                            secondaryAnimation,
-                                          ) => const LoginScreen(),
+                                      pageBuilder: (context, animation, secondaryAnimation) =>
+                                          const LoginScreen(),
                                       transitionsBuilder:
-                                          (
-                                            context,
-                                            animation,
-                                            secondaryAnimation,
-                                            child,
-                                          ) {
+                                          (context, animation, secondaryAnimation, child) {
                                             return SlideTransition(
                                               position: Tween<Offset>(
-                                                // من اليسار لليمين عشان إحساس "رجوع"
                                                 begin: const Offset(-1.0, 0.0),
                                                 end: Offset.zero,
                                               ).animate(animation),
@@ -740,9 +759,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
                                     ),
                                   );
                                 },
-                                child: const Text(
-                                  "Log In",
-                                  style: TextStyle(
+                                child: Text(
+                                  languageProvider.isArabic
+                                      ? "تسجيل الدخول"
+                                      : "Log In",
+                                  style: const TextStyle(
                                     color: Color.fromARGB(255, 248, 183, 255),
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -761,7 +782,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             ),
           ),
 
-          // ✅ البانر الأحمر تحت زي اللوق إن
           Positioned(bottom: 0, left: 0, right: 0, child: _buildErrorBanner()),
         ],
       ),
@@ -793,7 +813,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
         controller: controller,
         keyboardType: keyboardType,
         validator: validator,
-        onTap: onTap, // ✅ لما يضغط على الفيلد يتكلم + يركزه
+        onTap: onTap,
         style: const TextStyle(color: Colors.black, fontSize: 18),
         decoration: InputDecoration(
           hintText: hint,
@@ -807,7 +827,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
             ),
             child: Icon(icon, color: primaryPurple, size: 24),
           ),
-          // ✅ البوردر البنفسجي الخفيف
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide(

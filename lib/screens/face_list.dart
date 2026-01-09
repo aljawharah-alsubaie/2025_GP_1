@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import './face_management.dart';
 import './camera.dart';
 import './home_page.dart';
@@ -23,7 +25,6 @@ class _FaceListPageState extends State<FaceListPage>
   AnimationController? _fadeController;
   AnimationController? _slideController;
 
-  // 🎨 Purple color scheme matching HomePage
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -45,16 +46,19 @@ class _FaceListPageState extends State<FaceListPage>
       duration: const Duration(milliseconds: 800),
     )..forward();
 
-    // 🎤 نطق مقدمة عند فتح الصفحة مع delay أطول
     Future.delayed(const Duration(milliseconds: 1500), () {
+      final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
       _speak(
-        'You can manage stored faces or identify a person using the camera. Choose an option below.',
+        languageProvider.isArabic
+            ? 'يمكنك إدارة الوجوه المحفوظة أو التعرف على شخص باستخدام الكاميرا. اختر خياراً أدناه'
+            : 'You can manage stored faces or identify a person using the camera. Choose an option below.',
       );
     });
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -81,10 +85,7 @@ class _FaceListPageState extends State<FaceListPage>
       backgroundColor: ultraLightPurple,
       body: Stack(
         children: [
-          // 🎨 Gradient background
           _buildGradientBackground(),
-
-          // Main content
           SafeArea(
             child: Column(
               children: [
@@ -99,7 +100,6 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 🎨 Gradient background
   Widget _buildGradientBackground() {
     return Container(
       decoration: BoxDecoration(
@@ -113,8 +113,9 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 🎯 هيدر مطابق تماماً للهوم بيج
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController ?? AlwaysStoppedAnimation(1.0),
       child: Container(
@@ -133,15 +134,14 @@ class _FaceListPageState extends State<FaceListPage>
         ),
         child: Row(
           children: [
-            // 🔙 زر الرجوع على اليسار - بنفسجي
             Semantics(
               label: 'Go back to previous page',
               button: true,
               child: GestureDetector(
                 onTap: () {
                   _hapticFeedback();
-                  _tts.stop(); // ✅ يوقف الكلام فوراً
-                  _speak('Going back');
+                  _tts.stop();
+                  _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                   Future.delayed(const Duration(milliseconds: 800), () {
                     Navigator.pop(context);
                   });
@@ -164,7 +164,9 @@ class _FaceListPageState extends State<FaceListPage>
                   ),
                   child: Center(
                     child: Icon(
-                      Icons.arrow_back_ios_new,
+                      languageProvider.isArabic
+                          ? Icons.arrow_forward_ios
+                          : Icons.arrow_back_ios_new,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -175,13 +177,12 @@ class _FaceListPageState extends State<FaceListPage>
 
             const SizedBox(width: 16),
 
-            // النص في المنتصف
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Face Recognition',
+                    languageProvider.isArabic ? 'التعرف على الوجوه' : 'Face Recognition',
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.w900,
@@ -194,7 +195,9 @@ class _FaceListPageState extends State<FaceListPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Manage and identify persons',
+                    languageProvider.isArabic
+                        ? 'إدارة والتعرف على الأشخاص'
+                        : 'Manage and identify persons',
                     style: TextStyle(
                       fontSize: 14,
                       color: deepPurple.withOpacity(0.6),
@@ -211,8 +214,9 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 📜 Options list - UNIFIED spacing with HomePage
   Widget _buildOptionsList() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SlideTransition(
       position: _slideController != null
           ? Tween<Offset>(
@@ -228,16 +232,19 @@ class _FaceListPageState extends State<FaceListPage>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
         children: [
-          // Add Person Card
           _buildOptionCard(
-            title: 'Face Management',
-            subtitle: 'Manage all stored face entries',
+            title: languageProvider.isArabic ? 'إدارة الوجوه' : 'Face Management',
+            subtitle: languageProvider.isArabic
+                ? 'إدارة جميع إدخالات الوجوه المحفوظة'
+                : 'Manage all stored face entries',
             icon: Icons.person_add,
             gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Face Management selected. You can add, edit, or delete saved faces',
+                languageProvider.isArabic
+                    ? 'تم اختيار إدارة الوجوه. يمكنك إضافة أو تعديل أو حذف الوجوه المحفوظة'
+                    : 'Face Management selected. You can add, edit, or delete saved faces',
               );
               Future.delayed(const Duration(milliseconds: 800), () {
                 Navigator.push(
@@ -251,16 +258,20 @@ class _FaceListPageState extends State<FaceListPage>
           ),
 
           const SizedBox(height: 15),
-          // Identify Person Card
+          
           _buildOptionCard(
-            title: 'Identify Person',
-            subtitle: 'Recognize a person via camera',
+            title: languageProvider.isArabic ? 'التعرف على شخص' : 'Identify Person',
+            subtitle: languageProvider.isArabic
+                ? 'التعرف على شخص عبر الكاميرا'
+                : 'Recognize a person via camera',
             icon: Icons.camera_alt,
             gradient: LinearGradient(colors: [vibrantPurple, primaryPurple]),
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Identify Person selected.Take a photo of the person in front of you to identify them',
+                languageProvider.isArabic
+                    ? 'تم اختيار التعرف على شخص. التقط صورة للشخص أمامك للتعرف عليه'
+                    : 'Identify Person selected. Take a photo of the person in front of you to identify them',
               );
               Future.delayed(const Duration(milliseconds: 800), () {
                 Navigator.push(
@@ -277,7 +288,6 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 🎯 Option card - UNIFIED with HomePage
   Widget _buildOptionCard({
     required String title,
     required String subtitle,
@@ -315,7 +325,6 @@ class _FaceListPageState extends State<FaceListPage>
               ),
               child: Row(
                 children: [
-                  // الأيقونة المتدرجة
                   Container(
                     width: 58,
                     height: 58,
@@ -335,7 +344,6 @@ class _FaceListPageState extends State<FaceListPage>
 
                   const SizedBox(width: 15),
 
-                  // النص
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,7 +370,7 @@ class _FaceListPageState extends State<FaceListPage>
                   ),
 
                   const SizedBox(width: 10),
-                  // سهم متدرج على اليمين
+                  
                   Container(
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
@@ -390,11 +398,12 @@ class _FaceListPageState extends State<FaceListPage>
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
+      clipBehavior: Clip.none,
       children: [
-        // الفوتر الأساسي
         ClipRRect(
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
@@ -430,12 +439,14 @@ class _FaceListPageState extends State<FaceListPage>
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
                       description: 'Navigate to Homepage',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigate to Homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -446,11 +457,13 @@ class _FaceListPageState extends State<FaceListPage>
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                       description: 'Manage your reminders and notifications',
                       onTap: () {
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -460,14 +473,16 @@ class _FaceListPageState extends State<FaceListPage>
                         );
                       },
                     ),
-                    const SizedBox(width: 60), // مساحة للدائرة
+                    const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
                       description:
                           'Manage your emergency contacts and important people',
                       onTap: () {
-                        _speak('Contact, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، تخزين وإدارة جهات اتصال الطوارئ'
+                            : 'Contact, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -478,11 +493,13 @@ class _FaceListPageState extends State<FaceListPage>
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                       description: 'Adjust app settings and preferences',
                       onTap: () {
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -505,7 +522,9 @@ class _FaceListPageState extends State<FaceListPage>
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+                languageProvider.isArabic
+                    ? 'طوارئ، إرسال تنبيه طوارئ لجهات الاتصال الموثوقة عندما تحتاج المساعدة'
+                    : 'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
               );
               Navigator.push(
                 context,
@@ -551,7 +570,6 @@ class _FaceListPageState extends State<FaceListPage>
     );
   }
 
-  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
   Widget _buildNavButton({
     required IconData icon,
     required String label,

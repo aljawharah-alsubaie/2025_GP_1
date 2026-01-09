@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import 'home_page.dart';
 import 'reminders.dart';
 import 'contact_info_page.dart';
@@ -26,7 +28,6 @@ class _SecurityDataPageState extends State<SecurityDataPage>
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
-  // Listeners flags
   late VoidCallback _newPwdListener;
   late VoidCallback _confirmPwdListener;
 
@@ -36,14 +37,12 @@ class _SecurityDataPageState extends State<SecurityDataPage>
   bool _newPasswordVisible = false;
   bool _confirmPasswordVisible = false;
 
-  // نظام البانر للأخطاء
   bool _showErrorBanner = false;
   String? _currentErrorMessage;
 
   late AnimationController _fadeController;
   late AnimationController _slideController;
 
-  // 🎨 نظام ألوان موحد
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -66,7 +65,6 @@ class _SecurityDataPageState extends State<SecurityDataPage>
       duration: const Duration(milliseconds: 800),
     )..forward();
 
-    // live checklist refresh
     _newPwdListener = () => setState(() {});
     _confirmPwdListener = () => setState(() {});
     _newPasswordController.addListener(_newPwdListener);
@@ -74,7 +72,8 @@ class _SecurityDataPageState extends State<SecurityDataPage>
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("en-US");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -100,21 +99,18 @@ class _SecurityDataPageState extends State<SecurityDataPage>
     super.dispose();
   }
 
-  // عرض بانر الخطأ
   void _showErrorBannerMessage(String message) {
     setState(() {
       _currentErrorMessage = message;
       _showErrorBanner = true;
     });
-final displaySeconds = message.length > 60 ? 10 : 6;
+    final displaySeconds = message.length > 60 ? 10 : 6;
 
-Future.delayed(Duration(seconds: displaySeconds), () {
-  if (mounted) _hideErrorBanner();
-});
-
+    Future.delayed(Duration(seconds: displaySeconds), () {
+      if (mounted) _hideErrorBanner();
+    });
   }
 
-  // إخفاء بانر الخطأ
   void _hideErrorBanner() {
     setState(() {
       _showErrorBanner = false;
@@ -122,64 +118,83 @@ Future.delayed(Duration(seconds: displaySeconds), () {
     });
   }
 
-  // ✅ التحقق من قوة كلمة المرور — يُرجع "كل" المخالفات دفعة واحدة
   List<String> _validatePasswordAll(String password) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     final List<String> errors = [];
 
     if (password.length < 8) {
-      errors.add('Must be at least 8 characters');
+      errors.add(languageProvider.isArabic
+          ? 'يجب أن تكون 8 أحرف على الأقل'
+          : 'Must be at least 8 characters');
     }
     if (!RegExp(r'[A-Z]').hasMatch(password)) {
-      errors.add('Must contain at least one uppercase letter (A-Z)');
+      errors.add(languageProvider.isArabic
+          ? 'يجب أن تحتوي على حرف كبير واحد على الأقل (A-Z)'
+          : 'Must contain at least one uppercase letter (A-Z)');
     }
     if (!RegExp(r'[a-z]').hasMatch(password)) {
-      errors.add('Must contain at least one lowercase letter (a-z)');
+      errors.add(languageProvider.isArabic
+          ? 'يجب أن تحتوي على حرف صغير واحد على الأقل (a-z)'
+          : 'Must contain at least one lowercase letter (a-z)');
     }
     if (!RegExp(r'[0-9]').hasMatch(password)) {
-      errors.add('Must contain at least one number (0-9)');
+      errors.add(languageProvider.isArabic
+          ? 'يجب أن تحتوي على رقم واحد على الأقل (0-9)'
+          : 'Must contain at least one number (0-9)');
     }
     if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) {
-      errors.add('Must contain at least one special character');
+      errors.add(languageProvider.isArabic
+          ? 'يجب أن تحتوي على رمز خاص واحد على الأقل'
+          : 'Must contain at least one special character');
     }
 
     return errors;
   }
 
   Future<void> _updatePassword() async {
-    // ✅ تحقق الحقول المطلوبة (كلها)
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     final current = _currentPasswordController.text.trim();
     final newer = _newPasswordController.text.trim();
     final confirm = _confirmPasswordController.text.trim();
+    
     if (current.isEmpty || newer.isEmpty || confirm.isEmpty) {
-      const msg = 'Please fill all required fields';
+      final msg = languageProvider.isArabic
+          ? 'من فضلك املأ جميع الحقول المطلوبة'
+          : 'Please fill all required fields';
       _showErrorBannerMessage(msg);
       _speak(msg);
       return;
     }
 
-    // التحقق من تطابق الجديدة والتأكيد
     if (newer != confirm) {
-      final msg = 'New passwords do not match';
+      final msg = languageProvider.isArabic
+          ? 'كلمات المرور الجديدة غير متطابقة'
+          : 'New passwords do not match';
       _showErrorBannerMessage(msg);
       _speak(msg);
       return;
     }
 
-    // التحقق من أن الجديدة ليست نفس الحالية
     if (current == newer) {
-      const msg = 'New password must be different from current password';
+      final msg = languageProvider.isArabic
+          ? 'يجب أن تكون كلمة المرور الجديدة مختلفة عن الحالية'
+          : 'New password must be different from current password';
       _showErrorBannerMessage(msg);
       _speak(msg);
       return;
     }
 
-    // ✅ التحقق الشامل
     final allErrors = _validatePasswordAll(newer);
     if (allErrors.isNotEmpty) {
-      final pretty = 'Please fix the following:\n• ${allErrors.join('\n• ')}';
+      final pretty = languageProvider.isArabic
+          ? 'من فضلك اصلح التالي:\n• ${allErrors.join('\n• ')}'
+          : 'Please fix the following:\n• ${allErrors.join('\n• ')}';
       _showErrorBannerMessage(pretty);
       _speak(
-        'Password does not meet the requirements. ${allErrors.join('. ')}.',
+        languageProvider.isArabic
+            ? 'كلمة المرور لا تستوفي المتطلبات. ${allErrors.join('. ')}.'
+            : 'Password does not meet the requirements. ${allErrors.join('. ')}.',
       );
       return;
     }
@@ -199,8 +214,12 @@ Future.delayed(Duration(seconds: displaySeconds), () {
         await user.reauthenticateWithCredential(credential);
         await user.updatePassword(newer);
 
-        _showSuccessSnackBar('Password updated successfully');
-        _speak('Password updated successfully');
+        _showSuccessSnackBar(languageProvider.isArabic
+            ? 'تم تحديث كلمة المرور بنجاح'
+            : 'Password updated successfully');
+        _speak(languageProvider.isArabic
+            ? 'تم تحديث كلمة المرور بنجاح'
+            : 'Password updated successfully');
 
         _clearPasswordForm();
         setState(() {
@@ -208,27 +227,45 @@ Future.delayed(Duration(seconds: displaySeconds), () {
         });
       }
     } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Failed to update password';
+      String errorMessage = languageProvider.isArabic
+          ? 'فشل تحديث كلمة المرور'
+          : 'Failed to update password';
 
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        errorMessage = 'Invalid password. Please try again';
+        errorMessage = languageProvider.isArabic
+            ? 'كلمة مرور غير صحيحة. حاول مرة أخرى'
+            : 'Invalid password. Please try again';
       } else if (e.code == 'weak-password') {
-        errorMessage = 'New password is too weak';
+        errorMessage = languageProvider.isArabic
+            ? 'كلمة المرور الجديدة ضعيفة جداً'
+            : 'New password is too weak';
       } else if (e.code == 'requires-recent-login') {
-        errorMessage = 'Please log out and log back in, then try again';
+        errorMessage = languageProvider.isArabic
+            ? 'من فضلك سجل خروج ثم سجل دخول مرة أخرى، ثم حاول'
+            : 'Please log out and log back in, then try again';
       } else if (e.code == 'invalid-email') {
-        errorMessage = 'Invalid email format';
+        errorMessage = languageProvider.isArabic
+            ? 'صيغة البريد الإلكتروني غير صحيحة'
+            : 'Invalid email format';
       } else if (e.code == 'user-not-found') {
-        errorMessage = 'User account not found';
+        errorMessage = languageProvider.isArabic
+            ? 'لم يتم العثور على حساب المستخدم'
+            : 'User account not found';
       } else {
-        errorMessage = 'Current password is incorrect. Please try again.';
+        errorMessage = languageProvider.isArabic
+            ? 'كلمة المرور الحالية غير صحيحة. حاول مرة أخرى'
+            : 'Current password is incorrect. Please try again.';
       }
 
       _showErrorBannerMessage(errorMessage);
       _speak(errorMessage);
     } catch (e) {
-      _showErrorBannerMessage('An unexpected error occurred');
-      _speak('An unexpected error occurred');
+      _showErrorBannerMessage(languageProvider.isArabic
+          ? 'حدث خطأ غير متوقع'
+          : 'An unexpected error occurred');
+      _speak(languageProvider.isArabic
+          ? 'حدث خطأ غير متوقع'
+          : 'An unexpected error occurred');
     } finally {
       setState(() {
         isLoading = false;
@@ -387,6 +424,8 @@ Future.delayed(Duration(seconds: displaySeconds), () {
   }
 
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
@@ -412,7 +451,7 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                 onTap: () {
                   _hapticFeedback();
                   _tts.stop();
-                  _speak('Going back');
+                  _speak(languageProvider.isArabic ? 'العودة' : 'Going back');
                   Future.delayed(const Duration(milliseconds: 800), () {
                     Navigator.pop(context);
                   });
@@ -433,9 +472,11 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                       ),
                     ],
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Icon(
-                      Icons.arrow_back_ios_new,
+                      languageProvider.isArabic
+                          ? Icons.arrow_forward_ios
+                          : Icons.arrow_back_ios_new,
                       color: Colors.white,
                       size: 20,
                     ),
@@ -449,7 +490,7 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Change Password',
+                    languageProvider.isArabic ? 'تغيير كلمة المرور' : 'Change Password',
                     style: TextStyle(
                       fontSize: 25,
                       fontWeight: FontWeight.w900,
@@ -462,7 +503,9 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Update your password securely',
+                    languageProvider.isArabic
+                        ? 'حدّث كلمة مرورك بأمان'
+                        : 'Update your password securely',
                     style: TextStyle(
                       fontSize: 14,
                       color: deepPurple.withOpacity(0.6),
@@ -477,9 +520,9 @@ Future.delayed(Duration(seconds: displaySeconds), () {
         ),
       ),
     );
-  }
-
-  Widget _buildContent() {
+  }Widget _buildContent() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
           .animate(
@@ -493,8 +536,10 @@ Future.delayed(Duration(seconds: displaySeconds), () {
         child: Column(
           children: [
             _buildSecurityCard(
-              'Update Your Password',
-              'Change your account password',
+              languageProvider.isArabic ? 'تحديث كلمة المرور' : 'Update Your Password',
+              languageProvider.isArabic
+                  ? 'تغيير كلمة مرور حسابك'
+                  : 'Change your account password',
               Icons.lock_outline,
               const LinearGradient(colors: [deepPurple, vibrantPurple]),
               onTap: () {
@@ -508,8 +553,12 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                 }
                 _speak(
                   isChangingPassword
-                      ? 'Password form opened'
-                      : 'Password form closed',
+                      ? (languageProvider.isArabic
+                          ? 'تم فتح نموذج كلمة المرور'
+                          : 'Password form opened')
+                      : (languageProvider.isArabic
+                          ? 'تم إغلاق نموذج كلمة المرور'
+                          : 'Password form closed'),
                 );
               },
             ),
@@ -616,6 +665,7 @@ Future.delayed(Duration(seconds: displaySeconds), () {
   }
 
   Widget _buildPasswordForm() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     final newPwd = _newPasswordController.text;
     final confirmPwd = _confirmPasswordController.text;
     final rules = _passwordRulesStatus(newPwd);
@@ -636,26 +686,25 @@ Future.delayed(Duration(seconds: displaySeconds), () {
       child: Column(
         children: [
           _buildPasswordField(
-            'Current Password',
+            languageProvider.isArabic ? 'كلمة المرور الحالية' : 'Current Password',
             _currentPasswordController,
             _currentPasswordVisible,
             (value) => setState(() => _currentPasswordVisible = value),
           ),
           const SizedBox(height: 20),
           _buildPasswordField(
-            'New Password',
+            languageProvider.isArabic ? 'كلمة المرور الجديدة' : 'New Password',
             _newPasswordController,
             _newPasswordVisible,
             (value) => setState(() => _newPasswordVisible = value),
           ),
 
-          // ✅ قائمة حيّة للمتطلبات
           const SizedBox(height: 12),
           _buildLiveChecklist(rules),
 
           const SizedBox(height: 20),
           _buildPasswordField(
-            'Confirm New Password',
+            languageProvider.isArabic ? 'تأكيد كلمة المرور الجديدة' : 'Confirm New Password',
             _confirmPasswordController,
             _confirmPasswordVisible,
             (value) => setState(() => _confirmPasswordVisible = value),
@@ -666,7 +715,6 @@ Future.delayed(Duration(seconds: displaySeconds), () {
           const SizedBox(height: 45),
           Column(
             children: [
-              // زر التحديث
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
@@ -706,9 +754,11 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                             strokeWidth: 2.5,
                           ),
                         )
-                      : const Text(
-                          'Update Password',
-                          style: TextStyle(
+                      : Text(
+                          languageProvider.isArabic
+                              ? 'تحديث كلمة المرور'
+                              : 'Update Password',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
                             fontSize: 20,
@@ -718,7 +768,6 @@ Future.delayed(Duration(seconds: displaySeconds), () {
               ),
               const SizedBox(height: 28),
 
-              // زر الإلغاء — خلفية فاتحة + حدود ونص كما كانت
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
@@ -730,13 +779,14 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                             isChangingPassword = false;
                           });
                           _clearPasswordForm();
-                          _speak('Password form cancelled');
+                          _speak(languageProvider.isArabic
+                              ? 'تم إلغاء نموذج كلمة المرور'
+                              : 'Password form cancelled');
                         },
                   style: OutlinedButton.styleFrom(
-                    backgroundColor: cancelUltraPale, // يبقى فاتح
-                    foregroundColor: vibrantPurple, // ← رجّعنا لون النص للأصلي
+                    backgroundColor: cancelUltraPale,
+                    foregroundColor: vibrantPurple,
                     side: BorderSide(
-                      // ← رجّعنا البوردر للأصلي
                       color: vibrantPurple.withOpacity(0.5),
                       width: 2,
                     ),
@@ -746,10 +796,10 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                     padding: const EdgeInsets.symmetric(vertical: 24),
                     overlayColor: vibrantPurple.withOpacity(0.06),
                   ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700, // نفس السماكة الأصلية
+                  child: Text(
+                    languageProvider.isArabic ? 'إلغاء' : 'Cancel',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
                       fontSize: 20,
                     ),
                   ),
@@ -768,6 +818,8 @@ Future.delayed(Duration(seconds: displaySeconds), () {
     bool isVisible,
     ValueChanged<bool> onVisibilityChanged,
   ) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -807,7 +859,9 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                 onVisibilityChanged(!isVisible);
               },
             ),
-            hintText: 'Enter ${label.toLowerCase()}',
+            hintText: languageProvider.isArabic
+                ? 'ادخل ${label.toLowerCase()}'
+                : 'Enter ${label.toLowerCase()}',
             hintStyle: TextStyle(
               color: deepPurple.withOpacity(0.4),
               fontWeight: FontWeight.w500,
@@ -838,12 +892,14 @@ Future.delayed(Duration(seconds: displaySeconds), () {
   }
 
   Map<String, bool> _passwordRulesStatus(String pwd) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
     return {
-      'At least 8 characters': pwd.length >= 8,
-      'Uppercase letter (A-Z)': RegExp(r'[A-Z]').hasMatch(pwd),
-      'Lowercase letter (a-z)': RegExp(r'[a-z]').hasMatch(pwd),
-      'Number (0-9)': RegExp(r'[0-9]').hasMatch(pwd),
-      'Special character': RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(pwd),
+      languageProvider.isArabic ? '8 أحرف على الأقل' : 'At least 8 characters': pwd.length >= 8,
+      languageProvider.isArabic ? 'حرف كبير (A-Z)' : 'Uppercase letter (A-Z)': RegExp(r'[A-Z]').hasMatch(pwd),
+      languageProvider.isArabic ? 'حرف صغير (a-z)' : 'Lowercase letter (a-z)': RegExp(r'[a-z]').hasMatch(pwd),
+      languageProvider.isArabic ? 'رقم (0-9)' : 'Number (0-9)': RegExp(r'[0-9]').hasMatch(pwd),
+      languageProvider.isArabic ? 'رمز خاص' : 'Special character': RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(pwd),
     };
   }
 
@@ -889,8 +945,11 @@ Future.delayed(Duration(seconds: displaySeconds), () {
   }
 
   Widget _buildConfirmMatchHint(String newPwd, String confirmPwd) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     if (confirmPwd.isEmpty && newPwd.isEmpty) return const SizedBox.shrink();
     final matches = newPwd == confirmPwd && confirmPwd.isNotEmpty;
+    
     return Row(
       children: [
         Icon(
@@ -900,7 +959,11 @@ Future.delayed(Duration(seconds: displaySeconds), () {
         ),
         const SizedBox(width: 8),
         Text(
-          matches ? 'Passwords match' : 'Passwords do not match yet',
+          matches
+              ? (languageProvider.isArabic ? 'كلمات المرور متطابقة' : 'Passwords match')
+              : (languageProvider.isArabic
+                  ? 'كلمات المرور غير متطابقة بعد'
+                  : 'Passwords do not match yet'),
           style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.w700,
@@ -912,11 +975,12 @@ Future.delayed(Duration(seconds: displaySeconds), () {
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
+      clipBehavior: Clip.none,
       children: [
-        // الفوتر الأساسي
         ClipRRect(
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
@@ -952,12 +1016,14 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: false,
                       description: 'Navigate to Homepage',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('Navigate to Homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'الانتقال للصفحة الرئيسية'
+                            : 'Navigate to Homepage');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -968,11 +1034,13 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
                       description: 'Manage your reminders and notifications',
                       onTap: () {
                         _speak(
-                          'Reminders, Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic
+                              ? 'التذكيرات، أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Reminders, Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -982,14 +1050,16 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                         );
                       },
                     ),
-                    const SizedBox(width: 60), // مساحة للدائرة
+                    const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
                       description:
                           'Manage your emergency contacts and important people',
                       onTap: () {
-                        _speak('Contact, Store and manage emergency contacts');
+                        _speak(languageProvider.isArabic
+                            ? 'جهات الاتصال، تخزين وإدارة جهات اتصال الطوارئ'
+                            : 'Contact, Store and manage emergency contacts');
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1000,11 +1070,13 @@ Future.delayed(Duration(seconds: displaySeconds), () {
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
                       description: 'Adjust app settings and preferences',
                       onTap: () {
                         _speak(
-                          'Settings, Manage your settings and preferences',
+                          languageProvider.isArabic
+                              ? 'الإعدادات، إدارة الإعدادات والتفضيلات'
+                              : 'Settings, Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -1027,7 +1099,9 @@ Future.delayed(Duration(seconds: displaySeconds), () {
             onTap: () {
               _hapticFeedback();
               _speak(
-                'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
+                languageProvider.isArabic
+                    ? 'طوارئ، إرسال تنبيه طوارئ لجهات الاتصال الموثوقة عندما تحتاج المساعدة'
+                    : 'Emergency SOS, Sends an emergency alert to your trusted contacts when you need help',
               );
               Navigator.push(
                 context,
@@ -1073,7 +1147,6 @@ Future.delayed(Duration(seconds: displaySeconds), () {
     );
   }
 
-  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
   Widget _buildNavButton({
     required IconData icon,
     required String label,
@@ -1126,12 +1199,4 @@ Future.delayed(Duration(seconds: displaySeconds), () {
       ),
     );
   }
-}
-
-// helper classes to access color constants in const widgets
-class SecurityDataPageStateColors {
-  static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
-  static const Color vibrantPurple = Color(0xFF8E3A95);
-  static const Color primaryPurple = Color(0xFF9C4A9E);
-  static const Color palePurple = Color.fromARGB(255, 218, 185, 225);
 }

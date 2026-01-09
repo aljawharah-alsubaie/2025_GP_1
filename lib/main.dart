@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:provider/provider.dart';
-import 'screens/language_selection_screen.dart';
+import 'screens/splash_screen.dart';  
 import 'providers/language_provider.dart';
 
 void main() async {
@@ -34,7 +34,6 @@ class MyApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'Munir App',
           theme: ThemeData(primarySwatch: Colors.purple),
-          // ✅ دعم اتجاه النص للعربي
           builder: (context, child) {
             return Directionality(
               textDirection: languageProvider.isArabic 
@@ -43,7 +42,7 @@ class MyApp extends StatelessWidget {
               child: child!,
             );
           },
-          home: const LanguageSelectionScreen(),
+          home: const SplashScreen(),  
         );
       },
     );

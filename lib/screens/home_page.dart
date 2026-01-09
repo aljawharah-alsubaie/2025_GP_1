@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import './profile.dart';
 import './face_list.dart';
 import './camera.dart';
@@ -29,7 +31,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   late AnimationController _floatController;
 
   String _userName = '';
-  // 🎨 نظام ألوان موف جديد
+  
   static const Color deepPurple = Color.fromARGB(255, 92, 25, 99);
   static const Color vibrantPurple = Color(0xFF8E3A95);
   static const Color primaryPurple = Color(0xFF9C4A9E);
@@ -59,7 +61,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Future<void> _initTts() async {
-    await _tts.setLanguage("eUSn-");
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    await _tts.setLanguage(languageCode == 'ar' ? 'ar-SA' : 'en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
   }
@@ -110,10 +113,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       backgroundColor: ultraLightPurple,
       body: Stack(
         children: [
-          // 🎨 خلفية متدرجة
           _buildGradientBackground(),
-
-          // 🎯 الهيدر الجديد فوق تماماً
           SafeArea(
             child: Column(
               children: [
@@ -124,12 +124,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
         ],
       ),
-
       bottomNavigationBar: _buildFloatingBottomNav(),
     );
   }
 
-  // 🎨 خلفية متدرجة
   Widget _buildGradientBackground() {
     return Container(
       decoration: BoxDecoration(
@@ -143,8 +141,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 🎯 هيدر جديد - أكبر حجماً
   Widget _buildModernHeader() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return FadeTransition(
       opacity: _fadeController,
       child: Container(
@@ -163,7 +162,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
         child: Row(
           children: [
-            // 🕶️ نظارة متحركة على اليسار - أكبر
+            // 🕶️ نظارة متحركة
             AnimatedBuilder(
               animation: _floatController,
               builder: (context, child) {
@@ -193,13 +192,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
             const SizedBox(width: 16),
 
-            // النص في المنتصف - أكبر
+            // النص
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Welcome Back',
+                    languageProvider.isArabic ? 'مرحباً بعودتك' : 'Welcome Back',
                     style: TextStyle(
                       fontSize: 14,
                       color: deepPurple.withOpacity(0.7),
@@ -224,15 +223,18 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               ),
             ),
 
-            // زر البروفايل ثابت على اليمين - أكبر
+            // زر البروفايل
             Semantics(
               label: 'Profile settings',
               button: true,
               child: GestureDetector(
                 onTap: () {
+                  final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
                   _explainFeature(
-                    'Profile',
-                    'Manage your personal information',
+                    languageProvider.isArabic ? 'الملف الشخصي' : 'Profile',
+                    languageProvider.isArabic
+                        ? 'إدارة معلوماتك الشخصية'
+                        : 'Manage your personal information',
                   );
                   Navigator.push(
                     context,
@@ -273,8 +275,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 📜 قائمة الميزات - مسافات أكبر
   Widget _buildFeaturesList() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return SlideTransition(
       position: Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero)
           .animate(
@@ -284,18 +287,23 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             ),
           ),
       child: ListView(
-        // كان: EdgeInsets.fromLTRB(16, 35, 16, 20)
         padding: const EdgeInsets.fromLTRB(20, 25, 20, 36),
         children: [
           _buildNeumorphicCard(
-            title: 'Face Recognition',
-            subtitle: 'Identify people instantly',
+            title: languageProvider.isArabic ? 'التعرف على الوجوه' : 'Face Recognition',
+            subtitle: languageProvider.isArabic
+                ? 'تعرّف على الأشخاص فوراً'
+                : 'Identify people instantly',
             icon: Icons.face_retouching_natural,
             gradient: LinearGradient(colors: [deepPurple, vibrantPurple]),
-            description:
-                'This feature helps you recognize faces and identify people around you using camera',
+            description: languageProvider.isArabic
+                ? 'هذه الميزة تساعدك على التعرف على الوجوه والأشخاص من حولك باستخدام الكاميرا'
+                : 'This feature helps you recognize faces and identify people around you using camera',
             onTap: () {
-              _explainFeature('Face Recognition', '');
+              _explainFeature(
+                languageProvider.isArabic ? 'التعرف على الوجوه' : 'Face Recognition',
+                '',
+              );
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const FaceListPage()),
@@ -304,16 +312,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           ),
 
           _buildNeumorphicCard(
-            title: 'Text Reading',
-            subtitle: 'Read text aloud',
+            title: languageProvider.isArabic ? 'قراءة النصوص' : 'Text Reading',
+            subtitle: languageProvider.isArabic
+                ? 'قراءة النص بصوت عالٍ'
+                : 'Read text aloud',
             icon: Icons.record_voice_over,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
-            description:
-                'This feature reads text from documents, signs, or any written material using your camera',
+            description: languageProvider.isArabic
+                ? 'هذه الميزة تقرأ النصوص من المستندات واللافتات أو أي مادة مكتوبة باستخدام الكاميرا'
+                : 'This feature reads text from documents, signs, or any written material using your camera',
             onTap: () {
               _explainFeature(
-                'Text Reading',
-                'Point your camera at any text. The app will detect it and read it aloud for you.',
+                languageProvider.isArabic ? 'قراءة النصوص' : 'Text Reading',
+                languageProvider.isArabic
+                    ? 'وجّه الكاميرا إلى أي نص. التطبيق سيكتشفه ويقرأه بصوت عالٍ'
+                    : 'Point your camera at any text. The app will detect it and read it aloud for you.',
               );
               Navigator.push(
                 context,
@@ -323,17 +336,23 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               );
             },
           ),
+
           _buildNeumorphicCard(
-            title: 'Currency Recognition',
-            subtitle: 'Recognize currency instantly',
+            title: languageProvider.isArabic ? 'التعرف على العملات' : 'Currency Recognition',
+            subtitle: languageProvider.isArabic
+                ? 'تعرّف على العملة فوراً'
+                : 'Recognize currency instantly',
             icon: Icons.monetization_on,
             gradient: const LinearGradient(colors: [deepPurple, vibrantPurple]),
-            description:
-                'This feature helps you identify different currency notes and their values',
+            description: languageProvider.isArabic
+                ? 'هذه الميزة تساعدك على التعرف على الأوراق النقدية المختلفة وقيمها'
+                : 'This feature helps you identify different currency notes and their values',
             onTap: () {
               _explainFeature(
-                'Currency Recognition',
-                'Point your camera at a banknote and the app will tell you its value',
+                languageProvider.isArabic ? 'التعرف على العملات' : 'Currency Recognition',
+                languageProvider.isArabic
+                    ? 'وجّه الكاميرا إلى ورقة نقدية وسيخبرك التطبيق بقيمتها'
+                    : 'Point your camera at a banknote and the app will tell you its value',
               );
               Navigator.push(
                 context,
@@ -343,19 +362,25 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               );
             },
           ),
+
           _buildNeumorphicCard(
-            title: 'Color Identification',
-            subtitle: 'Identify colors around you',
+            title: languageProvider.isArabic ? 'تحديد الألوان' : 'Color Identification',
+            subtitle: languageProvider.isArabic
+                ? 'تعرّف على الألوان من حولك'
+                : 'Identify colors around you',
             icon: Icons.palette,
             gradient: const LinearGradient(
               colors: [vibrantPurple, primaryPurple],
             ),
-            description:
-                'This feature detects and announces colors of objects around you using your camera',
+            description: languageProvider.isArabic
+                ? 'هذه الميزة تكتشف وتعلن عن ألوان الأشياء من حولك باستخدام الكاميرا'
+                : 'This feature detects and announces colors of objects around you using your camera',
             onTap: () {
               _explainFeature(
-                'Color Identification',
-                'Point your camera at an object and the app will describe it and tell you its color',
+                languageProvider.isArabic ? 'تحديد الألوان' : 'Color Identification',
+                languageProvider.isArabic
+                    ? 'وجّه الكاميرا إلى شيء وسيصفه التطبيق ويخبرك بلونه'
+                    : 'Point your camera at an object and the app will describe it and tell you its color',
               );
               Navigator.push(
                 context,
@@ -370,7 +395,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 🎯 كارت Neumorphic بحجم مطابق للصورة
   Widget _buildNeumorphicCard({
     required String title,
     required String subtitle,
@@ -383,9 +407,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       label: '$title. $subtitle. Double tap to open',
       button: true,
       child: Container(
-        margin: const EdgeInsets.only(
-          bottom: 26,
-        ), // قللت المسافة شوي مثل الصورة
+        margin: const EdgeInsets.only(bottom: 26),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -409,13 +431,10 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-              constraints: const BoxConstraints(
-                minHeight: 90,
-              ), // نفس ارتفاع الصورة
+              constraints: const BoxConstraints(minHeight: 90),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // 🟣 الأيقونة
                   Container(
                     width: 55,
                     height: 55,
@@ -435,7 +454,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
                   const SizedBox(width: 16),
 
-                  // 🟣 النصوص
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -464,7 +482,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ),
 
-                  // 🟣 السهم
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
@@ -492,11 +509,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   Widget _buildFloatingBottomNav() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    
     return Stack(
       alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.none, // مهم عشان الدائرة تطلع فوق
+      clipBehavior: Clip.none,
       children: [
-        // الفوتر الأساسي
         ClipRRect(
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
@@ -532,22 +550,30 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   children: [
                     _buildNavButton(
                       icon: Icons.home_rounded,
-                      label: 'Home',
+                      label: languageProvider.isArabic ? 'الرئيسية' : 'Home',
                       isActive: true,
-                      description: 'You are on the home screen',
+                      description: languageProvider.isArabic
+                          ? 'أنت في الصفحة الرئيسية'
+                          : 'You are on the home screen',
                       onTap: () {
                         _hapticFeedback();
-                        _speak('You are already on homepage');
+                        _speak(languageProvider.isArabic
+                            ? 'أنت بالفعل في الصفحة الرئيسية'
+                            : 'You are already on homepage');
                       },
                     ),
                     _buildNavButton(
                       icon: Icons.notifications_rounded,
-                      label: 'Reminders',
-                      description: 'Manage your reminders and notifications',
+                      label: languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
+                      description: languageProvider.isArabic
+                          ? 'إدارة التذكيرات والإشعارات'
+                          : 'Manage your reminders and notifications',
                       onTap: () {
                         _explainFeature(
-                          'Reminders',
-                          'Create and manage reminders, and the app will notify you at the right time',
+                          languageProvider.isArabic ? 'التذكيرات' : 'Reminders',
+                          languageProvider.isArabic
+                              ? 'أنشئ وأدر التذكيرات، وسيخطرك التطبيق في الوقت المناسب'
+                              : 'Create and manage reminders, and the app will notify you at the right time',
                         );
                         Navigator.push(
                           context,
@@ -557,16 +583,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         );
                       },
                     ),
-                    const SizedBox(width: 60), // مساحة للدائرة
+                    const SizedBox(width: 60),
                     _buildNavButton(
                       icon: Icons.contacts_rounded,
-                      label: 'Contacts',
-                      description:
-                          'Manage your emergency contacts and important people',
+                      label: languageProvider.isArabic ? 'جهات الاتصال' : 'Contacts',
+                      description: languageProvider.isArabic
+                          ? 'إدارة جهات الاتصال الطارئة والأشخاص المهمين'
+                          : 'Manage your emergency contacts and important people',
                       onTap: () {
                         _explainFeature(
-                          'Contact',
-                          'Store and manage emergency contacts',
+                          languageProvider.isArabic ? 'جهات الاتصال' : 'Contact',
+                          languageProvider.isArabic
+                              ? 'احفظ وأدر جهات الاتصال الطارئة'
+                              : 'Store and manage emergency contacts',
                         );
                         Navigator.push(
                           context,
@@ -578,12 +607,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                     _buildNavButton(
                       icon: Icons.settings_rounded,
-                      label: 'Settings',
-                      description: 'Adjust app settings and preferences',
+                      label: languageProvider.isArabic ? 'الإعدادات' : 'Settings',
+                      description: languageProvider.isArabic
+                          ? 'ضبط إعدادات التطبيق والتفضيلات'
+                          : 'Adjust app settings and preferences',
                       onTap: () {
                         _explainFeature(
-                          'Settings',
-                          'Manage your settings and preferences',
+                          languageProvider.isArabic ? 'الإعدادات' : 'Settings',
+                          languageProvider.isArabic
+                              ? 'إدارة الإعدادات والتفضيلات'
+                              : 'Manage your settings and preferences',
                         );
                         Navigator.push(
                           context,
@@ -604,10 +637,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           bottom: 40,
           child: GestureDetector(
             onTap: () {
+              final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
               _hapticFeedback();
               _explainFeature(
-                'Emergency SOS',
-                'Sends an emergency alert to your trusted contacts when you need help',
+                languageProvider.isArabic ? 'طوارئ' : 'Emergency SOS',
+                languageProvider.isArabic
+                    ? 'يرسل تنبيه طوارئ لجهات الاتصال الموثوقة عندما تحتاج مساعدة'
+                    : 'Sends an emergency alert to your trusted contacts when you need help',
               );
               Navigator.push(
                 context,
@@ -653,7 +689,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     );
   }
 
-  // 🔘 زر Navigation بألوان فاتحة للخلفية الغامقة
   Widget _buildNavButton({
     required IconData icon,
     required String label,

@@ -8,6 +8,8 @@ import 'dart:io';
 import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -26,7 +28,6 @@ class _CameraScreenState extends State<CameraScreen> {
   String _extractedText = "";
   String? _selectedImagePath;
 
-  // IBM Watson TTS
   static const String IBM_TTS_API_KEY =
       "Ibvg1Q2qca9ALJa1JCZVp09gFJMstnyeAXaOWKNrq6o-";
   static const String IBM_TTS_URL =
@@ -63,7 +64,6 @@ class _CameraScreenState extends State<CameraScreen> {
     if (mounted) setState(() {});
   }
 
-  // معالجة الصورة لتحسين OCR
   Future<File> _preprocessImage(File imageFile) async {
     print('🔧 Preprocessing image for better OCR...');
 
@@ -72,24 +72,15 @@ class _CameraScreenState extends State<CameraScreen> {
       img.Image? image = img.decodeImage(bytes);
 
       if (image != null) {
-        // 1. تصغير الحجم إذا كانت كبيرة جداً (تسريع المعالجة)
         if (image.width > 2000) {
           image = img.copyResize(image, width: 2000);
         }
 
-        // 2. تحويل لأبيض وأسود
         image = img.grayscale(image);
-
-        // 3. زيادة التباين
         image = img.contrast(image, contrast: 150);
-
-        // 4. إزالة الضوضاء
         image = img.gaussianBlur(image, radius: 1);
-
-        // 5. Sharpen
         image = img.adjustColor(image, brightness: 1.05, contrast: 1.2);
 
-        // حفظ مؤقت
         final tempDir = await getTemporaryDirectory();
         final processedPath =
             '${tempDir.path}/processed_${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -110,23 +101,19 @@ class _CameraScreenState extends State<CameraScreen> {
     try {
       print('📸 Starting advanced OCR...');
 
-      // معالجة الصورة أولاً
       final processedImage = await _preprocessImage(imageFile);
 
-      // Tesseract OCR مع إعدادات محسّنة
       String text = await FlutterTesseractOcr.extractText(
         processedImage.path,
-        language: 'ara+eng', // عربي + إنجليزي
+        language: 'ara+eng',
         args: {
-          "psm": "3", // Fully automatic page segmentation
+          "psm": "3",
           "preserve_interword_spaces": "1",
         },
       );
 
-      // تنظيف النص
       text = text.trim();
 
-      // حذف الصورة المؤقتة
       if (processedImage.path != imageFile.path) {
         try {
           await processedImage.delete();
@@ -145,7 +132,13 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Future<String?> _convertTextToSpeech(String text) async {
     try {
+      final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
       final String auth = base64Encode(utf8.encode('apikey:$IBM_TTS_API_KEY'));
+
+      // اختيار الصوت حسب اللغة
+      final voice = languageCode == 'ar' 
+          ? 'ar-MS_OmarVoice'  // صوت عربي
+          : 'en-US_AllisonV3Voice';  // صوت إنجليزي
 
       final response = await http.post(
         Uri.parse('$IBM_TTS_URL/v1/synthesize'),
@@ -156,7 +149,7 @@ class _CameraScreenState extends State<CameraScreen> {
         },
         body: jsonEncode({
           'text': text,
-          'voice': 'en-US_AllisonV3Voice',
+          'voice': voice,
           'accept': 'audio/mp3',
         }),
       );
@@ -180,6 +173,7 @@ class _CameraScreenState extends State<CameraScreen> {
     String imagePath, {
     bool fromGallery = false,
   }) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
     setState(() => _busy = true);
 
     try {
@@ -187,7 +181,6 @@ class _CameraScreenState extends State<CameraScreen> {
         _selectedImagePath = imagePath;
       }
 
-      // استخراج النص
       String extractedText = await _extractTextFromImage(File(imagePath));
 
       setState(() {
@@ -199,11 +192,12 @@ class _CameraScreenState extends State<CameraScreen> {
         textToSpeak = extractedText;
         print("✅ Extracted: $extractedText");
       } else {
-        textToSpeak = "No text detected in the image";
+        textToSpeak = languageProvider.isArabic
+            ? "لم يتم اكتشاف نص في الصورة"
+            : "No text detected in the image";
         print("⚠️ No text found");
       }
 
-      // تحويل لصوت
       if (textToSpeak.trim().isNotEmpty) {
         String? audioPath = await _convertTextToSpeech(textToSpeak);
 
@@ -216,8 +210,12 @@ class _CameraScreenState extends State<CameraScreen> {
               SnackBar(
                 content: Text(
                   extractedText.isNotEmpty
-                      ? 'Text extracted successfully! 📄'
-                      : 'No text found in image',
+                      ? (languageProvider.isArabic
+                          ? 'تم استخراج النص بنجاح! 📄'
+                          : 'Text extracted successfully! 📄')
+                      : (languageProvider.isArabic
+                          ? 'لم يتم العثور على نص في الصورة'
+                          : 'No text found in image'),
                 ),
                 backgroundColor: extractedText.isNotEmpty
                     ? Colors.green
@@ -232,7 +230,12 @@ class _CameraScreenState extends State<CameraScreen> {
       print('❌ Processing error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text(languageProvider.isArabic
+                ? 'خطأ: $e'
+                : 'Error: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -269,6 +272,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
@@ -276,7 +280,6 @@ class _CameraScreenState extends State<CameraScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                // Camera Preview
                 Positioned.fill(
                   child: _selectedImagePath != null
                       ? Image.file(File(_selectedImagePath!), fit: BoxFit.cover)
@@ -299,7 +302,8 @@ class _CameraScreenState extends State<CameraScreen> {
                 // Back button
                 Positioned(
                   top: 40,
-                  left: 16,
+                  left: languageProvider.isArabic ? null : 16,
+                  right: languageProvider.isArabic ? 16 : null,
                   child: GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
@@ -308,8 +312,10 @@ class _CameraScreenState extends State<CameraScreen> {
                         color: Colors.black.withOpacity(0.3),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                        Icons.arrow_back,
+                      child: Icon(
+                        languageProvider.isArabic
+                            ? Icons.arrow_forward
+                            : Icons.arrow_back,
                         color: Colors.white,
                         size: 28,
                       ),
@@ -320,8 +326,8 @@ class _CameraScreenState extends State<CameraScreen> {
                 // Title
                 Positioned(
                   top: 40,
-                  right: 16,
-                  left: 80,
+                  right: languageProvider.isArabic ? 80 : 16,
+                  left: languageProvider.isArabic ? 16 : 80,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -331,14 +337,16 @@ class _CameraScreenState extends State<CameraScreen> {
                       color: Colors.black.withOpacity(0.6),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.text_fields, color: Colors.white, size: 16),
-                        SizedBox(width: 8),
+                        const Icon(Icons.text_fields, color: Colors.white, size: 16),
+                        const SizedBox(width: 8),
                         Text(
-                          'Advanced Text Recognition',
-                          style: TextStyle(
+                          languageProvider.isArabic
+                              ? 'التعرف المتقدم على النصوص'
+                              : 'Advanced Text Recognition',
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -353,7 +361,8 @@ class _CameraScreenState extends State<CameraScreen> {
                 if (_selectedImagePath != null)
                   Positioned(
                     top: 100,
-                    right: 16,
+                    right: languageProvider.isArabic ? null : 16,
+                    left: languageProvider.isArabic ? 16 : null,
                     child: GestureDetector(
                       onTap: _returnToCamera,
                       child: Container(
@@ -362,18 +371,20 @@ class _CameraScreenState extends State<CameraScreen> {
                           color: Colors.black.withOpacity(0.6),
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.camera_alt,
                               color: Colors.white,
                               size: 20,
                             ),
-                            SizedBox(width: 4),
+                            const SizedBox(width: 4),
                             Text(
-                              'New Photo',
-                              style: TextStyle(
+                              languageProvider.isArabic
+                                  ? 'صورة جديدة'
+                                  : 'New Photo',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
                               ),
@@ -401,17 +412,19 @@ class _CameraScreenState extends State<CameraScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.check_circle,
                                   color: Colors.greenAccent,
                                   size: 20,
                                 ),
-                                SizedBox(width: 8),
+                                const SizedBox(width: 8),
                                 Text(
-                                  'Extracted Text:',
-                                  style: TextStyle(
+                                  languageProvider.isArabic
+                                      ? 'النص المستخرج:'
+                                      : 'Extracted Text:',
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -427,20 +440,27 @@ class _CameraScreenState extends State<CameraScreen> {
                                 fontSize: 14,
                                 height: 1.5,
                               ),
+                              textDirection: _extractedText.contains(RegExp(r'[\u0600-\u06FF]'))
+                                  ? TextDirection.rtl
+                                  : TextDirection.ltr,
                             ),
                             const SizedBox(height: 12),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  '${_extractedText.split(' ').length} words',
+                                  languageProvider.isArabic
+                                      ? '${_extractedText.split(' ').length} كلمة'
+                                      : '${_extractedText.split(' ').length} words',
                                   style: const TextStyle(
                                     color: Colors.white38,
                                     fontSize: 11,
                                   ),
                                 ),
                                 Text(
-                                  '${_extractedText.length} characters',
+                                  languageProvider.isArabic
+                                      ? '${_extractedText.length} حرف'
+                                      : '${_extractedText.length} characters',
                                   style: const TextStyle(
                                     color: Colors.white38,
                                     fontSize: 11,
@@ -554,27 +574,31 @@ class _CameraScreenState extends State<CameraScreen> {
                   Positioned.fill(
                     child: Container(
                       color: Colors.black.withOpacity(0.3),
-                      child: const Center(
+                      child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            CircularProgressIndicator(
+                            const CircularProgressIndicator(
                               strokeWidth: 3,
                               color: Colors.white,
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             Text(
-                              'Processing image...',
-                              style: TextStyle(
+                              languageProvider.isArabic
+                                  ? 'جاري معالجة الصورة...'
+                                  : 'Processing image...',
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            SizedBox(height: 8),
+                            const SizedBox(height: 8),
                             Text(
-                              'Enhancing & extracting text',
-                              style: TextStyle(
+                              languageProvider.isArabic
+                                  ? 'تحسين واستخراج النص'
+                                  : 'Enhancing & extracting text',
+                              style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 13,
                               ),
