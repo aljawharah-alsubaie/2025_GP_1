@@ -64,8 +64,11 @@ class _CameraScreenState extends State<CameraScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<File> _preprocessImage(File imageFile) async {
-    print('🔧 Preprocessing image for better OCR...');
+  // ============================================================================
+  // تحسين: معالجة أفضل للنصوص العربية
+  // ============================================================================
+  Future<File> _preprocessImage(File imageFile, {bool isArabic = false}) async {
+    print('🔧 Preprocessing image for ${isArabic ? "Arabic" : "English"} OCR...');
 
     try {
       final bytes = await imageFile.readAsBytes();
@@ -77,9 +80,17 @@ class _CameraScreenState extends State<CameraScreen> {
         }
 
         image = img.grayscale(image);
-        image = img.contrast(image, contrast: 150);
+        
+        // للنصوص العربية: معالجة أقوى للنقاط والحركات
+        if (isArabic) {
+          image = img.contrast(image, contrast: 180);
+          image = img.adjustColor(image, brightness: 1.1, contrast: 1.3);
+        } else {
+          image = img.contrast(image, contrast: 150);
+          image = img.adjustColor(image, brightness: 1.05, contrast: 1.2);
+        }
+        
         image = img.gaussianBlur(image, radius: 1);
-        image = img.adjustColor(image, brightness: 1.05, contrast: 1.2);
 
         final tempDir = await getTemporaryDirectory();
         final processedPath =
@@ -97,11 +108,27 @@ class _CameraScreenState extends State<CameraScreen> {
     return imageFile;
   }
 
+  // ============================================================================
+  // تحسين: كشف اللغة تلقائياً
+  // ============================================================================
+  bool _isArabicText(String text) {
+    if (text.isEmpty) return false;
+    final arabicRegex = RegExp(r'[\u0600-\u06FF]');
+    final arabicChars = arabicRegex.allMatches(text).length;
+    final totalChars = text.replaceAll(RegExp(r'\s'), '').length;
+    return totalChars > 0 && (arabicChars / totalChars) > 0.3;
+  }
+
   Future<String> _extractTextFromImage(File imageFile) async {
     try {
-      print('📸 Starting advanced OCR...');
+      print('📸 Starting OCR...');
 
-      final processedImage = await _preprocessImage(imageFile);
+      // محاولة أولية لتحديد إذا كانت الصورة تحتوي على عربي
+      // (يمكن تحسين هذا بـ ML Kit لكشف اللغة قبل OCR)
+      final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+      final bool probablyArabic = languageCode == 'ar';
+
+      final processedImage = await _preprocessImage(imageFile, isArabic: probablyArabic);
 
       String text = await FlutterTesseractOcr.extractText(
         processedImage.path,
@@ -123,6 +150,8 @@ class _CameraScreenState extends State<CameraScreen> {
       }
 
       print('✅ OCR completed! Text length: ${text.length} chars');
+      print('📝 Detected language: ${_isArabicText(text) ? "Arabic" : "English"}');
+      
       return text;
     } catch (e) {
       print('❌ OCR Error: $e');
@@ -130,15 +159,21 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
+  // ============================================================================
+  // تصحيح: استخدام الصوت العربي الصحيح لـ IBM Watson
+  // ============================================================================
   Future<String?> _convertTextToSpeech(String text) async {
     try {
       final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
       final String auth = base64Encode(utf8.encode('apikey:$IBM_TTS_API_KEY'));
 
-      // اختيار الصوت حسب اللغة
+      // ✅ الأصوات الصحيحة لـ IBM Watson
+      // ar-AR_OmarVoice = الصوت العربي الوحيد المتاح في IBM Watson
       final voice = languageCode == 'ar' 
-          ? 'ar-MS_OmarVoice'  // صوت عربي
-          : 'en-US_AllisonV3Voice';  // صوت إنجليزي
+          ? 'ar-AR_OmarVoice'  // ✅ صحيح!
+          : 'en-US_AllisonV3Voice';
+
+      print('🔊 Using voice: $voice for language: $languageCode');
 
       final response = await http.post(
         Uri.parse('$IBM_TTS_URL/v1/synthesize'),
@@ -160,9 +195,13 @@ class _CameraScreenState extends State<CameraScreen> {
             '${tempDir.path}/output_${DateTime.now().millisecondsSinceEpoch}.mp3';
         final File audioFile = File(audioPath);
         await audioFile.writeAsBytes(response.bodyBytes);
+        print('✅ Audio saved: $audioPath');
         return audioPath;
+      } else {
+        print('❌ TTS failed with status: ${response.statusCode}');
+        print('Response: ${response.body}');
+        return null;
       }
-      return null;
     } catch (e) {
       print('❌ TTS Error: $e');
       return null;
@@ -221,6 +260,19 @@ class _CameraScreenState extends State<CameraScreen> {
                     ? Colors.green
                     : Colors.orange,
                 duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          // إذا فشل TTS، أظهر رسالة
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(languageProvider.isArabic
+                    ? 'تم استخراج النص لكن فشلت القراءة الصوتية'
+                    : 'Text extracted but audio playback failed'),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 3),
               ),
             );
           }
