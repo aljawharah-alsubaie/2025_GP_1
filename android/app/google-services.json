@@ -14,11 +14,27 @@
       },
       "oauth_client": [
         {
+          "client_id": "624453793810-ac63eb3sf92rm9iiu7ui5emafan0e177.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.munir_app",
+            "certificate_hash": "fe77c68ea2c7629ca17ff3a6f23389d2040b6e0f"
+          }
+        },
+        {
           "client_id": "624453793810-q4oqksqupl7ivj8oagsk93cmmjmr2sc8.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.munir_app",
             "certificate_hash": "0beac2b01e4d1b500cc46dc24888366ed6db27f5"
+          }
+        },
+        {
+          "client_id": "624453793810-u6fusun8ulm6mnc2qog1mt7se7q1h01j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.munir_app",
+            "certificate_hash": "0ab076033203035346ba42ae045486e9ec87fac1"
           }
         },
         {
