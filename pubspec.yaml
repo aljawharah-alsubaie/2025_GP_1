@@ -81,8 +81,6 @@ flutter:
     - assets/models/feature_extractor.tflite
     - assets/models/mobilefacenet.tflite
     - assets/models/arcface.tflite
-    - assets/models/w600k_r50_float16.tflite
-    - assets/models/1k3d68_float16.tflite
     - assets/models/2d106det_float16.tflite
     - assets/models/det_10g_simplified_float16.tflite
   fonts:
