@@ -13,6 +13,8 @@ import './reminders.dart';
 import './sos_screen.dart';
 import './contact_info_page.dart';
 import './currency_camera.dart';
+import 'camera_text_screen.dart';
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -331,7 +333,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const CameraScreen(mode: 'text'),
+                  builder: (context) => const CameraTextScreen(),
                 ),
               );
             },

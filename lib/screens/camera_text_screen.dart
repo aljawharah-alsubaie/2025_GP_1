@@ -11,14 +11,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../providers/language_provider.dart';
 
-class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key});
+class CameraTextScreen extends StatefulWidget {
+  const CameraTextScreen({super.key});
 
   @override
-  State<CameraScreen> createState() => _CameraScreenState();
+  State<CameraTextScreen> createState() => _CameraTextScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraTextScreenState extends State<CameraTextScreen> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   final picker = ImagePicker();
