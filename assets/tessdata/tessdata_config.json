@@ -1,0 +1,6 @@
+{
+  "tessedit_char_whitelist": "",
+  "tessedit_char_blacklist": "",
+  "language_model_penalty_non_freq_dict_word": 0.1,
+  "language_model_penalty_non_dict_word": 0.15
+}
