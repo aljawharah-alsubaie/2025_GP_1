@@ -75,10 +75,12 @@ class _CameraTextScreenState extends State<CameraTextScreen> {
       img.Image? image = img.decodeImage(bytes);
 
       if (image != null) {
+        // تصغير الصورة إذا كانت كبيرة جداً
         if (image.width > 2000) {
           image = img.copyResize(image, width: 2000);
         }
 
+        // تحويل لـ grayscale
         image = img.grayscale(image);
         
         // للنصوص العربية: معالجة أقوى للنقاط والحركات
@@ -90,6 +92,7 @@ class _CameraTextScreenState extends State<CameraTextScreen> {
           image = img.adjustColor(image, brightness: 1.05, contrast: 1.2);
         }
         
+        // تنعيم بسيط لإزالة التشويش
         image = img.gaussianBlur(image, radius: 1);
 
         final tempDir = await getTemporaryDirectory();
@@ -119,28 +122,37 @@ class _CameraTextScreenState extends State<CameraTextScreen> {
     return totalChars > 0 && (arabicChars / totalChars) > 0.3;
   }
 
+  // ============================================================================
+  // OCR مع Tesseract - محسّن للعربي
+  // ============================================================================
   Future<String> _extractTextFromImage(File imageFile) async {
     try {
-      print('📸 Starting OCR...');
+      print('📸 Starting OCR with Tesseract...');
 
-      // محاولة أولية لتحديد إذا كانت الصورة تحتوي على عربي
-      // (يمكن تحسين هذا بـ ML Kit لكشف اللغة قبل OCR)
+      // تحديد اللغة المتوقعة من إعدادات التطبيق
       final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
       final bool probablyArabic = languageCode == 'ar';
 
+      // معالجة الصورة قبل OCR
       final processedImage = await _preprocessImage(imageFile, isArabic: probablyArabic);
+
+      // ✅ تحسين: استخدام العربي أولاً إذا كانت اللغة عربية
+      final tessLanguage = probablyArabic ? 'ara+eng' : 'eng+ara';
+
+      print('🔤 Using Tesseract language: $tessLanguage');
 
       String text = await FlutterTesseractOcr.extractText(
         processedImage.path,
-        language: 'ara+eng',
+        language: tessLanguage,
         args: {
-          "psm": "3",
+          "psm": "3", // Fully automatic page segmentation
           "preserve_interword_spaces": "1",
         },
       );
 
       text = text.trim();
 
+      // حذف الملف المؤقت
       if (processedImage.path != imageFile.path) {
         try {
           await processedImage.delete();
