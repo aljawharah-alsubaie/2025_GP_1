@@ -8,8 +8,7 @@ environment:
 
 dependencies:  
   flutter:
-   sdk: flutter 
-   uses-material-design: true 
+    sdk: flutter
   flutter_localizations:  
     sdk: flutter          
   intl: ^0.20.0   
@@ -77,7 +76,7 @@ flutter:
 
   assets:
     - assets/images/
-     assets/tessdata/
+    - assets/tessdata/
     - assets/models/banknote_model.tflite
     - assets/models/facenet.tflite
     - assets/models/feature_extractor.tflite
@@ -87,6 +86,7 @@ flutter:
     - assets/models/det_10g_simplified_float16.tflite
     - assets/tessdata/ara.traineddata
     - assets/tessdata/eng.traineddata
+    
   fonts:
     - family: PlayfairDisplay
       fonts:
