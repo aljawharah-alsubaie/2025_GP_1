@@ -126,99 +126,93 @@ class _CameraTextScreenState extends State<CameraTextScreen> {
   // OCR مع Tesseract - محسّن للعربي
   // ============================================================================
   Future<String> _extractTextFromImage(File imageFile) async {
-    try {
-      print('📸 Starting OCR with Tesseract...');
+  try {
+    print('📸 Starting OCR with Tesseract...');
 
-      // تحديد اللغة المتوقعة من إعدادات التطبيق
-      final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
-      final bool probablyArabic = languageCode == 'ar';
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    final bool probablyArabic = languageCode == 'ar';
 
-      // معالجة الصورة قبل OCR
-      final processedImage = await _preprocessImage(imageFile, isArabic: probablyArabic);
+    final processedImage = await _preprocessImage(imageFile, isArabic: probablyArabic);
 
-      // ✅ تحسين: استخدام العربي أولاً إذا كانت اللغة عربية
-      final tessLanguage = probablyArabic ? 'ara+eng' : 'eng+ara';
+    final tessLanguage = probablyArabic ? 'ara+eng' : 'eng+ara';
 
-      print('🔤 Using Tesseract language: $tessLanguage');
+    print('🔤 Using Tesseract language: $tessLanguage');
 
-      String text = await FlutterTesseractOcr.extractText(
-        processedImage.path,
-        language: tessLanguage,
-        args: {
-          "psm": "3", // Fully automatic page segmentation
-          "preserve_interword_spaces": "1",
-        },
-      );
+    String text = await FlutterTesseractOcr.extractText(
+      processedImage.path,
+      language: tessLanguage,
+      args: {
+        "psm": "3",
+        "preserve_interword_spaces": "1",
+      },
+    );
 
-      text = text.trim();
+    text = text.trim();
 
-      // حذف الملف المؤقت
-      if (processedImage.path != imageFile.path) {
-        try {
-          await processedImage.delete();
-        } catch (e) {
-          print('Could not delete temp file: $e');
-        }
+    if (processedImage.path != imageFile.path) {
+      try {
+        await processedImage.delete();
+      } catch (e) {
+        print('Could not delete temp file: $e');
       }
-
-      print('✅ OCR completed! Text length: ${text.length} chars');
-      print('📝 Detected language: ${_isArabicText(text) ? "Arabic" : "English"}');
-      
-      return text;
-    } catch (e) {
-      print('❌ OCR Error: $e');
-      return "";
     }
+
+    print('✅ OCR completed! Text length: ${text.length} chars');
+    print('📝 Detected language: ${_isArabicText(text) ? "Arabic" : "English"}');
+    
+    return text;
+  } catch (e) {
+    print('❌ OCR Error: $e');
+    return "";
   }
+}
 
   // ============================================================================
-  // تصحيح: استخدام الصوت العربي الصحيح لـ IBM Watson
+  // تصحيح: استخدام الصوت العربي الصحيح لـ
   // ============================================================================
   Future<String?> _convertTextToSpeech(String text) async {
-    try {
-      final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
-      final String auth = base64Encode(utf8.encode('apikey:$IBM_TTS_API_KEY'));
-
-      // ✅ الأصوات الصحيحة لـ IBM Watson
-      // ar-AR_OmarVoice = الصوت العربي الوحيد المتاح في IBM Watson
-      final voice = languageCode == 'ar' 
-          ? 'ar-AR_OmarVoice'  // ✅ صحيح!
-          : 'en-US_AllisonV3Voice';
-
-      print('🔊 Using voice: $voice for language: $languageCode');
-
-      final response = await http.post(
-        Uri.parse('$IBM_TTS_URL/v1/synthesize'),
-        headers: {
-          'Authorization': 'Basic $auth',
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mp3',
+  try {
+    final languageCode = Provider.of<LanguageProvider>(context, listen: false).languageCode;
+    
+    // ✅ Google Cloud TTS
+    const apiKey = 'AIzaSyB3NAgQyhGwLvtnhnTp3zNcCFYIJZvn7t4';
+    
+    final voice = languageCode == 'ar'
+        ? {'languageCode': 'ar-XA', 'name': 'ar-XA-Wavenet-C'} // سعودي نسائي
+        : {'languageCode': 'en-US', 'name': 'en-US-Wavenet-F'}; // أمريكي نسائي
+    
+    final response = await http.post(
+      Uri.parse('https://texttospeech.googleapis.com/v1/text:synthesize?key=$apiKey'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'input': {'text': text},
+        'voice': {
+          'languageCode': voice['languageCode'],
+          'name': voice['name'],
         },
-        body: jsonEncode({
-          'text': text,
-          'voice': voice,
-          'accept': 'audio/mp3',
-        }),
-      );
+        'audioConfig': {'audioEncoding': 'MP3'},
+      }),
+    );
 
-      if (response.statusCode == 200) {
-        final Directory tempDir = await getTemporaryDirectory();
-        final String audioPath =
-            '${tempDir.path}/output_${DateTime.now().millisecondsSinceEpoch}.mp3';
-        final File audioFile = File(audioPath);
-        await audioFile.writeAsBytes(response.bodyBytes);
-        print('✅ Audio saved: $audioPath');
-        return audioPath;
-      } else {
-        print('❌ TTS failed with status: ${response.statusCode}');
-        print('Response: ${response.body}');
-        return null;
-      }
-    } catch (e) {
-      print('❌ TTS Error: $e');
-      return null;
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final audioBytes = base64Decode(data['audioContent']);
+      
+      final Directory tempDir = await getTemporaryDirectory();
+      final String audioPath = '${tempDir.path}/output_${DateTime.now().millisecondsSinceEpoch}.mp3';
+      final File audioFile = File(audioPath);
+      await audioFile.writeAsBytes(audioBytes);
+      
+      print('✅ Audio saved with Google TTS');
+      return audioPath;
     }
+    
+    return null;
+  } catch (e) {
+    print('❌ TTS Error: $e');
+    return null;
   }
+}
 
   Future<void> _processImage(
     String imagePath, {

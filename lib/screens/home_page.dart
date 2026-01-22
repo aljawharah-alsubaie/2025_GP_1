@@ -13,7 +13,7 @@ import './reminders.dart';
 import './sos_screen.dart';
 import './contact_info_page.dart';
 import './currency_camera.dart';
-import 'camera_text_screen.dart';
+import './camera_text_screen.dart';
 
 
 class HomePage extends StatefulWidget {
