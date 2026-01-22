@@ -86,7 +86,7 @@ flutter:
     - assets/models/det_10g_simplified_float16.tflite
     - assets/tessdata/ara.traineddata
     - assets/tessdata/eng.traineddata
-    - assets/tessdata/tessdata_config.json 
+    - assets/tessdata_config.json 
     
   fonts:
     - family: PlayfairDisplay
